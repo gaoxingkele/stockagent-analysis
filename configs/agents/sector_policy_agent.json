@@ -1,0 +1,15 @@
+{
+  "agent_id": "sector_policy_agent",
+  "dim_code": "SECTOR_POLICY",
+  "name": "板块与政策环境Agent",
+  "role": "板块政策分析师",
+  "enabled": true,
+  "mandatory": true,
+  "weight": 0.10,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["行业指数", "政策公告", "监管新闻", "板块轮动"]
+  }
+}

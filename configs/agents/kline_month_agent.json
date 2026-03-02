@@ -1,0 +1,17 @@
+{
+  "agent_id": "kline_month_agent",
+  "agent_type": "kline_vision",
+  "timeframe": "month",
+  "dim_code": "KLINE_MONTH",
+  "name": "月线K线视觉Agent",
+  "role": "月线K线技术分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.08,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["月线K线图像", "MACD", "RSI", "KDJ", "布林带", "MA5-250", "长期趋势线"]
+  }
+}

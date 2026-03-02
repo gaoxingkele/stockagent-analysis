@@ -1,0 +1,17 @@
+{
+  "agent_id": "kline_1h_agent",
+  "agent_type": "kline_vision",
+  "timeframe": "1h",
+  "dim_code": "KLINE_1H",
+  "name": "1小时K线视觉Agent",
+  "role": "1小时K线技术分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.06,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["1h/日/周/月K线图像", "MACD", "RSI", "KDJ", "布林带", "MA5-250"]
+  }
+}

@@ -1,0 +1,1 @@
+{"agent_id":"top_structure_agent","dim_code":"TOP_STRUCTURE","name":"顶部结构研判Agent","role":"顶部结构分析师","enabled":true,"mandatory":false,"weight":0.08,"data_sources":{"mode":"combined","primary":["akshare","tushare"],"fallback":["akshare","tushare"],"required_data_points":["日/周/月K线","头肩顶/M顶/长上影线等顶部形态"]}}

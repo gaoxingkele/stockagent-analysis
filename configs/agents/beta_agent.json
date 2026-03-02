@@ -1,0 +1,15 @@
+{
+  "agent_id": "beta_agent",
+  "dim_code": "BETA",
+  "name": "大盘联动与Beta分析Agent",
+  "role": "Beta联动分析师",
+  "enabled": true,
+  "mandatory": true,
+  "weight": 0.10,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["沪深300相关性", "行业Beta", "指数回归系数"]
+  }
+}

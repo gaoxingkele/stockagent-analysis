@@ -1,0 +1,15 @@
+{
+  "agent_id": "sentiment_agent",
+  "dim_code": "SENTIMENT",
+  "name": "舆情与投资者情绪分析Agent",
+  "role": "舆情情绪分析师",
+  "enabled": true,
+  "mandatory": true,
+  "weight": 0.08,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare"],
+    "fallback": ["tushare"],
+    "required_data_points": ["新闻热度", "社媒情绪", "公告舆情", "事件冲击"]
+  }
+}

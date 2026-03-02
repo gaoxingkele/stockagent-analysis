@@ -1,0 +1,55 @@
+{
+  "project_name": "stockagent-analysis",
+  "market": "CN-A",
+  "default_decision_labels": [
+    "buy",
+    "hold",
+    "sell"
+  ],
+  "debate_rounds": 2,
+  "decision_threshold_buy": 70,
+  "decision_threshold_sell": 50,
+  "multi_model_weight_mode": true,
+  "data_backend": {
+    "mode": "combined",
+    "default_sources": [
+      "tushare",
+      "akshare"
+    ],
+    "fallback_order": [
+      "tushare",
+      "akshare"
+    ]
+  },
+  "llm": {
+    "enabled": true,
+    "default_provider": "kimi",
+    "multi_eval_providers": [
+      "kimi"
+    ],
+    "multi_model_weight_providers": [
+      "kimi",
+      "grok",
+      "gemini"
+    ],
+    "supported_providers": [
+      "kimi",
+      "grok",
+      "gemini",
+      "deepseek",
+      "glm",
+      "perplexity",
+      "minmax",
+      "chatgpt",
+      "openai",
+      "claude",
+      "doubao",
+      "qwen"
+    ],
+    "temperature": 0.3,
+    "max_tokens": 600,
+    "request_timeout_sec": 25,
+    "multi_turn_default": true
+  },
+  "output_dir": "output/runs"
+}

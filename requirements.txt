@@ -1,0 +1,8 @@
+akshare>=1.14.0
+tushare>=1.2.89
+python-dotenv>=1.0.1
+requests>=2.32.0
+reportlab>=4.2.0
+mplfinance>=0.12.9
+pandas-ta>=0.3.14b
+matplotlib>=3.7.0

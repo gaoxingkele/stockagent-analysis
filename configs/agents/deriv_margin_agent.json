@@ -1,0 +1,16 @@
+{
+  "agent_id": "deriv_margin_agent",
+  "agent_type": "standard",
+  "dim_code": "DERIV_MARGIN",
+  "name": "融资融券分析师",
+  "role": "融资融券与衍生品市场分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.12,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tushare", "akshare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["融资余额", "融券余额", "融资净买入", "杠杆率", "融资分位数", "融券做空力量"]
+  }
+}

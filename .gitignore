@@ -1,0 +1,33 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Output data (run results, charts, PDFs)
+output/
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Temp scripts
+patch_*.py
+add_doubao_provider.py
+
+# Screenshots
+*.png
+
+# Claude Code
+.claude/

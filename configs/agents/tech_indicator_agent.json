@@ -1,0 +1,1 @@
+{"agent_id":"tech_indicator_agent","dim_code":"TECH","name":"技术指标量化读数Agent","role":"技术指标量化分析师","enabled":true,"mandatory":true,"weight":0.12,"data_sources":{"mode":"combined","primary":["akshare","tushare"],"fallback":["akshare","tushare"],"required_data_points":["RSI","MACD","KDJ","布林带","StochRSI","波动率","3-5根K线组合","长期趋势线","MA5-250"]}}

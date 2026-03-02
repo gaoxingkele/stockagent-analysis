@@ -1,0 +1,15 @@
+{
+  "agent_id": "flow_detail_agent",
+  "dim_code": "FLOW_DETAIL",
+  "name": "精细资金流向追踪Agent",
+  "role": "精细资金流分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.03,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare"],
+    "fallback": ["tushare"],
+    "required_data_points": ["分时资金流", "主力大单轨迹", "异常成交"]
+  }
+}

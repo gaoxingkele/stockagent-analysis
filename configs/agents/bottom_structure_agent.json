@@ -1,0 +1,1 @@
+{"agent_id":"bottom_structure_agent","dim_code":"BOTTOM_STRUCTURE","name":"底部结构研判Agent","role":"底部结构分析师","enabled":true,"mandatory":false,"weight":0.08,"data_sources":{"mode":"combined","primary":["akshare","tushare"],"fallback":["akshare","tushare"],"required_data_points":["日/周/月K线","W底/长下影线阳线等底部形态"]}}

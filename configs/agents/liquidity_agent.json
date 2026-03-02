@@ -1,0 +1,15 @@
+{
+  "agent_id": "liquidity_agent",
+  "dim_code": "LIQ",
+  "name": "流动性与盘口评估Agent",
+  "role": "流动性与盘口分析师",
+  "enabled": true,
+  "mandatory": true,
+  "weight": 0.10,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare"],
+    "fallback": ["tushare"],
+    "required_data_points": ["成交额", "换手率", "盘口深度", "委比量比"]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "agent_id": "quant_agent",
+  "dim_code": "QUANT",
+  "name": "量化策略与信号生成Agent",
+  "role": "量化策略分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.04,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["因子暴露", "回测片段", "短中期信号"]
+  }
+}

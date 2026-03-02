@@ -1,0 +1,15 @@
+{
+  "agent_id": "trend_agent",
+  "dim_code": "TREND",
+  "name": "趋势与多周期结构Agent",
+  "role": "趋势与结构分析师",
+  "enabled": true,
+  "mandatory": true,
+  "weight": 0.18,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare", "tushare"],
+    "fallback": ["akshare", "tushare"],
+    "required_data_points": ["日/周/月K线", "HH/HL/LH/LL结构点"]
+  }
+}

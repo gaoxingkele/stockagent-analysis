@@ -1,0 +1,15 @@
+{
+  "agent_id": "manager_orchestrator",
+  "dim_code": "MASTER",
+  "name": "A股个股研究协调器",
+  "role": "Master Orchestrator",
+  "enabled": true,
+  "mandatory": true,
+  "weight": 0.0,
+  "data_sources": {
+    "mode": "meta",
+    "primary": [],
+    "fallback": []
+  },
+  "tasks": ["统一调度", "一致性检测", "辩论仲裁", "加权评分", "输出最终JSON"]
+}

@@ -1,0 +1,15 @@
+{
+  "agent_id": "fundamental_agent",
+  "dim_code": "FUNDAMENTAL",
+  "name": "基本面与公司经营评估Agent",
+  "role": "基本面分析师",
+  "enabled": true,
+  "mandatory": true,
+  "weight": 0.05,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tushare", "akshare"],
+    "fallback": ["akshare", "tushare"],
+    "required_data_points": ["营收利润", "ROE/毛利率", "估值PE/PB", "资产负债结构"]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "agent_id": "kline_week_agent",
+  "agent_type": "kline_vision",
+  "timeframe": "week",
+  "dim_code": "KLINE_WEEK",
+  "name": "周线K线视觉Agent",
+  "role": "周线K线技术分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.10,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["周线K线图像", "MACD", "RSI", "KDJ", "布林带", "MA5-250", "长期趋势线"]
+  }
+}

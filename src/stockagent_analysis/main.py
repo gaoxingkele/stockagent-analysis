@@ -1,0 +1,79 @@
+# -*- coding: utf-8 -*-
+import argparse
+import sys
+from pathlib import Path
+
+from .doc_converter import convert_other_domain_doc
+from .io_utils import build_run_dir
+from .orchestrator import run_analysis
+
+
+def _cmd_analyze(args: argparse.Namespace) -> None:
+    root = Path(__file__).resolve().parents[2]
+    if args.run_dir:
+        run_dir = Path(args.run_dir)
+        if not run_dir.exists():
+            print(f"[错误] 指定的run-dir不存在: {run_dir}")
+            sys.exit(1)
+        print(f"[断点续传] 使用已有run-dir: {run_dir}", flush=True)
+    else:
+        run_dir = build_run_dir(root, args.symbol)
+    result = run_analysis(
+        root=root,
+        symbol=args.symbol,
+        name=args.name,
+        run_dir=run_dir,
+        llm_provider_override=args.provider,
+        multi_eval_providers_override=args.providers,
+    )
+    if result.get("error"):
+        sys.exit(1)
+    print(f"run_dir: {run_dir}")
+    print(f"final_decision: {result['final_decision']} (score={result['final_score']})")
+    if result.get("final_pdf_path"):
+        print(f"final_pdf: {result['final_pdf_path']}")
+
+
+def _cmd_convert_doc(args: argparse.Namespace) -> None:
+    root = Path(__file__).resolve().parents[2]
+    input_path = Path(args.input)
+    output_path = convert_other_domain_doc(input_path, root / "docs" / "converted")
+    print(f"converted_doc: {output_path}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="中国股市多智能体分析系统")
+    sub = parser.add_subparsers(dest="command")
+
+    p_analyze = sub.add_parser("analyze", help="分析单只股票并输出买卖决策")
+    p_analyze.add_argument("--symbol", required=True, help="A股代码，如 600519")
+    p_analyze.add_argument("--name", required=True, help="股票名称，如 贵州茅台")
+    p_analyze.add_argument(
+        "--provider",
+        choices=["kimi", "grok", "gemini", "deepseek", "glm", "perplexity", "minmax", "chatgpt", "openai", "claude", "doubao", "qwen"],
+        default=None,
+        help="临时覆盖 LLM 提供商（默认读取 project.json: kimi）",
+    )
+    p_analyze.add_argument(
+        "--providers",
+        type=str,
+        default=None,
+        help="多模型权重/评估时指定，逗号分隔。支持: kimi,grok,gemini,deepseek,glm,perplexity,minmax,chatgpt,openai,claude。如: kimi,deepseek,grok",
+    )
+    p_analyze.add_argument(
+        "--run-dir",
+        type=str,
+        default=None,
+        help="指定已有的run目录路径用于断点续传。崩溃或部分provider失败后，可用相同--run-dir重新运行，自动加载已有数据和已完成的provider结果",
+    )
+    p_analyze.set_defaults(func=_cmd_analyze)
+
+    p_convert = sub.add_parser("convert-doc", help="将其他品类智能体文档转换为中国股市定义文档")
+    p_convert.add_argument("--input", required=True, help="输入 Markdown 文档路径")
+    p_convert.set_defaults(func=_cmd_convert_doc)
+
+    args = parser.parse_args()
+    if not args.command:
+        parser.print_help()
+        return
+    args.func(args)

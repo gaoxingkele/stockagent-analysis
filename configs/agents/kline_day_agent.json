@@ -1,0 +1,17 @@
+{
+  "agent_id": "kline_day_agent",
+  "agent_type": "kline_vision",
+  "timeframe": "day",
+  "dim_code": "KLINE_DAY",
+  "name": "日线K线视觉Agent",
+  "role": "日线K线技术分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.10,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["日线K线图像", "MACD", "RSI", "KDJ", "布林带", "MA5-250", "长期趋势线"]
+  }
+}

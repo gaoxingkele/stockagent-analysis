@@ -1,0 +1,15 @@
+{
+  "agent_id": "nlp_sentiment_agent",
+  "dim_code": "NLP_SENTIMENT",
+  "name": "深度舆情NLP与投资者情绪网络Agent",
+  "role": "NLP舆情分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.03,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare"],
+    "fallback": ["tushare"],
+    "required_data_points": ["新闻文本", "社媒文本", "主题情绪网络"]
+  }
+}

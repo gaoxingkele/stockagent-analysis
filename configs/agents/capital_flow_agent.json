@@ -1,0 +1,15 @@
+{
+  "agent_id": "capital_flow_agent",
+  "dim_code": "CAPITAL_FLOW",
+  "name": "资金流向与筹码分布分析Agent",
+  "role": "资金流向分析师",
+  "enabled": true,
+  "mandatory": true,
+  "weight": 0.15,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare"],
+    "fallback": ["tushare"],
+    "required_data_points": ["主力净流入", "超大单/大单", "筹码峰", "北向资金"]
+  }
+}
