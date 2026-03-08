@@ -457,26 +457,38 @@ def run_analysis(
         )
 
     model_totals: dict[str, float] = {}
+    # TOP_STRUCTURE 评分语义: 高分=顶部信号强(卖出)，在加权时需反转(100-score)使其拉低总分
+    _INVERT_DIMS = {"TOP_STRUCTURE"}
     if use_multi_model_weights and model_weights:
         # 构建 agent_id → 本地评分 映射
         local_scores = {d["agent_id"]: d["score_0_100"] for d in detail}
+        _dim_map = {a.agent_id: a.dim_code for a in analysts}
         for p, w_map in model_weights.items():
             total = 0.0
             for a, res in zip(analysts, submissions):
                 w = w_map.get(a.agent_id, 1.0 / len(analysts))
                 # 使用本地数据驱动评分（非LLM评分），LLM仅提供权重
                 score = local_scores.get(a.agent_id, res.score_0_100)
+                # TOP_STRUCTURE: 高分=顶部强→反转后拉低总分
+                if _dim_map.get(a.agent_id) in _INVERT_DIMS:
+                    score = 100.0 - score
                 total += score * w
             model_totals[p] = round(total, 4)
         if model_totals:
             final_score = sum(model_totals.values()) / len(model_totals)
         else:
             total_weight = sum(a.weight for a in analysts) or 1.0
-            weighted_score = sum(r.score_0_100 * a.weight for a, r in zip(analysts, submissions))
+            weighted_score = sum(
+                (100.0 - r.score_0_100 if a.dim_code in _INVERT_DIMS else r.score_0_100) * a.weight
+                for a, r in zip(analysts, submissions)
+            )
             final_score = weighted_score / total_weight
     else:
         total_weight = sum(a.weight for a in analysts) or 1.0
-        weighted_score = sum(r.score_0_100 * a.weight for a, r in zip(analysts, submissions))
+        weighted_score = sum(
+            (100.0 - r.score_0_100 if a.dim_code in _INVERT_DIMS else r.score_0_100) * a.weight
+            for a, r in zip(analysts, submissions)
+        )
         final_score = weighted_score / total_weight
     buy_th = float(project_cfg.get("decision_threshold_buy", 70.0))
     sell_th = float(project_cfg.get("decision_threshold_sell", 50.0))

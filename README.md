@@ -29,15 +29,44 @@ A 股个股多智能体分析决策系统。29 个专业智能体并行研判，
 
 ### 29 智能体体系
 
-| 类别 | 智能体 | 说明 |
-|------|--------|------|
-| **核心维度 (9)** | TREND, TECH, CAPITAL_FLOW, FUNDAMENTAL, SENTIMENT, BETA, SECTOR_POLICY, LIQ, DERIV_MARGIN | 趋势/技术/资金/基本面/情绪/风险/行业/流动性/融资融券 |
-| **K线视觉 (4)** | KLINE_1H, KLINE_DAY, KLINE_WEEK, KLINE_MONTH | 多周期 K 线图表视觉分析（Vision 模型） |
-| **技术形态 (7)** | DIVERGENCE, VOLUME_PRICE, SUPPORT_RESISTANCE, CHANLUN, CHART_PATTERN, TIMEFRAME_RESONANCE, TRENDLINE | 背离/量价/支撑阻力/缠论/图表形态/多周期共振/趋势线 |
-| **结构识别 (2)** | TOP_STRUCTURE, BOTTOM_STRUCTURE | 顶底结构信号 |
-| **K线形态 (1)** | KLINE_PATTERN | 15+ 经典 K 线组合形态识别 |
-| **扩展分析 (5)** | QUANT, MACRO, INDUSTRY, FLOW_DETAIL, MM_BEHAVIOR, NLP_SENTIMENT | 量化/宏观/行业/资金细分/主力行为/NLP情绪 |
-| **管理 (1)** | MANAGER | 主控编排智能体 |
+#### 短线参考（5 日内）
+
+| 智能体 | 说明 | 权重 |
+|--------|------|------|
+| TREND | 趋势结构分析（均线/动量/涨幅） | 18% |
+| TECH | 技术指标综合（MACD/RSI/KDJ/布林） | 12% |
+| CAPITAL_FLOW | 资金流向分析 | 15% |
+| SENTIMENT | 新闻舆情情绪 | 5% |
+| KLINE_PATTERN | 15+ 经典 K 线组合形态识别 | 10% |
+| DIVERGENCE | MACD/RSI 顶底背离检测 | 10% |
+| VOLUME_PRICE | 量价信号（放量突破/缩量回踩/OBV） | 8% |
+| SUPPORT_RESISTANCE | 支撑阻力位（前高前低/缺口/整数关口） | 8% |
+| TRENDLINE | 趋势线斜率+突破信号 | 6% |
+| KLINE_1H / KLINE_DAY | 1h/日 K 线视觉分析 | 各 3% |
+| TOP_STRUCTURE | 顶部结构识别（高分=卖出警示） | 3% |
+| BOTTOM_STRUCTURE | 底部结构识别（高分=买入参考） | 3% |
+
+#### 中长期参考（1 月以上）
+
+| 智能体 | 说明 | 权重 |
+|--------|------|------|
+| FUNDAMENTAL | 基本面（PE/PB/ROE/营收增速） | 8% |
+| BETA | Beta 风险系数 | 10% |
+| LIQ | 流动性分析（换手率/成交额） | 5% |
+| SECTOR_POLICY | 行业政策与板块轮动 | 5% |
+| DERIV_MARGIN | 融资融券分析 | 12% |
+| CHANLUN | 缠论（分型→笔→中枢→三类买卖点） | 10% |
+| CHART_PATTERN | 图表形态（三角形/箱体/旗形/杯柄） | 8% |
+| TIMEFRAME_RESONANCE | 日/周/月多周期共振 | 8% |
+| KLINE_WEEK / KLINE_MONTH | 周/月 K 线视觉分析 | 各 3% |
+| QUANT | 量化因子 | — |
+| MACRO | 宏观经济 | — |
+| INDUSTRY | 行业竞争格局 | — |
+| FLOW_DETAIL | 资金细分（北向/主力/散户） | — |
+| MM_BEHAVIOR | 主力行为分析 | — |
+| NLP_SENTIMENT | NLP 情绪深度分析 | — |
+
+> **顶底结构评分语义**：TOP_STRUCTURE 高分 = 顶部信号显著（卖出警示），低分 = 无顶部信号（中性）；BOTTOM_STRUCTURE 高分 = 底部信号显著（买入参考），低分 = 无底部信号（中性）。两者独立评估、交叉印证，并标注信号所在的周期级别（日线/周线/月线）。TOP_STRUCTURE 在最终加权评分中自动反转（100 - score），使顶部信号拉低总分。
 
 ### 多数据源
 
@@ -60,37 +89,45 @@ A 股个股多智能体分析决策系统。29 个专业智能体并行研判，
 - 每个 Provider 独立分配 29 个智能体权重 → 加权评分 → 取平均
 - 单 Agent 超时 300s → 重试 1 次 → 随机候选 Provider 最多 4 次
 - 海外模型 (grok/gemini/claude/openai) 走 `LLM_PROXY`，国内模型直连
+- 每个 Provider 有两个模型：`{PROVIDER}_MODEL`（推理）+ `{PROVIDER}_VISION_MODEL`（视觉）
 
 ### Vision K 线分析
 
 - 4 个视觉智能体分析 1h/日/周/月 K 线图表
-- 图表含 MA/布林/MACD/RSI/KDJ/趋势线等叠加指标
+- K 线根数：1h=160, 日=250, 周=156, 月=120
+- 图表含 MA5/10/20/60/120/250、布林(20,2)、MACD(12,26,9)、RSI6/12/24、KDJ(9,3,3)、趋势线
 - 自动检测 Vision 模型支持：`{PROVIDER}_VISION_MODEL` 环境变量
 - 不支持视觉的 Provider 自动降级为文本分析
+- 无可用 Vision Provider 时自动回退到 `VISION_FALLBACK_PROVIDER`（默认 kimi）
 
 ### 技术分析引擎
 
 本地计算，无需 LLM：
 
-- **K 线形态**：锤子/吞噬/早晨之星/红三兵/W 底/头肩等 15+ 种
-- **背离检测**：MACD/RSI 顶底背离，多周期加权
-- **缠论**：分型 → 笔 → 中枢 → 三类买卖点
-- **图表形态**：三角形/箱体/旗形/杯柄/圆弧顶底
-- **量价关系**：放量突破/缩量回踩/底部放量/天量滞涨/OBV
+- **K 线形态**：锤子/吞噬/早晨之星/红三兵/W 底/头肩等 15+ 种（单根→两根→三根→五根 5 类层次）
+- **背离检测**：MACD/RSI 顶底背离，多周期加权（月 0.40 + 周 0.35 + 日 0.25）
+- **缠论**：K 线包含处理 → 顶底分型 → 笔构造(间隔≥4) → 中枢(≥3 笔重叠) → 三类买卖点
+- **图表形态**：三角形(上升/下降/对称)/箱体/旗形/杯柄/圆弧顶底，20-60 根 K 线级别
+- **量价关系**：放量突破/缩量回踩/底部放量/天量滞涨/OBV 趋势
 - **支撑阻力**：前高前低/均线/密集成交区/跳空缺口/整数关口
 - **多周期共振**：日/周/月趋势斜率 + 动量方向一致性检测
+- **顶底结构**：多周期上下影线 + 动量反转检测，日线/周线/月线独立评估
 
 ### PDF 投资者报告
 
-生成专业级 PDF 报告，包含：
+生成专业级 PDF 报告（全表格自动换行，无文字重叠），包含：
 
-1. 全智能体加权评分汇总表（29 个智能体评分 + 五级建议）
+1. 多智能体框架说明表
 2. 多模型权重分配对比表
-3. 均线系统 MA5-MA250 指标
-4. 三周期技术指标总览（日/周/月）
-5. Bull vs Bear 多空辩论
-6. 行业竞争格局分析
-7. 三情景概率表 + 分批建仓策略
+3. 公司概览与关键价位表
+4. 均线系统 MA5-MA250 指标
+5. 三周期技术指标总览（日/周/月）
+6. **29 智能体加权评分汇总表**（分短线参考 / 中长期参考两组，含分组小计）
+   - 顶底结构智能体使用独立信号标签（非标准五级建议）
+   - 显示信号所在周期级别（如"顶部显著(卖出警示) [日线,周线]"）
+7. Bull vs Bear 多空辩论
+8. 行业竞争格局分析
+9. 三情景概率表 + 分批建仓策略
 
 ### 评分体系
 
@@ -103,6 +140,7 @@ A 股个股多智能体分析决策系统。29 个专业智能体并行研判，
 - 本地公式覆盖 [15, 85] 评分区间，充分区分度
 - 新闻情绪截断 ±10，防止单因子主导
 - PE/PB 多级偏差（亏损/深度价值/合理/偏高/高估/极度高估）
+- TOP_STRUCTURE 在加权中自动反转（100 - score），使顶部信号拉低总分
 
 ## 快速开始
 
@@ -126,6 +164,7 @@ cp .env.example .env
 - `LLM_PROXY` — 海外模型代理地址（如 `http://127.0.0.1:18182`）
 - `TDX_DIR` — 通达信安装目录（默认 `D:/tdx`）
 - `{PROVIDER}_VISION_MODEL` — 视觉模型 ID（启用 K 线图表视觉分析）
+- `VISION_FALLBACK_PROVIDER` — 视觉回退 Provider（默认 `kimi`）
 
 ### 3. 运行分析
 
@@ -146,6 +185,7 @@ python run.py analyze --symbol 300617 --name 安靠智电 --run-dir output/runs/
 output/runs/<run_id>/
 ├── <代码>_<名称>_投资者报告.pdf    # 投资者报告
 ├── final_decision.json             # 最终决策 JSON
+├── logs/manager_orchestrator.log   # 编排日志
 ├── logs/<agent_id>.log             # 智能体日志
 ├── messages/*.json                 # 智能体间消息
 ├── submissions/*.json              # 智能体提交结论
@@ -232,12 +272,26 @@ AnalystAgent (基类)
 | minmax | 国内直连 | `MINMAX_API_KEY`, `MINMAX_MODEL` |
 | perplexity | 海外代理 | `PERPLEXITY_API_KEY`, `PERPLEXITY_MODEL` |
 
+### 重试与容错机制
+
+```
+单 Agent 调用流程:
+主 Provider (300s) → 失败 → 重试 1 次 (300s) → 失败 → 随机候选 ×4 (各 300s)
+                                                         ↓
+                                                  全部失败 → 使用同线程已成功 Agent 均值
+```
+
+- 默认 Provider 失败后自动从候选池 (kimi/gemini/doubao/minmax) 随机选择重试
+- 最多 5 次失败后放弃，用该 Provider 已完成 Agent 的平均分替代
+- Provider 级总超时 1800s，超时后直接结束该 Provider 线程
+
 ## 运行可观测性
 
 - **流水线阶段指示**：`[v]数据采集 → [>]并行分析 → [ ]合并评分 → ...`
 - **Provider 并行进度表**：表格化显示每个 Agent × Provider 的实时状态
 - **智能体独立日志**：`output/runs/<run_id>/logs/<agent_id>.log`
-- **最终决策 JSON**：包含评分、决策、所有智能体投票明细
+- **编排日志**：`output/runs/<run_id>/logs/manager_orchestrator.log`（Provider 状态、耗时、合并结果）
+- **最终决策 JSON**：包含评分、决策、所有智能体投票明细、各 Provider 独立评分
 
 ## 依赖
 

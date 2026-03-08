@@ -15,6 +15,99 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
+# ─────────────────────────────────────────────────────────────────
+#  表格单元格自动换行辅助
+# ─────────────────────────────────────────────────────────────────
+_CELL_STYLES: dict[str, ParagraphStyle] = {}
+
+
+def _cell(text: str, font: str = "", size: float = 9, bold: bool = False,
+          color: str = "#222222", align: int = 0) -> Paragraph:
+    """将文本包裹为 Paragraph 以支持表格单元格内自动换行。
+
+    align: 0=左对齐 1=居中 2=右对齐
+    """
+    key = f"{font}_{size}_{bold}_{color}_{align}"
+    if key not in _CELL_STYLES:
+        _CELL_STYLES[key] = ParagraphStyle(
+            f"Cell_{key}",
+            fontName=font or "STSong-Light",
+            fontSize=size,
+            leading=size + 3,
+            textColor=colors.HexColor(color),
+            wordWrap="CJK",
+            alignment=align,
+        )
+    safe = str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    if bold:
+        safe = f"<b>{safe}</b>"
+    return Paragraph(safe, _CELL_STYLES[key])
+
+
+def _cells(row: list, font: str = "", size: float = 9, bold: bool = False) -> list:
+    """批量转换一行的所有单元格。"""
+    return [_cell(str(c), font, size, bold) for c in row]
+
+
+# ─────────────────────────────────────────────────────────────────
+#  顶底结构信号辅助（独立评估，交叉印证）
+# ─────────────────────────────────────────────────────────────────
+
+def _structure_signal_label(dim_code: str, score: float) -> str:
+    """顶/底结构专用标签（不使用通用五级映射）。
+
+    BOTTOM_STRUCTURE: 高分=底部信号强(买入参考)，低分=无底部信号(中性)
+    TOP_STRUCTURE: 高分=顶部信号强(卖出警示)，低分=无顶部信号(中性)
+    """
+    if dim_code == "BOTTOM_STRUCTURE":
+        if score >= 70:
+            return "底部显著(买入参考)"
+        if score >= 55:
+            return "底部偏弱"
+        return "无底部信号(中性)"
+    if dim_code == "TOP_STRUCTURE":
+        if score >= 70:
+            return "顶部显著(卖出警示)"
+        if score >= 55:
+            return "顶部偏弱"
+        return "无顶部信号(中性)"
+    return ""
+
+
+def _structure_tf_breakdown(kline_indicators: dict) -> dict[str, list[str]]:
+    """从 kline_indicators 计算顶/底结构各周期信号级别。"""
+    tf_label_map = {"day": "日线", "week": "周线", "month": "月线"}
+    top_tfs: list[str] = []
+    bot_tfs: list[str] = []
+    for tf in ("day", "week", "month"):
+        ind = kline_indicators.get(tf)
+        if not isinstance(ind, dict) or not ind.get("ok"):
+            continue
+        upper = float(ind.get("upper_shadow_ratio", 0))
+        lower = float(ind.get("lower_shadow_ratio", 0))
+        mom = float(ind.get("momentum_10", 0))
+        amp = float(ind.get("amplitude_20", 0))
+        label = tf_label_map[tf]
+        if (upper > 40 and mom < 0) or upper > 35 or (mom < -5 and amp > 15):
+            top_tfs.append(label)
+        if (lower > 40 and mom > 0) or lower > 35 or mom > 5:
+            bot_tfs.append(label)
+    return {"top": top_tfs, "bottom": bot_tfs}
+
+
+def _structure_color(dim_code: str, score: float) -> str:
+    """顶底结构专用颜色。"""
+    if dim_code == "BOTTOM_STRUCTURE":
+        if score >= 70:
+            return "#C41E3A"  # 红(买入信号)
+        return "#666666"
+    if dim_code == "TOP_STRUCTURE":
+        if score >= 70:
+            return "#228B22"  # 绿(卖出信号)
+        return "#666666"
+    return "#222222"
+
+
 def _score_to_decision_level_cn(score: float) -> str:
     """根据评分映射到五级决策中文。强烈买入(≥85)、弱买入(70-85)、观望(50-70)、弱卖出(40-50)、强烈卖出(<40)。"""
     if score >= 85:
@@ -83,7 +176,7 @@ def _add_framework_intro_table(
     votes = result.get("agent_votes", [])
     n_agents = len(votes)
     flow.append(Paragraph("多智能体分析框架说明", st_h))
-    rows = [["模块", "核心智能体", "分析维度", "数据来源"]]
+    rows = [_cells(["模块", "核心智能体", "分析维度", "数据来源"], body_font, 9, True)]
     modules = [
         ("基本面", "基本面分析师", "PE/PB/市值/估值/盈利质量", "Tushare / AKShare"),
         ("技术面", "趋势/技术指标/K线视觉/结构", "多周期K线、MA均线、MACD/RSI/KDJ/布林", "历史行情 / 图像识别"),
@@ -93,7 +186,7 @@ def _add_framework_intro_table(
         ("综合决策", "量化/风险/顶底结构/融资融券", "综合加权评分、Bull-Bear辩论、五级决策", "多维数据融合"),
     ]
     for m in modules:
-        rows.append(list(m))
+        rows.append(_cells(list(m), body_font, 9))
     tbl = Table(rows, colWidths=[24 * mm, 38 * mm, 62 * mm, 36 * mm])
     style = [
         ("FONTNAME", (0, 0), (-1, -1), body_font),
@@ -147,7 +240,7 @@ def _add_multi_model_table(
     col_model = max(24.0, (content_w - agent_w - agg_w) / n) if n else 28.0
     col_widths = [agent_w * mm] + [col_model * mm] * n + [agg_w * mm]
 
-    headers = ["Agent"] + [str(p) for p in providers] + ["汇总均分"]
+    headers = _cells(["Agent"] + [str(p) for p in providers] + ["汇总均分"], bold_font, 8, True)
     table_data = [headers]
 
     for v in votes:
@@ -162,14 +255,14 @@ def _add_multi_model_table(
             contrib_sum += s * w
         contrib_sum /= len(providers) if providers else 1
         row.append(f"{contrib_sum:.1f}")
-        table_data.append(row)
+        table_data.append(_cells(row, body_font, 8))
 
     total_row = ["合计"]
     for p in providers:
         total_row.append(f"{model_totals.get(p, 0):.1f}")
     final_avg = result.get("final_score", 0.0)
     total_row.append(f"{final_avg:.1f}")
-    table_data.append(total_row)
+    table_data.append(_cells(total_row, bold_font, 8, True))
 
     tbl = Table(table_data, colWidths=col_widths[: 1 + n + 1])
     style = [
@@ -221,19 +314,19 @@ def _add_company_overview(
     turn = feats.get("turnover_rate")
     close_price = feats.get("close")
     flow.append(Paragraph("公司概览", st_h))
-    rows = [["项目", "内容"]]
-    rows.append(["股票代码 / 名称", f"{symbol}  {name}"])
+    rows = [_cells(["项目", "内容"], bold_font, 10, True)]
+    rows.append(_cells(["股票代码 / 名称", f"{symbol}  {name}"], body_font, 10))
     if close_price is not None:
-        rows.append(["最新收盘价", f"{float(close_price):.2f} 元"])
+        rows.append(_cells(["最新收盘价", f"{float(close_price):.2f} 元"], body_font, 10))
     if total_mv is not None:
         mv_yi = total_mv / 1e8 if total_mv > 1e8 else total_mv / 1e4
-        rows.append(["总市值", f"{mv_yi:.2f}亿元" if total_mv > 1e8 else f"{mv_yi:.2f}万元"])
+        rows.append(_cells(["总市值", f"{mv_yi:.2f}亿元" if total_mv > 1e8 else f"{mv_yi:.2f}万元"], body_font, 10))
     if pe is not None:
-        rows.append(["市盈率 PE-TTM", f"{float(pe):.2f}"])
+        rows.append(_cells(["市盈率 PE-TTM", f"{float(pe):.2f}"], body_font, 10))
     if pb is not None:
-        rows.append(["市净率 PB", f"{float(pb):.2f}"])
+        rows.append(_cells(["市净率 PB", f"{float(pb):.2f}"], body_font, 10))
     if turn is not None:
-        rows.append(["换手率", f"{float(turn):.2f}%"])
+        rows.append(_cells(["换手率", f"{float(turn):.2f}%"], body_font, 10))
     if len(rows) <= 1:
         flow.append(Paragraph(f"标的：{symbol} {name}。", st_body))
         return
@@ -270,14 +363,14 @@ def _add_key_levels_table(
     if not key_levels or not key_levels.get("ok"):
         return
     flow.append(Paragraph("关键价位与 Fibonacci 回撤", st_h))
-    rows = [["价位类型", "价格(元)", "说明"]]
-    rows.append(["波段高点", str(key_levels.get("band_high", "")), "近期高点"])
-    rows.append(["波段低点", str(key_levels.get("band_low", "")), "近期低点"])
-    rows.append(["当前价", str(key_levels.get("current", "")), "最新收盘"])
-    rows.append(["23.6% 回撤", str(key_levels.get("retrace_236", "")), "弱支撑/阻力"])
-    rows.append(["38.2% 回撤", str(key_levels.get("retrace_382", "")), "中性支撑/阻力"])
-    rows.append(["50.0% 回撤", str(key_levels.get("retrace_50", "")), "心理关口"])
-    rows.append(["61.8% 回撤", str(key_levels.get("retrace_618", "")), "强支撑/阻力（黄金比例）"])
+    rows = [_cells(["价位类型", "价格(元)", "说明"], body_font, 9, True)]
+    rows.append(_cells(["波段高点", str(key_levels.get("band_high", "")), "近期高点"], body_font, 9))
+    rows.append(_cells(["波段低点", str(key_levels.get("band_low", "")), "近期低点"], body_font, 9))
+    rows.append(_cells(["当前价", str(key_levels.get("current", "")), "最新收盘"], body_font, 9))
+    rows.append(_cells(["23.6% 回撤", str(key_levels.get("retrace_236", "")), "弱支撑/阻力"], body_font, 9))
+    rows.append(_cells(["38.2% 回撤", str(key_levels.get("retrace_382", "")), "中性支撑/阻力"], body_font, 9))
+    rows.append(_cells(["50.0% 回撤", str(key_levels.get("retrace_50", "")), "心理关口"], body_font, 9))
+    rows.append(_cells(["61.8% 回撤", str(key_levels.get("retrace_618", "")), "强支撑/阻力（黄金比例）"], body_font, 9))
     tbl = Table(rows, colWidths=[38 * mm, 32 * mm, 65 * mm])
     tbl.setStyle(
         TableStyle([
@@ -314,7 +407,7 @@ def _add_multi_timeframe_trend_table(
 
     tf_order = ["month", "week", "day"]
     tf_labels = {"month": "月线", "week": "周线", "day": "日线"}
-    rows = [["周期", "趋势状态", "动量(10根)%", "RSI(14)", "趋势斜率%", "波动率%", "K线组合"]]
+    rows = [_cells(["周期", "趋势状态", "动量(10根)%", "RSI(14)", "趋势斜率%", "波动率%", "K线组合"], body_font, 8, True)]
     has_any = False
     for tf in tf_order:
         ind = kli.get(tf)
@@ -330,7 +423,7 @@ def _add_multi_timeframe_trend_table(
             state = "偏多↑" if float(mom) > 2 else ("偏空↓" if float(mom) < -2 else "震荡→")
         else:
             state = "-"
-        rows.append([label, state, _val(mom), _val(rsi), _val(slope), _val(vol_tf), str(combo)[:10]])
+        rows.append(_cells([label, state, _val(mom), _val(rsi), _val(slope), _val(vol_tf), str(combo)[:10]], body_font, 8))
         has_any = True
     if not has_any:
         return
@@ -372,7 +465,7 @@ def _add_ma_system_table(
         return
     curr = day_ind.get("close") or feats.get("close")
     flow.append(Paragraph("均线系统（日线 MA5 – MA250）", st_h))
-    rows = [["均线", "当前值(元)", "偏离度%", "信号"]]
+    rows = [_cells(["均线", "当前值(元)", "偏离度%", "信号"], bold_font, 9, True)]
     ma_names = {
         "ma5": "MA5 (1周)", "ma10": "MA10 (2周)", "ma20": "MA20 (月线)",
         "ma60": "MA60 (季线)", "ma120": "MA120 (半年线)", "ma250": "MA250 (年线)",
@@ -383,13 +476,13 @@ def _add_ma_system_table(
         pct = entry.get("pct_above")
         if val is None:
             signal = "-（数据不足）"
-            rows.append([label, "-", "-", signal])
+            rows.append(_cells([label, "-", "-", signal], body_font, 9))
         else:
             if pct is not None:
                 signal = "价格在均线上方▲" if pct > 0 else "价格在均线下方▼"
             else:
                 signal = "-"
-            rows.append([label, f"{val:.2f}", f"{pct:+.2f}%" if pct is not None else "-", signal])
+            rows.append(_cells([label, f"{val:.2f}", f"{pct:+.2f}%" if pct is not None else "-", signal], body_font, 9))
 
     # 判断多空排列
     above_cnt = sum(
@@ -444,14 +537,14 @@ def _add_tech_indicators_table(
         def _v(v, fmt=".1f"):
             return (fmt.format(v) if v is not None else "-") if fmt else str(v) if v is not None else "-"
 
-        rows = [["指标", "读数", "指标", "读数"]]
-        rows.append(["RSI(14)", _v(ind.get("rsi")), "MACD DIF", _v(ind.get("macd_dif"), ".4f")])
-        rows.append(["MACD DEA", _v(ind.get("macd_dea"), ".4f"), "MACD 柱", _v(ind.get("macd_hist"), ".4f")])
-        rows.append(["KDJ K", _v(ind.get("kdj_k")), "KDJ D", _v(ind.get("kdj_d"))])
-        rows.append(["KDJ J", _v(ind.get("kdj_j")), "StochRSI", _v(ind.get("stoch_rsi"))])
-        rows.append(["布林上轨", _v(ind.get("boll_upper"), ".2f"), "布林中轨", _v(ind.get("boll_mid"), ".2f")])
-        rows.append(["布林下轨", _v(ind.get("boll_lower"), ".2f"), "趋势斜率%", _v(ind.get("trend_slope_pct"))])
-        rows.append(["动量(10根)%", _v(ind.get("momentum_10")), "波动率%", _v(ind.get("volatility_20"))])
+        rows = [_cells(["指标", "读数", "指标", "读数"], body_font, 9, True)]
+        rows.append(_cells(["RSI(14)", _v(ind.get("rsi")), "MACD DIF", _v(ind.get("macd_dif"), ".4f")], body_font, 9))
+        rows.append(_cells(["MACD DEA", _v(ind.get("macd_dea"), ".4f"), "MACD 柱", _v(ind.get("macd_hist"), ".4f")], body_font, 9))
+        rows.append(_cells(["KDJ K", _v(ind.get("kdj_k")), "KDJ D", _v(ind.get("kdj_d"))], body_font, 9))
+        rows.append(_cells(["KDJ J", _v(ind.get("kdj_j")), "StochRSI", _v(ind.get("stoch_rsi"))], body_font, 9))
+        rows.append(_cells(["布林上轨", _v(ind.get("boll_upper"), ".2f"), "布林中轨", _v(ind.get("boll_mid"), ".2f")], body_font, 9))
+        rows.append(_cells(["布林下轨", _v(ind.get("boll_lower"), ".2f"), "趋势斜率%", _v(ind.get("trend_slope_pct"))], body_font, 9))
+        rows.append(_cells(["动量(10根)%", _v(ind.get("momentum_10")), "波动率%", _v(ind.get("volatility_20"))], body_font, 9))
 
         flow.append(Paragraph(f"<b>▎{label}</b>", st_body))
         tbl = Table(rows, colWidths=[32 * mm, 28 * mm, 32 * mm, 28 * mm])
@@ -522,21 +615,49 @@ def _add_weighted_score_table(
     flow.append(Paragraph("多智能体加权评分体系", st_h))
     total_weight = sum(float(v.get("weight", 0)) for v in votes) or 1.0
 
-    # 表头
-    table_data = [["#", "智能体", "评分", "五级建议", "权重"]]
+    # 获取 kline_indicators 用于顶底结构周期解读
+    feats = result.get("analysis_features") or {}
+    kli = feats.get("kline_indicators") if isinstance(feats, dict) else {}
+    tf_breakdown = _structure_tf_breakdown(kli) if isinstance(kli, dict) else {"top": [], "bottom": []}
+    _STRUCTURE_DIMS = {"TOP_STRUCTURE", "BOTTOM_STRUCTURE"}
 
-    # ── 短线分组标题行 ──
-    table_data.append(["", "短线参考（5日内）", "", "", ""])
-    n_short_header = len(table_data) - 1  # 短线标题行索引
-
-    for idx, v in enumerate(short_votes, 1):
+    def _vote_row(idx: int, v: dict) -> list:
+        """构建单个 Agent 行，顶底结构使用专用标签。"""
+        dim_code = v.get("dim_code", "")
         role = v.get("role", v.get("dim_code", ""))
         if len(role) > 12:
             role = role[:12]
         score = float(v.get("score_0_100", 50))
-        level_cn = _score_to_decision_level_cn(score)
         weight_pct = float(v.get("weight", 0)) / total_weight
-        table_data.append([str(idx), role, f"{score:.1f}", level_cn, f"{weight_pct:.1%}"])
+        if dim_code in _STRUCTURE_DIMS:
+            label = _structure_signal_label(dim_code, score)
+            lc = _structure_color(dim_code, score)
+            # 追加周期级别
+            tfs = tf_breakdown.get("top" if dim_code == "TOP_STRUCTURE" else "bottom", [])
+            if tfs:
+                role_display = f"{role}({'/'.join(tfs)})"
+            else:
+                role_display = role
+        else:
+            label = _score_to_decision_level_cn(score)
+            lc = level_color_map.get(label, "#222222")
+            role_display = role
+        return [
+            _cell(str(idx), body_font, 8), _cell(role_display, body_font, 8),
+            _cell(f"{score:.1f}", body_font, 8), _cell(label, bold_font, 8, True, lc),
+            _cell(f"{weight_pct:.1%}", body_font, 8),
+        ]
+
+    # 表头
+    table_data = [_cells(["#", "智能体", "评分", "信号/建议", "权重"], bold_font, 8, True)]
+
+    # ── 短线分组标题行 ──
+    table_data.append([_cell("", body_font, 8), _cell("短线参考（5日内）", bold_font, 8, True, "#E65100"),
+                        _cell("", body_font, 8), _cell("", body_font, 8), _cell("", body_font, 8)])
+    n_short_header = len(table_data) - 1
+
+    for idx, v in enumerate(short_votes, 1):
+        table_data.append(_vote_row(idx, v))
 
     # 短线小计
     if short_votes:
@@ -544,22 +665,22 @@ def _add_weighted_score_table(
         sw_scores = [float(v.get("score_0_100", 50)) for v in short_votes]
         sw_weights = [float(v.get("weight", 0)) for v in short_votes]
         sw_avg = sum(s * w for s, w in zip(sw_scores, sw_weights)) / sw_total if sw_total else 50.0
-        table_data.append(["", "短线小计", f"{sw_avg:.1f}",
-                            _score_to_decision_level_cn(sw_avg), f"{sw_total / total_weight:.1%}"])
-    n_short_subtotal = len(table_data) - 1  # 短线小计行索引
+        sw_level = _score_to_decision_level_cn(sw_avg)
+        sw_lc = level_color_map.get(sw_level, "#222222")
+        table_data.append([
+            _cell("", bold_font, 8), _cell("短线小计", bold_font, 8, True),
+            _cell(f"{sw_avg:.1f}", bold_font, 8, True), _cell(sw_level, bold_font, 8, True, sw_lc),
+            _cell(f"{sw_total / total_weight:.1%}", bold_font, 8, True),
+        ])
+    n_short_subtotal = len(table_data) - 1
 
     # ── 中长期分组标题行 ──
-    table_data.append(["", "中长期参考（1月以上）", "", "", ""])
-    n_mid_header = len(table_data) - 1  # 中长期标题行索引
+    table_data.append([_cell("", body_font, 8), _cell("中长期参考（1月以上）", bold_font, 8, True, "#0D47A1"),
+                        _cell("", body_font, 8), _cell("", body_font, 8), _cell("", body_font, 8)])
+    n_mid_header = len(table_data) - 1
 
     for idx, v in enumerate(mid_votes, 1):
-        role = v.get("role", v.get("dim_code", ""))
-        if len(role) > 12:
-            role = role[:12]
-        score = float(v.get("score_0_100", 50))
-        level_cn = _score_to_decision_level_cn(score)
-        weight_pct = float(v.get("weight", 0)) / total_weight
-        table_data.append([str(idx), role, f"{score:.1f}", level_cn, f"{weight_pct:.1%}"])
+        table_data.append(_vote_row(idx, v))
 
     # 中长期小计
     if mid_votes:
@@ -567,66 +688,59 @@ def _add_weighted_score_table(
         mw_scores = [float(v.get("score_0_100", 50)) for v in mid_votes]
         mw_weights = [float(v.get("weight", 0)) for v in mid_votes]
         mw_avg = sum(s * w for s, w in zip(mw_scores, mw_weights)) / mw_total if mw_total else 50.0
-        table_data.append(["", "中长期小计", f"{mw_avg:.1f}",
-                            _score_to_decision_level_cn(mw_avg), f"{mw_total / total_weight:.1%}"])
-    n_mid_subtotal = len(table_data) - 1  # 中长期小计行索引
+        mw_level = _score_to_decision_level_cn(mw_avg)
+        mw_lc = level_color_map.get(mw_level, "#222222")
+        table_data.append([
+            _cell("", bold_font, 8), _cell("中长期小计", bold_font, 8, True),
+            _cell(f"{mw_avg:.1f}", bold_font, 8, True), _cell(mw_level, bold_font, 8, True, mw_lc),
+            _cell(f"{mw_total / total_weight:.1%}", bold_font, 8, True),
+        ])
+    n_mid_subtotal = len(table_data) - 1
 
     # ── 综合评分行 ──
-    table_data.append(["", "综合评分", f"{final_score:.1f}",
-                        _score_to_decision_level_cn(final_score), "100%"])
+    final_level = _score_to_decision_level_cn(final_score)
+    final_lc = level_color_map.get(final_level, "#222222")
+    table_data.append([
+        _cell("", bold_font, 9), _cell("综合评分", bold_font, 9, True),
+        _cell(f"{final_score:.1f}", bold_font, 9, True), _cell(final_level, bold_font, 9, True, final_lc),
+        _cell("100%", bold_font, 9, True),
+    ])
 
     col_w = [10 * mm, 48 * mm, 18 * mm, 26 * mm, 18 * mm]
     table = Table(table_data, colWidths=col_w)
 
     tbl_style = [
-        ("FONTNAME", (0, 0), (-1, -1), body_font),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
-        # 表头
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF2FF")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0D3B66")),
-        ("FONTNAME", (0, 0), (-1, 0), bold_font),
         ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D0D7DE")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("LEFTPADDING", (0, 0), (-1, -1), 3),
         ("RIGHTPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        # 综合评分行
+        # 表头底色
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF2FF")),
+        # 综合评分行底色
         ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#F0F4F8")),
-        ("FONTNAME", (0, -1), (-1, -1), bold_font),
-        # 短线分组标题行样式
+        # 短线分组标题行
         ("BACKGROUND", (0, n_short_header), (-1, n_short_header), colors.HexColor("#FFF3E0")),
-        ("FONTNAME", (0, n_short_header), (-1, n_short_header), bold_font),
-        ("TEXTCOLOR", (0, n_short_header), (-1, n_short_header), colors.HexColor("#E65100")),
         ("SPAN", (1, n_short_header), (4, n_short_header)),
-        # 短线小计行样式
+        # 短线小计行
         ("BACKGROUND", (0, n_short_subtotal), (-1, n_short_subtotal), colors.HexColor("#FFF8E1")),
-        ("FONTNAME", (0, n_short_subtotal), (-1, n_short_subtotal), bold_font),
-        # 中长期分组标题行样式
+        # 中长期分组标题行
         ("BACKGROUND", (0, n_mid_header), (-1, n_mid_header), colors.HexColor("#E3F2FD")),
-        ("FONTNAME", (0, n_mid_header), (-1, n_mid_header), bold_font),
-        ("TEXTCOLOR", (0, n_mid_header), (-1, n_mid_header), colors.HexColor("#0D47A1")),
         ("SPAN", (1, n_mid_header), (4, n_mid_header)),
-        # 中长期小计行样式
+        # 中长期小计行
         ("BACKGROUND", (0, n_mid_subtotal), (-1, n_mid_subtotal), colors.HexColor("#E8EAF6")),
-        ("FONTNAME", (0, n_mid_subtotal), (-1, n_mid_subtotal), bold_font),
     ]
-
-    # 五级建议列着色
-    level_col = 3
-    for i, row in enumerate(table_data[1:], 1):
-        if len(row) > level_col and row[level_col]:
-            lvl = row[level_col]
-            lc = level_color_map.get(lvl, "#222222")
-            tbl_style.append(("TEXTCOLOR", (level_col, i), (level_col, i), colors.HexColor(lc)))
-            tbl_style.append(("FONTNAME", (level_col, i), (level_col, i), bold_font))
     table.setStyle(TableStyle(tbl_style))
     flow.append(table)
     flow.append(
         Paragraph(
             "<b>说明：</b>短线参考以未来5个交易日为视角，中长期参考以1个月以上为视角。"
             "最终评分 = Σ(各Agent评分×LLM权重) / Σ(权重)。"
-            "五级映射：强烈买入(≥85)、弱买入(70-85)、观望(50-70)、弱卖出(40-50)、强烈卖出(&lt;40)。",
+            "五级映射：强烈买入(≥85)、弱买入(70-85)、观望(50-70)、弱卖出(40-50)、强烈卖出(&lt;40)。"
+            "<br/><b>顶/底结构说明：</b>底部结构高分=底部信号显著(买入参考)，低分=无底部信号(中性，非卖出)；"
+            "顶部结构高分=顶部信号显著(卖出警示)，低分=无顶部信号(中性，非买入)。"
+            "两者独立评估、交叉印证，通常仅一个结构显著。括号内标注信号所在周期级别。",
             st_body,
         )
     )
@@ -706,25 +820,25 @@ def _add_scenario_table(
         elif final_score < 40:
             bull_prob, base_prob, bear_prob = 10, 30, 60
 
-        rows = [["情景", "概率", "触发条件", "价格目标(元)", "止损参考"]]
-        rows.append([
+        rows = [_cells(["情景", "概率", "触发条件", "价格目标(元)", "止损参考"], bold_font, 9, True)]
+        rows.append(_cells([
             "乐观", f"{bull_prob}%",
             "放量突破关键阻力 / 业绩超预期 / 板块政策催化",
             f"{cp * 1.15:.2f}（+15%）",
             f"{cp * 0.93:.2f}（-7%）",
-        ])
-        rows.append([
+        ], body_font, 9))
+        rows.append(_cells([
             "中性", f"{base_prob}%",
             "维持当前区间震荡 / 无明显催化剂",
             f"{cp * 1.05:.2f}（+5%）",
             f"{cp * 0.95:.2f}（-5%）",
-        ])
-        rows.append([
+        ], body_font, 9))
+        rows.append(_cells([
             "悲观", f"{bear_prob}%",
             "放量跌破支撑 / 业绩低于预期 / 板块政策收紧",
             f"{cp * 0.88:.2f}（-12%）",
             f"{cp * 0.90:.2f}（-10%）",
-        ])
+        ], body_font, 9))
         tbl = Table(rows, colWidths=[16 * mm, 14 * mm, 56 * mm, 36 * mm, 33 * mm])
         tbl_style = [
             ("FONTNAME", (0, 0), (-1, -1), body_font),
@@ -745,19 +859,19 @@ def _add_scenario_table(
         # 分批建仓策略（3批）
         if decision_level_cn in {"强烈买入", "弱买入"}:
             flow.append(Paragraph("<b>分批建仓策略（仅供参考）</b>", st_body))
-            pos_rows = [["批次", "建仓时机", "建议仓位", "介入价格参考", "止损位"]]
-            pos_rows.append([
+            pos_rows = [_cells(["批次", "建仓时机", "建议仓位", "介入价格参考", "止损位"], bold_font, 9, True)]
+            pos_rows.append(_cells([
                 "第一批", "当前价附近 / 量能温和放大",
                 "30%", f"{cp:.2f}（当前）", f"{cp * 0.95:.2f}（-5%）"
-            ])
-            pos_rows.append([
+            ], body_font, 9))
+            pos_rows.append(_cells([
                 "第二批", "突破近期阻力并回踩确认",
                 "30%", f"{cp * 1.03:.2f}（+3%）", f"{cp * 0.97:.2f}（-3%）"
-            ])
-            pos_rows.append([
+            ], body_font, 9))
+            pos_rows.append(_cells([
                 "第三批", "放量创新高 / 催化剂落地",
                 "40%", f"{cp * 1.06:.2f}（+6%）", f"{cp * 1.00:.2f}（保本）"
-            ])
+            ], body_font, 9))
             pos_tbl = Table(pos_rows, colWidths=[16 * mm, 44 * mm, 20 * mm, 34 * mm, 30 * mm])
             pos_tbl.setStyle(
                 TableStyle([
@@ -1037,18 +1151,18 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
 
     # ── 结果摘要 ──
     flow.append(Paragraph("结果摘要", st_h))
-    summary_data = [["指标", "结果"]]
-    summary_data.append(["股票", f"{symbol}  {name}"])
+    summary_data = [_cells(["指标", "结果"], bold_font, 11, True)]
+    summary_data.append(_cells(["股票", f"{symbol}  {name}"], body_font, 11))
     summary_data.append([
-        "最终建议（五级）",
-        Paragraph(f"<b><font color='{decision_color}'>{decision_level_cn}</font></b>", st_body),
+        _cell("最终建议（五级）", body_font, 11),
+        _cell(decision_level_cn, bold_font, 11, True, decision_color),
     ])
-    summary_data.append(["综合评分", f"{final_score:.2f}"])
+    summary_data.append(_cells(["综合评分", f"{final_score:.2f}"], body_font, 11))
     if short_hold or medium_hold:
-        summary_data.append(["短线建议", short_hold])
-        summary_data.append(["中长线建议", medium_hold])
-    summary_data.append(["辩论轮次", str(result.get("debate_rounds", 0))])
-    summary_data.append(["智能体数量", str(len(votes))])
+        summary_data.append(_cells(["短线建议", short_hold], body_font, 11))
+        summary_data.append(_cells(["中长线建议", medium_hold], body_font, 11))
+    summary_data.append(_cells(["辩论轮次", str(result.get("debate_rounds", 0))], body_font, 11))
+    summary_data.append(_cells(["智能体数量", str(len(votes))], body_font, 11))
     summary_table = Table(summary_data, colWidths=[38 * mm, 120 * mm])
     summary_table.setStyle(
         TableStyle([

@@ -264,9 +264,14 @@ class AnalystAgent:
             "NLP_SENTIMENT": 50 + news_c * 1.2 + 0.2 * mom,
             "DERIV_MARGIN":  50 + 0.4 * pct - (vr - 1.0) * 8 - 0.2 * vol + 0.1 * mom,
         }
-        # TOP_STRUCTURE / BOTTOM_STRUCTURE：基于 kline_indicators 多周期结构研判（仅日线/周线/月线）
+        # TOP_STRUCTURE / BOTTOM_STRUCTURE：基于 kline_indicators 多周期结构研判
+        # 评分语义：TOP高分=顶部信号强(卖出警示)，BOTTOM高分=底部信号强(买入参考)
+        # 两者独立评估，交叉印证；通常只有一个结构显著
         kli = f.get("kline_indicators", {})
         top_signals, bot_signals = 0.0, 0.0
+        top_tf_detail: dict[str, float] = {}
+        bot_tf_detail: dict[str, float] = {}
+        tf_label_map = {"day": "日线", "week": "周线", "month": "月线"}
         for tf in ("day", "week", "month"):
             ind = kli.get(tf)
             if not isinstance(ind, dict) or not ind.get("ok"):
@@ -276,25 +281,36 @@ class AnalystAgent:
             mom_tf = float(ind.get("momentum_10", 0))
             amp = float(ind.get("amplitude_20", 0))
             # 顶部结构：长上影线+负动量 或 高振幅+负动量（头肩顶/M顶/长上影线）
+            tf_top = 0.0
             if upper > 40 and mom_tf < 0:
-                top_signals += 10
+                tf_top = 10
             elif upper > 35:
-                top_signals += 5
+                tf_top = 5
             elif mom_tf < -5 and amp > 15:
-                top_signals += 6
+                tf_top = 6
             elif mom_tf < 0:
-                top_signals += 2
+                tf_top = 2
+            top_signals += tf_top
+            if tf_top > 0:
+                top_tf_detail[tf_label_map[tf]] = tf_top
             # 底部结构：长下影线+正动量 或 正动量反弹（W底/长下影线阳线）
+            tf_bot = 0.0
             if lower > 40 and mom_tf > 0:
-                bot_signals += 10
+                tf_bot = 10
             elif lower > 35:
-                bot_signals += 5
+                tf_bot = 5
             elif mom_tf > 5:
-                bot_signals += 6
+                tf_bot = 6
             elif mom_tf > 0:
-                bot_signals += 2
-        base_dim["TOP_STRUCTURE"] = 50.0 - top_signals * 1.5 + bot_signals * 0.4
+                tf_bot = 2
+            bot_signals += tf_bot
+            if tf_bot > 0:
+                bot_tf_detail[tf_label_map[tf]] = tf_bot
+        # TOP: 高分=顶部信号强(卖出警示)；在最终加权中需用 100-score 反转
+        base_dim["TOP_STRUCTURE"] = 50.0 + top_signals * 1.5 - bot_signals * 0.4
+        # BOTTOM: 高分=底部信号强(买入参考)
         base_dim["BOTTOM_STRUCTURE"] = 50.0 + bot_signals * 1.5 - top_signals * 0.4
+        # per-tf detail 可从 kline_indicators 重算，不需要存到 self
         # K线视觉智能体的文字降级评分（无图时使用综合技术信号）
         tech_score = float(base_dim.get("TECH", 50.0))
         base_dim["KLINE_DAY"] = tech_score
