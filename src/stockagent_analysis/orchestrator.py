@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -12,23 +13,12 @@ from .config_loader import load_agent_configs, load_project_config, split_agents
 from .data_backend import DataBackend
 from .io_utils import dump_json, get_agent_logger
 from .llm_client import LLMRouter, assign_agent_weights, score_agent_analysis, generate_scenario_and_position
+from .progress_display import PipelineTracker, AgentNameRegistry
 from .report_pdf import build_investor_pdf
-
-
-def _print_progress(stage: str, done: int, total: int, detail: str = "") -> None:
-    pct = (done / total * 100) if total else 100
-    msg = f"[进度] {stage}: {done}/{total} ({pct:.1f}%)"
-    if detail:
-        msg += f" | {detail}"
-    print(msg, flush=True)
 
 
 def _print_data_progress(step: str, detail: str) -> None:
     print(f"[数据] {step}: {detail}", flush=True)
-
-
-def _print_agent_progress(stage: str, detail: str) -> None:
-    print(f"[智能体] {stage}: {detail}", flush=True)
 
 
 def _build_agent_task_summary(analyst_cfg: list[dict[str, Any]]) -> str:
@@ -53,9 +43,11 @@ def _verify_data_readiness(
     """进入大模型调用前的数据就绪门控：校验所有必需数据文件已落地。"""
     missing: list[str] = []
 
-    # 1. is_complete
+    # 1. is_complete（month 缺失属于可降级，不阻断）
     integrity = analysis_context.get("data_integrity", {})
-    if not integrity.get("is_complete", False):
+    failed_items_raw = integrity.get("failed_items", [])
+    only_month_missing = set(failed_items_raw) <= {"month"}
+    if not integrity.get("is_complete", False) and not only_month_missing:
         missing.append("data_integrity.is_complete=False")
 
     # 2. analysis_context.json 文件存在
@@ -63,19 +55,26 @@ def _verify_data_readiness(
     if not ctx_path.exists():
         missing.append(f"analysis_context.json ({ctx_path})")
 
-    # 3. K线CSV文件
+    # 3. K线CSV文件（day/week 必须，month 可选降级）
     data_dir = run_dir / "data"
-    for tf in ("day", "week", "month"):
+    failed_tfs = set(integrity.get("failed_items", []))
+    for tf in ("day", "week"):
         csv_path = data_dir / "kline" / f"{tf}.csv"
         if not csv_path.exists():
             missing.append(f"kline/{tf}.csv")
+    month_csv = data_dir / "kline" / "month.csv"
+    if not month_csv.exists():
+        manager_logger.info("month kline CSV missing — degraded mode (non-fatal)")
 
-    # 4. kline_vision agent 依赖的 chart PNG 文件
+    # 4. kline_vision agent 依赖的 chart PNG 文件（仅校验有数据的周期）
     chart_files = analysis_context.get("chart_files", {})
     for cfg in analyst_cfg:
         if cfg.get("agent_type") != "kline_vision":
             continue
         tf = cfg.get("timeframe", "")
+        if tf in failed_tfs:
+            manager_logger.info("kline_vision chart %s skipped — data unavailable (non-fatal)", tf)
+            continue
         chart_path_str = chart_files.get(tf, "")
         if chart_path_str:
             if not Path(chart_path_str).exists():
@@ -211,18 +210,35 @@ def run_analysis(
     backend = DataBackend(mode=backend_cfg["mode"], default_sources=backend_cfg["default_sources"])
     llm_cfg = project_cfg.get("llm", {})
     llm_enabled = bool(llm_cfg.get("enabled", True))
-    provider = (llm_provider_override or llm_cfg.get("default_provider", "kimi")).lower()
-    multi_eval_providers = llm_cfg.get("multi_eval_providers", ["kimi"])
-    if multi_eval_providers_override:
-        multi_eval_providers = [p.strip().lower() for p in multi_eval_providers_override.split(",") if p.strip()]
-        if multi_eval_providers:
-            provider = multi_eval_providers[0]
-    elif llm_provider_override:
-        multi_eval_providers = [provider] + [p for p in multi_eval_providers if p != provider]
-    llm_routers: dict[str, LLMRouter] = {}
     multi_turn = bool(llm_cfg.get("multi_turn_default", True))
+
+    # ── 自动发现所有Provider：默认 + 候选 ──
+    default_providers_cfg = llm_cfg.get("default_providers", [])
+    candidate_providers_cfg = llm_cfg.get("candidate_providers", [])
+
+    if multi_eval_providers_override:
+        # --providers 显式指定默认Provider
+        default_providers = [p.strip().lower() for p in multi_eval_providers_override.split(",") if p.strip()]
+    elif llm_provider_override:
+        default_providers = [llm_provider_override.lower()]
+    else:
+        default_providers = list(default_providers_cfg) if default_providers_cfg else llm_cfg.get("multi_eval_providers", ["kimi"])
+
+    provider = default_providers[0] if default_providers else "kimi"
+
+    # 过滤：只保留有API_KEY的Provider
+    default_providers = [p for p in default_providers if os.getenv(f"{p.upper()}_API_KEY", "").strip()]
+    candidate_providers = [
+        p for p in candidate_providers_cfg
+        if p not in default_providers and os.getenv(f"{p.upper()}_API_KEY", "").strip()
+    ]
+
+    # 全部Provider = 默认 + 候选，都启动子任务
+    all_providers = default_providers + candidate_providers
+
+    llm_routers: dict[str, LLMRouter] = {}
     if llm_enabled:
-        for p in multi_eval_providers:
+        for p in all_providers:
             llm_routers[p] = LLMRouter(
                 provider=p,
                 temperature=float(llm_cfg.get("temperature", 0.3)),
@@ -233,31 +249,31 @@ def run_analysis(
     manager_logger = get_agent_logger(run_dir, manager_cfg["agent_id"])
 
     manager_logger.info("start symbol=%s name=%s analysts=%s", symbol, name, [a["agent_id"] for a in analyst_cfg])
-    manager_logger.info("llm_enabled=%s providers=%s", llm_enabled, list(llm_routers.keys()))
+    manager_logger.info("llm_enabled=%s default=%s candidate=%s", llm_enabled, default_providers, candidate_providers)
 
     multi_model_weight_mode = bool(project_cfg.get("multi_model_weight_mode", False))
-    explicit = llm_cfg.get("multi_model_weight_providers", [])
-    if multi_eval_providers_override:
-        weight_providers = [p for p in list(llm_routers.keys()) if p in llm_routers]
-    else:
-        weight_providers = [p for p in (explicit or list(llm_routers.keys())) if p in llm_routers]
-    weight_providers = weight_providers[:10]
+    weight_providers = list(llm_routers.keys())[:10]
     use_multi_model_weights = multi_model_weight_mode and len(weight_providers) >= 2
+
+    # 初始化流水线追踪与Agent名称注册
+    pipeline = PipelineTracker()
+    agent_registry = AgentNameRegistry(analyst_cfg)
 
     print(
         f"[启动] 股票 {symbol} {name} | 智能体数量: {len(analyst_cfg)} | "
-        f"综合评估API: {', '.join(llm_routers.keys()) if llm_routers else 'disabled'}"
-        + (f" | 多模型权重模式: {weight_providers}" if use_multi_model_weights else ""),
+        f"默认: {', '.join(default_providers)} | 候选: {', '.join(candidate_providers)}"
+        + (f" | 多模型权重模式" if use_multi_model_weights else ""),
         flush=True
     )
-    # ── 断点续传：检查是否已有 analysis_context.json ──
+
+    # ── 阶段1: 数据采集 ──
+    pipeline.advance("数据采集")
     existing_ctx_path = run_dir / "data" / "analysis_context.json"
     if existing_ctx_path.exists():
         print("[断点续传] 检测到已有数据，跳过数据采集，直接进入分析阶段", flush=True)
         analysis_context = json.loads(existing_ctx_path.read_text(encoding="utf-8"))
         manager_logger.info("resume: loaded existing analysis_context from %s", existing_ctx_path)
     else:
-        print("[进度] 数据采集与落地: 开始", flush=True)
         analysis_context = backend.collect_and_save_context(
             symbol=symbol,
             name=name,
@@ -268,8 +284,9 @@ def run_analysis(
     integrity = analysis_context.get("data_integrity", {})
     is_complete = bool(integrity.get("is_complete", False))
     failed_items = integrity.get("failed_items", [])
-    # 仅当所有数据获取成功才继续；否则终止 LLM 调用，不输出研判报告
-    if not is_complete:
+    # day/week 必须；month 缺失可降级继续
+    only_optional_missing = set(failed_items) <= {"month"}
+    if not is_complete and not only_optional_missing:
         err_msg = f"数据获取失败，缺失项: {', '.join(failed_items) if failed_items else '基础数据'}"
         manager_logger.warning("data_integrity_incomplete=%s; terminate_no_llm_no_report", integrity)
         print(f"[错误] {err_msg}", flush=True)
@@ -282,8 +299,9 @@ def run_analysis(
             "symbol": symbol,
             "name": name,
         }
+    if not is_complete and only_optional_missing:
+        print(f"[警告] 缺失 {', '.join(failed_items)} 数据，月线相关Agent将降级为文本分析模式", flush=True)
     analysts = [create_agent(cfg, run_dir, backend, llm_routers=llm_routers) for cfg in analyst_cfg]
-    print("[进度] 数据采集与落地: 完成", flush=True)
 
     # 调用大模型前检查各 Agent 所需数据，列出本地/云端对照
     agent_mappings = build_agent_data_table(analyst_cfg, analysis_context)
@@ -312,26 +330,35 @@ def run_analysis(
                 "name": name,
             }
 
-        # 阶段2: 本地策略分析（无LLM调用，秒级完成）
-        print("[进度] 本地策略分析: 开始", flush=True)
+        # ── 阶段2: 本地策略分析 ──
+        pipeline.advance("本地分析")
         base_results: dict[str, AgentBaseResult] = {}
         for a in analysts:
             base_results[a.agent_id] = a.analyze_local(symbol, name, analysis_context)
-        print(f"[进度] 本地策略分析: 完成 ({len(base_results)}个智能体)", flush=True)
+        print(f"[本地分析] 完成 ({len(base_results)}个智能体)", flush=True)
 
-        # 阶段3: 多Provider并行执行（权重分配+研判增强+独立评分）
+        # ── 阶段3: 并行分析 ──
+        pipeline.advance("并行分析")
         task_summary = _build_agent_task_summary(analyst_cfg)
         (run_dir / "data").mkdir(parents=True, exist_ok=True)
         (run_dir / "data" / "task_summary.txt").write_text(task_summary, encoding="utf-8")
 
-        parallel_routers = {p: llm_routers[p] for p in weight_providers}
+        # 仅默认Provider启动并行子任务，候选Provider作为共享备选池（按需激活）
+        parallel_routers = {p: llm_routers[p] for p in default_providers if p in llm_routers}
+        provider_timeout = float(llm_cfg.get("provider_timeout_sec", 720))
+        agent_call_timeout = float(llm_cfg.get("agent_call_timeout_sec", 300))
         provider_results = run_providers_parallel(
             parallel_routers, base_results, analyst_cfg, symbol, name, task_summary,
             run_dir=run_dir,
+            provider_timeout_sec=provider_timeout,
+            agent_names=agent_registry.as_dict(),
+            agent_call_timeout_sec=agent_call_timeout,
+            default_providers=default_providers,
+            candidate_providers=candidate_providers,
         )
 
-        # 阶段4: 合并结果
-        print("[进度] 合并多Provider结果: 开始", flush=True)
+        # ── 阶段4: 合并评分 ──
+        pipeline.advance("合并评分")
         submissions, model_weights, model_scores = _merge_provider_results(
             analysts, base_results, provider_results, analysis_context,
         )
@@ -341,7 +368,7 @@ def run_analysis(
             "parallel merge done: ok=%s fail=%s weights_keys=%s scores_keys=%s",
             ok_providers, fail_providers, list(model_weights.keys()), list(model_scores.keys()),
         )
-        print(f"[进度] 合并多Provider结果: 完成 (成功:{len(ok_providers)} 失败:{len(fail_providers)})", flush=True)
+        print(f"[合并] 完成 (成功:{len(ok_providers)} 失败:{len(fail_providers)})", flush=True)
 
         # 如果全部Provider失败，使用本地base_results作为后备
         if not submissions:
@@ -361,14 +388,17 @@ def run_analysis(
         # ══════════════════════════════════════════════════════════════
         # 串行路径：保持原有逻辑不变
         # ══════════════════════════════════════════════════════════════
+        pipeline.advance("本地分析")
+        pipeline.advance("并行分析")  # 串行模式也走这个阶段标记
         total_steps = len(analysts) + debate_rounds + 2
         done = 0
 
         def agent_progress_cb(s: str, d: str) -> None:
-            _print_agent_progress(s, d)
+            print(f"[智能体] {s}: {d}", flush=True)
 
         for a in analysts:
-            _print_progress("多智能体分析", done, total_steps, detail=f"正在分析 {a.agent_id} ({a.role})")
+            cn = agent_registry.get(a.agent_id)
+            print(f"[分析] {done}/{total_steps} 正在分析 {cn}", flush=True)
             submissions.append(
                 a.analyze(
                     symbol, name,
@@ -377,7 +407,7 @@ def run_analysis(
                 )
             )
             done += 1
-            _print_progress("多智能体分析", done, total_steps, detail=f"完成 {a.agent_id} vote={submissions[-1].vote} score={submissions[-1].score_0_100:.1f}")
+            print(f"[分析] {done}/{total_steps} 完成 {cn} vote={submissions[-1].vote} score={submissions[-1].score_0_100:.1f}", flush=True)
 
     debate_bull_bear: dict[str, Any] = {}
     for r in range(1, debate_rounds + 1):
@@ -405,9 +435,9 @@ def run_analysis(
         }
         manager_logger.info("debate_round=%s bull=%s bear=%s", r, bull.agent_id, bear.agent_id)
         done += 1
-        _print_progress(
-            "辩论仲裁", done, total_steps,
-            detail=f"第{r}轮 Bull={bull.agent_id}({bull.score_0_100:.1f}) vs Bear={bear.agent_id}({bear.score_0_100:.1f})",
+        print(
+            f"[辩论] {done}/{total_steps} 第{r}轮 Bull={agent_registry.get(bull.agent_id)}({bull.score_0_100:.1f}) vs Bear={agent_registry.get(bear.agent_id)}({bear.score_0_100:.1f})",
+            flush=True,
         )
 
     detail = []
@@ -428,12 +458,14 @@ def run_analysis(
 
     model_totals: dict[str, float] = {}
     if use_multi_model_weights and model_weights:
+        # 构建 agent_id → 本地评分 映射
+        local_scores = {d["agent_id"]: d["score_0_100"] for d in detail}
         for p, w_map in model_weights.items():
             total = 0.0
-            s_map = model_scores.get(p, {})
             for a, res in zip(analysts, submissions):
                 w = w_map.get(a.agent_id, 1.0 / len(analysts))
-                score = s_map.get(a.agent_id, res.score_0_100)
+                # 使用本地数据驱动评分（非LLM评分），LLM仅提供权重
+                score = local_scores.get(a.agent_id, res.score_0_100)
                 total += score * w
             model_totals[p] = round(total, 4)
         if model_totals:
@@ -466,9 +498,9 @@ def run_analysis(
     else:
         decision_level = "strong_sell"
     done += 1
-    _print_progress(
-        "加权评分", done, total_steps,
-        detail=f"最终={final_decision} score={final_score:.2f} (阈值: buy>={buy_th} sell<{sell_th})",
+    print(
+        f"[评分] 最终={final_decision} score={final_score:.2f} (阈值: buy>={buy_th} sell<{sell_th})",
+        flush=True,
     )
 
     # 短线/中长线建议：基于周线、月线趋势
@@ -498,7 +530,7 @@ def run_analysis(
             kl_summary = f"高点{key_levels.get('band_high')} 低点{key_levels.get('band_low')} 当前{key_levels.get('current')} 38.2%回撤{key_levels.get('retrace_382')}"
         first_router = next(iter(llm_routers.values()), None)
         if first_router:
-            _print_agent_progress("情景与策略", "生成情景分析与建仓/止损建议")
+            print("[情景] 生成情景分析与建仓/止损建议", flush=True)
             scenario_analysis, position_strategy = generate_scenario_and_position(
                 first_router, symbol, name, final_score, decision_level_cn, kl_summary
             )
@@ -533,6 +565,8 @@ def run_analysis(
         "scenario_analysis": scenario_analysis,
         "position_strategy": position_strategy,
     }
+    # ── 阶段5: 输出报告 ──
+    pipeline.advance("输出报告")
     json_path = run_dir / "final_decision.json"
     dump_json(json_path, output)
     pdf_path = build_investor_pdf(run_dir, output)
@@ -540,6 +574,6 @@ def run_analysis(
     output["final_json_path"] = str(json_path)
     dump_json(json_path, output)
     manager_logger.info("final_decision=%s score=%.4f", final_decision, final_score)
-    done += 1
-    _print_progress("输出结果", done, total_steps, detail=f"PDF={pdf_path.name}")
+    pipeline.finish()
+    print(f"[完成] PDF={pdf_path.name}", flush=True)
     return output

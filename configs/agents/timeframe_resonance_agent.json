@@ -1,0 +1,21 @@
+{
+  "agent_id": "timeframe_resonance_agent",
+  "agent_type": "timeframe_resonance",
+  "dim_code": "TIMEFRAME_RESONANCE",
+  "name": "多周期共振评分Agent",
+  "role": "多周期共振分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.08,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tdx", "akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": [
+      "日/周/月K线",
+      "MACD",
+      "RSI",
+      "长期趋势线"
+    ]
+  }
+}

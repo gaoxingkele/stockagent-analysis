@@ -10,11 +10,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# 数据源域名（Tushare + AKShare），统一加入 NO_PROXY，确保数据采集不走代理
+# 数据源域名加入 NO_PROXY，确保数据采集不走 LLM 代理。
+# 仅包含 Tushare（HTTP，代理可能不兼容）；AKShare 域名（东财/腾讯/新浪）
+# 使用 HTTPS，在有系统代理的环境下反而需要代理才能连通，因此不再强制绕过。
+# 如需绕过更多域名，可通过 DATA_NO_PROXY 环境变量追加（逗号分隔）。
 _DATA_NO_PROXY = (
-    "api.tushare.pro,"
-    "push2his.eastmoney.com,quote.eastmoney.com,"
-    "finance.sina.com.cn,gu.qq.com"
+    "api.tushare.pro,api.waditu.com"
 )
 # 兼容旧引用
 _AKSHARE_NO_PROXY = _DATA_NO_PROXY
@@ -36,13 +37,17 @@ def _tushare_throttle() -> None:
 
 
 def _ensure_akshare_no_proxy() -> None:
-    """确保数据源域名（Tushare/AKShare）在 NO_PROXY 中，数据采集不走代理。"""
+    """确保 Tushare 域名在 NO_PROXY 中，数据采集不走 LLM 代理。
+    可通过 DATA_NO_PROXY 环境变量追加额外需要绕过的域名（逗号分隔）。
+    """
+    extra = os.getenv("DATA_NO_PROXY", "").strip()
+    domains = _DATA_NO_PROXY + ("," + extra if extra else "")
     current = os.environ.get("NO_PROXY", "").strip()
     if not current:
-        os.environ["NO_PROXY"] = _DATA_NO_PROXY
+        os.environ["NO_PROXY"] = domains
     else:
         existing = {d.strip() for d in current.split(",") if d.strip()}
-        to_add = [d.strip() for d in _DATA_NO_PROXY.split(",") if d.strip() and d.strip() not in existing]
+        to_add = [d.strip() for d in domains.split(",") if d.strip() and d.strip() not in existing]
         if to_add:
             os.environ["NO_PROXY"] = f"{current},{','.join(to_add)}".strip(",")
     os.environ["no_proxy"] = os.environ["NO_PROXY"]
@@ -65,11 +70,36 @@ class DataBackend:
         self.default_sources = default_sources
         self._tushare_token = os.getenv("TUSHARE_TOKEN", "").strip()
         self._tushare_timeout = int(os.getenv("TUSHARE_TIMEOUT_SEC", "15"))
+        self._tdx_reader = None  # lazy init; None means not yet tried
+        self._tdx_reader_ok: bool | None = None  # True/False after first try
         _ensure_akshare_no_proxy()
+
+    def _get_tdx_reader(self):
+        """获取通达信本地数据读取器（惰性初始化，TDX目录不存在时返回None）。"""
+        if self._tdx_reader_ok is False:
+            return None
+        if self._tdx_reader is not None:
+            return self._tdx_reader
+        try:
+            from mootdx.reader import Reader
+            tdx_dir = os.getenv("TDX_DIR", "D:/tdx")
+            vipdoc = os.path.join(tdx_dir, "vipdoc")
+            if not os.path.isdir(vipdoc):
+                self._tdx_reader_ok = False
+                return None
+            self._tdx_reader = Reader.factory(market="std", tdxdir=tdx_dir)
+            self._tdx_reader_ok = True
+            return self._tdx_reader
+        except Exception:
+            self._tdx_reader_ok = False
+            return None
 
     def fetch_snapshot(self, symbol: str, name: str, preferred_sources: list[str] | None = None) -> MarketSnapshot:
         symbol = self._clean_symbol(symbol)
-        sources = preferred_sources or self.default_sources
+        sources = list(preferred_sources or self.default_sources)
+        # 通达信本地数据最高优先级（无网络，速度最快）
+        if "tdx" not in sources:
+            sources = ["tdx"] + sources
         if self.mode == "single":
             return self._fetch_from_source(sources[0], symbol, name)
         # combined: 按顺序尝试，成功即返回
@@ -223,7 +253,7 @@ class DataBackend:
             if progress_cb:
                 progress_cb("K线图表生成", f"失败(非致命): {e}")
 
-        required_tfs = ["day", "week", "month"]
+        required_tfs = ["day", "week"]  # month 为可选，缺失时降级而非终止
         kline_ok = all(kline_bundle.get(k, {}).get("ok") for k in required_tfs)
         fundamentals_ok = fundamentals.get("source") != "unknown"
         news_ok = len(news) > 0
@@ -310,9 +340,9 @@ class DataBackend:
         timeframes: dict[str, int],
         progress_cb=None,
     ) -> dict[str, dict[str, Any]]:
-        """K线抓取：Tushare 优先，失败则改用 AKShare。每周期最多重试 3 次，每次尝试 Tushare→AKShare。"""
-        # 确保顺序：Tushare 优先，AKShare 备选
-        ordered_sources = ["tushare", "akshare"]
+        """K线抓取：通达信本地 → Tushare → AKShare，依次降级。每周期最多重试 3 次。"""
+        # 确保顺序：通达信本地最优先，其次 Tushare，最后 AKShare
+        ordered_sources = ["tdx", "tushare", "akshare"]
         for s in sources:
             if s not in ordered_sources:
                 ordered_sources.append(s)
@@ -329,7 +359,9 @@ class DataBackend:
                     if progress_cb:
                         progress_cb("K线抓取", f"{tf} 第{used_attempts}/3次 source={source}")
                     try:
-                        if source == "akshare":
+                        if source == "tdx":
+                            data = self._fetch_kline_tdx(symbol, tf, limit)
+                        elif source == "akshare":
                             data = self._fetch_kline_akshare(symbol, tf, limit)
                         elif source == "tushare":
                             data = self._fetch_kline_tushare(symbol, tf, limit)
@@ -358,11 +390,98 @@ class DataBackend:
         return bundle
 
     def _fetch_from_source(self, source: str, symbol: str, name: str) -> MarketSnapshot:
+        if source == "tdx":
+            return self._fetch_snapshot_tdx(symbol, name)
         if source == "akshare":
             return self._fetch_akshare(symbol, name)
         if source == "tushare":
             return self._fetch_tushare(symbol, name)
         raise ValueError(f"unsupported source: {source}")
+
+    def _fetch_kline_tdx(self, symbol: str, timeframe: str, limit: int):
+        """从通达信本地文件读取K线（无网络请求，速度最快）。
+        日/周/月：从 vipdoc/*/lday/*.day 读取后按需重采样。
+        1h：从 vipdoc/*/minline/*.lc1 读取1分钟数据后重采样至60分钟。
+        """
+        import pandas as pd
+
+        reader = self._get_tdx_reader()
+        if reader is None:
+            raise RuntimeError("tdx_reader_unavailable")
+
+        if timeframe in ("day", "week", "month"):
+            df = reader.daily(symbol=symbol)
+            if df is None or df.empty:
+                raise RuntimeError(f"tdx_{timeframe}_no_data")
+
+            if timeframe == "week":
+                df = df.resample("W-FRI").agg(
+                    {"open": "first", "high": "max", "low": "min", "close": "last", "amount": "sum", "volume": "sum"}
+                ).dropna()
+            elif timeframe == "month":
+                df = df.resample("ME").agg(
+                    {"open": "first", "high": "max", "low": "min", "close": "last", "amount": "sum", "volume": "sum"}
+                ).dropna()
+
+            df = df.reset_index()
+            date_col = df.columns[0]  # "date" after reset_index
+            df.rename(columns={date_col: "ts"}, inplace=True)
+            df["ts"] = pd.to_datetime(df["ts"]).dt.strftime("%Y-%m-%d")
+            df["pct_chg"] = df["close"].pct_change() * 100
+            df["pct_chg"] = df["pct_chg"].fillna(0.0)
+
+        elif timeframe == "1h":
+            df_min = reader.minute(symbol=symbol, suffix=1)
+            if df_min is None or df_min.empty:
+                raise RuntimeError("tdx_1h_no_minute_data")
+
+            df = df_min.resample("1h").agg(
+                {"open": "first", "high": "max", "low": "min", "close": "last", "amount": "sum", "volume": "sum"}
+            ).dropna()
+            df = df.reset_index()
+            dt_col = df.columns[0]
+            df.rename(columns={dt_col: "ts"}, inplace=True)
+            df["ts"] = pd.to_datetime(df["ts"]).dt.strftime("%Y-%m-%d %H:%M:%S")
+            df["pct_chg"] = df["close"].pct_change() * 100
+            df["pct_chg"] = df["pct_chg"].fillna(0.0)
+
+        else:
+            raise RuntimeError(f"tdx_unsupported_timeframe_{timeframe}")
+
+        result = df[["ts", "open", "high", "low", "close", "volume", "amount", "pct_chg"]].copy()
+        for c in ["open", "high", "low", "close", "volume", "amount", "pct_chg"]:
+            result[c] = pd.to_numeric(result[c], errors="coerce").fillna(0.0)
+        result = result.sort_values("ts").reset_index(drop=True)
+
+        min_rows = min(limit, 30)
+        if len(result) < min_rows:
+            raise RuntimeError(f"tdx_{timeframe}_rows_not_enough (got {len(result)})")
+
+        return result.tail(limit).reset_index(drop=True)
+
+    def _fetch_snapshot_tdx(self, symbol: str, name: str) -> MarketSnapshot:
+        """从通达信本地日线文件读取最新行情快照（取最后一根K线）。"""
+        reader = self._get_tdx_reader()
+        if reader is None:
+            raise RuntimeError("tdx_reader_unavailable")
+        df = reader.daily(symbol=symbol)
+        if df is None or df.empty:
+            raise RuntimeError("tdx_snapshot_no_data")
+        close = float(df.iloc[-1]["close"])
+        pct_chg = 0.0
+        if len(df) >= 2:
+            prev = float(df.iloc[-2]["close"])
+            if prev > 0:
+                pct_chg = (close / prev - 1.0) * 100
+        return MarketSnapshot(
+            symbol=symbol,
+            name=name,
+            close=close,
+            pct_chg=round(pct_chg, 4),
+            pe_ttm=None,
+            turnover_rate=None,
+            source="tdx",
+        )
 
     def _fetch_hist_akshare(self, symbol: str):
         import akshare as ak
@@ -387,7 +506,9 @@ class DataBackend:
         if timeframe in {"day", "week", "month"}:
             period = "daily" if timeframe == "day" else ("weekly" if timeframe == "week" else "monthly")
             end_date = datetime.now().strftime("%Y%m%d")
-            start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
+            # 日线取1年，周线取3年，月线取10年，确保足够的K线根数
+            lookback_days = {"day": 365, "week": 1095, "month": 3650}.get(timeframe, 365)
+            start_date = (datetime.now() - timedelta(days=lookback_days)).strftime("%Y%m%d")
             raw = None
             try:
                 raw = ak.stock_zh_a_hist(
@@ -776,8 +897,10 @@ class DataBackend:
             boll_val = self._calc_bollinger(close, 20, 2) if n >= 22 else None
             # StochRSI(14)
             stoch_rsi_val = self._calc_stoch_rsi(close, 14) if n >= 29 else None
-            # 3-5根K线组合（三连阳/三连阴等）
+            # 3-5根K线组合（三连阳/三连阴等，旧简版，向后兼容）
             k_combo = self._detect_kline_combo(open_, high, low, close, 5) if n >= 5 else None
+            # 高级多形态识别（15+种典型形态，带置信度）
+            kline_patterns = self._detect_advanced_kline_patterns(open_, high, low, close, n) if n >= 2 else []
             # 长期趋势线（20周期线性回归斜率%/根）
             trend_slope = self._calc_trend_slope(close, 20) if n >= 20 else None
 
@@ -794,6 +917,18 @@ class DataBackend:
                     }
                 else:
                     ma_system[f"ma{period}"] = {"value": None, "pct_above": None}
+
+            # 背离检测（MACD/RSI顶底背离）
+            divergence = self._detect_divergence(close, high, low, n)
+            # 缠论信号
+            chanlun = self._detect_chanlun_signals(close, high, low, n)
+            # 大级别图形形态
+            chart_patterns = self._detect_chart_patterns(close, high, low, n)
+            # 量价关系信号
+            vol_series = df["volume"].astype(float) if "volume" in df.columns else df.get("amount", close * 0 + 1).astype(float)
+            volume_price = self._detect_volume_price_signals(close, vol_series, n)
+            # 支撑阻力位
+            support_resistance = self._detect_support_resistance(close, high, low, vol_series, n)
 
             out[tf] = {
                 "ok": True,
@@ -816,9 +951,15 @@ class DataBackend:
                 "boll_lower": round(boll_val[2], 4) if boll_val and len(boll_val) > 2 else None,
                 "stoch_rsi": round(stoch_rsi_val, 2) if stoch_rsi_val is not None else None,
                 "kline_combo_5": k_combo,
+                "kline_patterns": kline_patterns,
                 "trend_slope_pct": round(trend_slope, 4) if trend_slope is not None else None,
                 "ma_system": ma_system,
                 "close": round(curr_price, 4),
+                "divergence": divergence,
+                "volume_price": volume_price,
+                "support_resistance": support_resistance,
+                "chanlun": chanlun,
+                "chart_patterns": chart_patterns,
             }
         return out
 
@@ -908,6 +1049,189 @@ class DataBackend:
         return "无典型组合"
 
     @staticmethod
+    def _detect_advanced_kline_patterns(open_, high, low, close, n: int) -> list[dict]:
+        """检测最新3-5根K线的15+种典型形态组合，带置信度与方向标注。
+
+        返回格式：[{"name": str, "direction": "bullish"|"bearish"|"neutral", "confidence": int, "desc": str}]
+        形态越强、置信度越高。多形态同时存在时全部返回。
+        """
+        import numpy as np
+
+        lookback = min(5, n)
+        o = open_.tail(lookback).values.astype(float)
+        h = high.tail(lookback).values.astype(float)
+        lv = low.tail(lookback).values.astype(float)
+        c = close.tail(lookback).values.astype(float)
+
+        body = c - o
+        abs_body = np.abs(body)
+        rng = h - lv
+        rng = np.where(rng == 0, 1e-8, rng)
+
+        # 近期趋势方向（用最后5根K线的线性斜率判断）
+        xs = np.arange(len(c), dtype=float)
+        slope = float(np.polyfit(xs, c, 1)[0]) if len(c) >= 3 else 0.0
+        uptrend = slope > 0
+        downtrend = slope < 0
+
+        patterns: list[dict] = []
+
+        # ── 单根K线形态（最后一根）───────────────────────────────────────────
+        r = rng[-1]
+        ab = abs_body[-1]
+        upper_wick = h[-1] - max(o[-1], c[-1])
+        lower_wick = min(o[-1], c[-1]) - lv[-1]
+
+        if r > 0:
+            # 锤子线：下影>=2×实体，上影<15%波动范围，下跌趋势末端
+            if lower_wick >= 2 * max(ab, r * 0.04) and upper_wick < r * 0.15 and downtrend:
+                patterns.append({"name": "锤子线", "direction": "bullish", "confidence": 74,
+                                 "desc": "下跌末端出现长下影锤头，买盘支撑强，看涨反转信号"})
+            # 上吊线：外形同锤头但在上涨趋势末端
+            elif lower_wick >= 2 * max(ab, r * 0.04) and upper_wick < r * 0.15 and uptrend:
+                patterns.append({"name": "上吊线", "direction": "bearish", "confidence": 66,
+                                 "desc": "上涨末端出现长下影上吊线，获利了结压力大，看跌警示"})
+            # 射击之星：上影>=2×实体，下影<15%，上涨趋势末端
+            if upper_wick >= 2 * max(ab, r * 0.04) and lower_wick < r * 0.15 and uptrend:
+                patterns.append({"name": "射击之星", "direction": "bearish", "confidence": 74,
+                                 "desc": "高位出现长上影射击之星，上方压力强，看跌反转信号"})
+            # 倒锤头：上影>=2×实体，下影<15%，下跌趋势末端
+            elif upper_wick >= 2 * max(ab, r * 0.04) and lower_wick < r * 0.15 and downtrend:
+                patterns.append({"name": "倒锤头", "direction": "bullish", "confidence": 61,
+                                 "desc": "下跌末端出现倒锤头，下方支撑开始介入，潜在反转"})
+            # 十字星/纺锤线：实体<10%波动范围，多空均衡
+            if ab < r * 0.1:
+                patterns.append({"name": "十字星", "direction": "neutral", "confidence": 50,
+                                 "desc": "多空分歧，实体极小，市场犹豫，关注后续方向选择"})
+            # 大阳线：实体>60%波动范围
+            if body[-1] > r * 0.6:
+                patterns.append({"name": "大阳线", "direction": "bullish", "confidence": 67,
+                                 "desc": "强势阳线，多头主导，收盘在高位，延续看涨"})
+            # 大阴线：实体>60%波动范围
+            if body[-1] < -r * 0.6:
+                patterns.append({"name": "大阴线", "direction": "bearish", "confidence": 67,
+                                 "desc": "强势阴线，空头主导，收盘在低位，延续看跌"})
+
+        # ── 两根K线形态（最后两根）──────────────────────────────────────────
+        if lookback >= 2:
+            b1, b2 = body[-2], body[-1]
+            r1, r2 = rng[-2], rng[-1]
+            ab1, ab2 = abs_body[-2], abs_body[-1]
+
+            # 看涨吞噬：前阴后阳，阳线实体完全覆盖阴线实体
+            if b1 < -r1 * 0.25 and b2 > 0 and o[-1] <= c[-2] and c[-1] >= o[-2]:
+                patterns.append({"name": "看涨吞噬", "direction": "bullish", "confidence": 79,
+                                 "desc": "阳线完全吞噬前阴，多头强势接管，看涨反转信号强烈"})
+            # 看跌吞噬：前阳后阴，阴线实体完全覆盖阳线实体
+            if b1 > r1 * 0.25 and b2 < 0 and o[-1] >= c[-2] and c[-1] <= o[-2]:
+                patterns.append({"name": "看跌吞噬", "direction": "bearish", "confidence": 79,
+                                 "desc": "阴线完全吞噬前阳，空头强势接管，看跌反转信号强烈"})
+            # 看涨孕线：大阴线后，小阳线实体在前棒实体范围内
+            if b1 < -r1 * 0.35 and b2 > 0 and o[-1] > c[-2] and c[-1] < o[-2] and ab2 < ab1 * 0.55:
+                patterns.append({"name": "看涨孕线", "direction": "bullish", "confidence": 63,
+                                 "desc": "小阳孕于大阴腹中，空头动能衰减，蓄势看涨反转"})
+            # 看跌孕线：大阳线后，小阴线实体在前棒实体范围内
+            if b1 > r1 * 0.35 and b2 < 0 and o[-1] < c[-2] and c[-1] > o[-2] and ab2 < ab1 * 0.55:
+                patterns.append({"name": "看跌孕线", "direction": "bearish", "confidence": 63,
+                                 "desc": "小阴孕于大阳腹中，多头动能衰减，蓄势看跌反转"})
+            # 穿刺形态：阴线后低开，阳线收盘超过阴线中线
+            if (b1 < -r1 * 0.3 and b2 > 0 and o[-1] < lv[-2]
+                    and c[-1] > (o[-2] + c[-2]) / 2):
+                patterns.append({"name": "穿刺形态", "direction": "bullish", "confidence": 73,
+                                 "desc": "低开后强势回收超越阴线中线，买盘积极，看涨反转"})
+            # 乌云盖顶：阳线后高开，阴线收盘跌破阳线中线
+            if (b1 > r1 * 0.3 and b2 < 0 and o[-1] > h[-2]
+                    and c[-1] < (o[-2] + c[-2]) / 2):
+                patterns.append({"name": "乌云盖顶", "direction": "bearish", "confidence": 73,
+                                 "desc": "高开后深度回落跌穿阳线中线，卖盘涌现，看跌反转"})
+
+        # ── 三根K线形态（最后三根）──────────────────────────────────────────
+        if lookback >= 3:
+            b0, b1_v, b2_v = body[-3], body[-2], body[-1]
+            r0, r1_v, r2_v = rng[-3], rng[-2], rng[-1]
+            ab0, ab1_v, ab2_v = abs_body[-3], abs_body[-2], abs_body[-1]
+
+            # 早晨之星：强阴+小实体(可含十字)+强阳，阳线收盘超前阴中线
+            if (b0 < -r0 * 0.4 and ab1_v < r1_v * 0.3
+                    and b2_v > r2_v * 0.4 and c[-1] > (o[-3] + c[-3]) / 2):
+                patterns.append({"name": "早晨之星", "direction": "bullish", "confidence": 83,
+                                 "desc": "底部经典三星反转：强阴-星线-强阳，看涨反转信号极强"})
+            # 黄昏之星：强阳+小实体+强阴，阴线收盘跌破前阳中线
+            if (b0 > r0 * 0.4 and ab1_v < r1_v * 0.3
+                    and b2_v < -r2_v * 0.4 and c[-1] < (o[-3] + c[-3]) / 2):
+                patterns.append({"name": "黄昏之星", "direction": "bearish", "confidence": 83,
+                                 "desc": "顶部经典三星反转：强阳-星线-强阴，看跌反转信号极强"})
+            # 红三兵（三白兵）：三根阳线逐步上行，开盘在前棒实体内
+            if (b0 > r0 * 0.3 and b1_v > r1_v * 0.3 and b2_v > r2_v * 0.3
+                    and c[-1] > c[-2] > c[-3]
+                    and o[-2] > o[-3] and o[-1] > o[-2]):
+                patterns.append({"name": "红三兵", "direction": "bullish", "confidence": 84,
+                                 "desc": "三阳逐级上行，多头气势强劲，上涨趋势强力确认"})
+            # 三只乌鸦：三根阴线逐步下行，开盘在前棒实体内
+            if (b0 < -r0 * 0.3 and b1_v < -r1_v * 0.3 and b2_v < -r2_v * 0.3
+                    and c[-1] < c[-2] < c[-3]
+                    and o[-2] < o[-3] and o[-1] < o[-2]):
+                patterns.append({"name": "三只乌鸦", "direction": "bearish", "confidence": 84,
+                                 "desc": "三阴逐级下行，空头气势强劲，下跌趋势强力确认"})
+            # 两阳夹一阴：阳-阴-阳，震荡后多头接力
+            if b0 > 0 and b1_v < 0 and b2_v > 0 and c[-1] > c[-3]:
+                patterns.append({"name": "两阳夹一阴", "direction": "bullish", "confidence": 64,
+                                 "desc": "震荡回调后多头接力，整体仍维持看涨态势"})
+            # 两阴夹一阳：阴-阳-阴，反弹后空头延续
+            if b0 < 0 and b1_v > 0 and b2_v < 0 and c[-1] < c[-3]:
+                patterns.append({"name": "两阴夹一阳", "direction": "bearish", "confidence": 64,
+                                 "desc": "反弹后空头继续主导，下跌趋势延续信号"})
+
+        # ── 五根K线形态（最后五根）──────────────────────────────────────────
+        if lookback >= 5:
+            # W底/双底：两个相近低点+中间高点+最后一根阳线
+            low1 = float(np.min(lv[0:2]))
+            low2 = float(np.min(lv[3:5]))
+            mid_high = float(np.max(h[1:4]))
+            if (abs(low2 - low1) / max(abs(low1), 1e-8) < 0.025
+                    and mid_high > low1 * 1.025
+                    and body[-1] > 0
+                    and c[-1] > mid_high * 0.97):
+                patterns.append({"name": "W底双底", "direction": "bullish", "confidence": 78,
+                                 "desc": "双底形态颈线附近确认，看涨反转，空头陷阱化解"})
+            # M顶/双顶：两个相近高点+中间低点+最后一根阴线
+            high1 = float(np.max(h[0:2]))
+            high2 = float(np.max(h[3:5]))
+            mid_low = float(np.min(lv[1:4]))
+            if (abs(high2 - high1) / max(abs(high1), 1e-8) < 0.025
+                    and mid_low < high1 * 0.975
+                    and body[-1] < 0
+                    and c[-1] < mid_low * 1.03):
+                patterns.append({"name": "M顶双顶", "direction": "bearish", "confidence": 78,
+                                 "desc": "双顶形态颈线附近确认，看跌反转，多头陷阱化解"})
+            # 头肩底：头部最低，两肩近似等高
+            sh1_l = float(np.min(lv[0:2]))
+            head_l = float(np.min(lv[1:4]))
+            sh2_l = float(np.min(lv[3:5]))
+            neck_h = float(np.max(h[[1, 3]]))
+            if (head_l < sh1_l * 0.985 and head_l < sh2_l * 0.985
+                    and abs(sh1_l - sh2_l) / max(sh1_l, 1e-8) < 0.04
+                    and c[-1] > neck_h):
+                patterns.append({"name": "头肩底", "direction": "bullish", "confidence": 81,
+                                 "desc": "头肩底突破颈线，底部反转确认，强烈看涨信号"})
+            # 头肩顶：头部最高，两肩近似等高
+            sh1_h = float(np.max(h[0:2]))
+            head_h = float(np.max(h[1:4]))
+            sh2_h = float(np.max(h[3:5]))
+            neck_l = float(np.min(lv[[1, 3]]))
+            if (head_h > sh1_h * 1.015 and head_h > sh2_h * 1.015
+                    and abs(sh1_h - sh2_h) / max(sh1_h, 1e-8) < 0.04
+                    and c[-1] < neck_l):
+                patterns.append({"name": "头肩顶", "direction": "bearish", "confidence": 81,
+                                 "desc": "头肩顶跌破颈线，顶部反转确认，强烈看跌信号"})
+
+        # 无典型形态时返回占位
+        if not patterns:
+            patterns.append({"name": "无明显形态", "direction": "neutral", "confidence": 50,
+                             "desc": "最近3-5根K线未见典型形态组合，维持观望"})
+        return patterns
+
+    @staticmethod
     def _compute_fibonacci_key_levels(day_df, current_close: float) -> dict[str, Any]:
         """基于日线计算近期波段高低点及 Fibonacci 回撤位（23.6%/38.2%/50%/61.8%）。"""
         import pandas as pd
@@ -969,6 +1293,777 @@ class DataBackend:
         slope = np.polyfit(x, y, 1)[0]
         mean_price = float(y.mean())
         return (slope / mean_price * 100) if mean_price else None
+
+    @staticmethod
+    def _detect_divergence(close, high, low, n: int) -> dict[str, Any]:
+        """检测 MACD 和 RSI 的顶底背离信号。
+
+        通过比较最近两个价格极值点与对应指标值的方向关系来判断背离：
+        - 顶背离：价格创新高但指标未创新高 → 看跌信号
+        - 底背离：价格创新低但指标未创新低 → 看涨信号
+
+        返回 dict 包含 macd_divergence, rsi_divergence, summary 等字段。
+        """
+        import numpy as np
+
+        result: dict[str, Any] = {
+            "macd_top_div": False, "macd_bot_div": False,
+            "rsi_top_div": False, "rsi_bot_div": False,
+            "macd_div_desc": "", "rsi_div_desc": "",
+            "divergence_score": 0,  # -100~+100, 正=看涨背离, 负=看跌背离
+        }
+        if n < 40:
+            return result
+
+        close_arr = close.values.astype(float)
+        high_arr = high.values.astype(float)
+        low_arr = low.values.astype(float)
+
+        # --- 计算 MACD DIF 序列 ---
+        ema12 = close.ewm(span=12, adjust=False).mean().values
+        ema26 = close.ewm(span=26, adjust=False).mean().values
+        dif = ema12 - ema26
+
+        # --- 计算 RSI(14) 序列 ---
+        delta = np.diff(close_arr, prepend=close_arr[0])
+        gain = np.where(delta > 0, delta, 0.0)
+        loss = np.where(delta < 0, -delta, 0.0)
+        # EMA 方式计算 RSI
+        avg_gain = np.zeros_like(gain)
+        avg_loss = np.zeros_like(loss)
+        avg_gain[14] = gain[1:15].mean()
+        avg_loss[14] = loss[1:15].mean()
+        for i in range(15, len(gain)):
+            avg_gain[i] = (avg_gain[i-1] * 13 + gain[i]) / 14
+            avg_loss[i] = (avg_loss[i-1] * 13 + loss[i]) / 14
+        with np.errstate(divide='ignore', invalid='ignore'):
+            rs = np.where(avg_loss > 0, avg_gain / avg_loss, 100.0)
+        rsi = 100 - 100 / (1 + rs)
+
+        # --- 查找局部极值点（前后 window 根内的最高/最低）---
+        window = max(5, n // 20)  # 自适应窗口
+        lookback = min(n, 120)  # 最多回看120根
+        start = max(0, n - lookback)
+
+        def find_peaks(arr, start_idx, win):
+            peaks = []
+            for i in range(start_idx + win, len(arr) - 1):
+                seg = arr[max(start_idx, i - win): min(len(arr), i + win + 1)]
+                if len(seg) > 0 and arr[i] == seg.max() and arr[i] > arr[i-1] and arr[i] >= arr[min(i+1, len(arr)-1)]:
+                    peaks.append(i)
+            return peaks
+
+        def find_troughs(arr, start_idx, win):
+            troughs = []
+            for i in range(start_idx + win, len(arr) - 1):
+                seg = arr[max(start_idx, i - win): min(len(arr), i + win + 1)]
+                if len(seg) > 0 and arr[i] == seg.min() and arr[i] < arr[i-1] and arr[i] <= arr[min(i+1, len(arr)-1)]:
+                    troughs.append(i)
+            return troughs
+
+        price_peaks = find_peaks(high_arr, start, window)
+        price_troughs = find_troughs(low_arr, start, window)
+
+        div_score = 0
+
+        # --- MACD 背离检测 ---
+        if len(price_peaks) >= 2:
+            p1, p2 = price_peaks[-2], price_peaks[-1]
+            if high_arr[p2] > high_arr[p1] and dif[p2] < dif[p1]:
+                result["macd_top_div"] = True
+                result["macd_div_desc"] = f"MACD顶背离: 价格新高{high_arr[p2]:.2f}>{high_arr[p1]:.2f}, DIF走低{dif[p2]:.4f}<{dif[p1]:.4f}"
+                div_score -= 30
+
+        if len(price_troughs) >= 2:
+            t1, t2 = price_troughs[-2], price_troughs[-1]
+            if low_arr[t2] < low_arr[t1] and dif[t2] > dif[t1]:
+                result["macd_bot_div"] = True
+                result["macd_div_desc"] = f"MACD底背离: 价格新低{low_arr[t2]:.2f}<{low_arr[t1]:.2f}, DIF走高{dif[t2]:.4f}>{dif[t1]:.4f}"
+                div_score += 30
+
+        # --- RSI 背离检测 ---
+        if len(price_peaks) >= 2:
+            p1, p2 = price_peaks[-2], price_peaks[-1]
+            if high_arr[p2] > high_arr[p1] and rsi[p2] < rsi[p1] - 2:
+                result["rsi_top_div"] = True
+                result["rsi_div_desc"] = f"RSI顶背离: 价格新高, RSI走低{rsi[p2]:.1f}<{rsi[p1]:.1f}"
+                div_score -= 25
+
+        if len(price_troughs) >= 2:
+            t1, t2 = price_troughs[-2], price_troughs[-1]
+            if low_arr[t2] < low_arr[t1] and rsi[t2] > rsi[t1] + 2:
+                result["rsi_bot_div"] = True
+                result["rsi_div_desc"] = f"RSI底背离: 价格新低, RSI走高{rsi[t2]:.1f}>{rsi[t1]:.1f}"
+                div_score += 25
+
+        # 双重背离加强信号
+        if result["macd_top_div"] and result["rsi_top_div"]:
+            div_score -= 15  # 额外扣分
+        if result["macd_bot_div"] and result["rsi_bot_div"]:
+            div_score += 15  # 额外加分
+
+        result["divergence_score"] = max(-100, min(100, div_score))
+        return result
+
+    @staticmethod
+    def _detect_volume_price_signals(close, volume, n: int) -> dict[str, Any]:
+        """检测量价关系信号：放量突破、缩量回踩、量能异动、天量滞涨、OBV趋势。
+
+        返回 dict 包含各量价信号及综合评分。
+        """
+        import numpy as np
+
+        result: dict[str, Any] = {
+            "volume_breakout": False,       # 放量突破
+            "shrink_pullback": False,        # 缩量回踩
+            "volume_anomaly": False,         # 底部放量异动
+            "climax_volume": False,          # 天量滞涨/见顶
+            "obv_trend": "neutral",          # OBV趋势方向
+            "volume_price_score": 0,         # -50~+50
+            "desc": "",
+        }
+        if n < 25:
+            return result
+
+        c = close.values.astype(float)
+        v = volume.values.astype(float)
+        vp_score = 0
+        descs = []
+
+        # 量比：近5日均量 / 近20日均量
+        vol_5 = v[-5:].mean() if len(v) >= 5 else v.mean()
+        vol_20 = v[-20:].mean() if len(v) >= 20 else v.mean()
+        vr = vol_5 / vol_20 if vol_20 > 0 else 1.0
+
+        # 最新一根的成交量 / 20日均量
+        last_vr = v[-1] / vol_20 if vol_20 > 0 else 1.0
+
+        # --- 放量突破：价格突破20日高点 且 量比>1.5 ---
+        high_20 = c[-21:-1].max() if len(c) >= 21 else c[:-1].max()
+        if c[-1] > high_20 and last_vr > 1.5:
+            result["volume_breakout"] = True
+            vp_score += 20
+            descs.append(f"放量突破: 价格{c[-1]:.2f}突破20日高点{high_20:.2f}, 量比{last_vr:.1f}倍")
+
+        # --- 缩量回踩：近3日价格回调但成交量持续萎缩 ---
+        if len(c) >= 6:
+            price_down = c[-1] < c[-4]  # 近3日回调
+            vol_shrink = all(v[-i] < v[-i-1] for i in range(1, min(4, len(v))))  # 逐日缩量
+            if price_down and vol_shrink and vr < 0.8:
+                result["shrink_pullback"] = True
+                vp_score += 12
+                descs.append("缩量回踩: 价格回调但量能逐日萎缩,洗盘特征")
+
+        # --- 底部放量异动：60日最低附近突然放量 ---
+        if len(c) >= 60:
+            low_60 = c[-60:].min()
+            near_bottom = (c[-1] - low_60) / (c[-60:].max() - low_60 + 1e-8) < 0.25
+            if near_bottom and last_vr > 2.0:
+                result["volume_anomaly"] = True
+                vp_score += 18
+                descs.append(f"底部放量异动: 价格位于60日低位区间, 量比{last_vr:.1f}倍异动")
+
+        # --- 天量滞涨/见顶：成交量创20日新高但涨幅微弱或下跌 ---
+        if len(v) >= 20:
+            is_max_vol = v[-1] >= v[-20:].max() * 0.95
+            weak_price = abs(c[-1] / c[-2] - 1) < 0.01 or c[-1] < c[-2]
+            near_top = (c[-1] - c[-60:].min()) / (c[-60:].max() - c[-60:].min() + 1e-8) > 0.8 if len(c) >= 60 else False
+            if is_max_vol and weak_price and near_top:
+                result["climax_volume"] = True
+                vp_score -= 20
+                descs.append("天量滞涨: 成交量创新高但价格停滞于高位,出货嫌疑")
+
+        # --- OBV 能量潮趋势 ---
+        if len(c) >= 30:
+            pct = np.diff(c, prepend=c[0])
+            obv = np.cumsum(np.where(pct > 0, v, np.where(pct < 0, -v, 0)))
+            obv_20 = obv[-20:]
+            obv_slope = np.polyfit(np.arange(len(obv_20)), obv_20, 1)[0]
+            price_slope = np.polyfit(np.arange(20), c[-20:], 1)[0]
+            if obv_slope > 0 and price_slope > 0:
+                result["obv_trend"] = "bullish"
+                vp_score += 8
+            elif obv_slope < 0 and price_slope < 0:
+                result["obv_trend"] = "bearish"
+                vp_score -= 8
+            elif obv_slope > 0 and price_slope < 0:
+                result["obv_trend"] = "bullish_divergence"
+                vp_score += 12
+                descs.append("OBV底背离: 价格下跌但OBV上行,资金暗中吸筹")
+            elif obv_slope < 0 and price_slope > 0:
+                result["obv_trend"] = "bearish_divergence"
+                vp_score -= 12
+                descs.append("OBV顶背离: 价格上涨但OBV下行,资金暗中出货")
+
+        result["volume_price_score"] = max(-50, min(50, vp_score))
+        result["desc"] = "; ".join(descs) if descs else "量价关系正常"
+        return result
+
+    @staticmethod
+    def _detect_support_resistance(close, high, low, volume, n: int) -> dict[str, Any]:
+        """检测关键支撑位和阻力位。
+
+        方法：前高/前低、密集成交区(量价分布)、均线支撑/压力、跳空缺口、整数关口。
+        返回 sorted 支撑位列表和阻力位列表及综合评估。
+        """
+        import numpy as np
+
+        result: dict[str, Any] = {
+            "support_levels": [],
+            "resistance_levels": [],
+            "nearest_support": None,
+            "nearest_resistance": None,
+            "price_position": "middle",  # "near_support" | "near_resistance" | "middle"
+            "sr_score": 0,  # -30~+30
+            "gaps": [],
+            "desc": "",
+        }
+        if n < 30:
+            return result
+
+        c = close.values.astype(float)
+        h = high.values.astype(float)
+        l = low.values.astype(float)
+        v = volume.values.astype(float)
+        curr = c[-1]
+        supports = []
+        resistances = []
+        descs = []
+
+        # --- 1. 前高/前低(波段极值) ---
+        window = max(5, n // 15)
+        lookback = min(n, 120)
+        start = max(0, n - lookback)
+        for i in range(start + window, n - 1):
+            seg_h = h[max(start, i-window): min(n, i+window+1)]
+            seg_l = l[max(start, i-window): min(n, i+window+1)]
+            if h[i] == seg_h.max() and h[i] > h[i-1]:
+                level = float(h[i])
+                if level > curr:
+                    resistances.append(("前高", level))
+                else:
+                    supports.append(("前高回落", level))
+            if l[i] == seg_l.min() and l[i] < l[i-1]:
+                level = float(l[i])
+                if level < curr:
+                    supports.append(("前低", level))
+                else:
+                    resistances.append(("前低反弹", level))
+
+        # --- 2. 均线支撑/压力 ---
+        for period, label in [(20, "MA20"), (60, "MA60"), (120, "MA120"), (250, "MA250")]:
+            if n >= period:
+                ma_val = float(c[-period:].mean())
+                if ma_val < curr and (curr - ma_val) / curr < 0.05:
+                    supports.append((label, round(ma_val, 2)))
+                elif ma_val > curr and (ma_val - curr) / curr < 0.05:
+                    resistances.append((label, round(ma_val, 2)))
+
+        # --- 3. 密集成交区 (Volume Profile 简化版) ---
+        if n >= 60:
+            price_range = h[-60:].max() - l[-60:].min()
+            if price_range > 0:
+                num_bins = 20
+                bin_edges = np.linspace(l[-60:].min(), h[-60:].max(), num_bins + 1)
+                vol_profile = np.zeros(num_bins)
+                for i in range(-60, 0):
+                    for j in range(num_bins):
+                        if l[i] <= bin_edges[j+1] and h[i] >= bin_edges[j]:
+                            vol_profile[j] += v[i]
+                # 找成交量最密集的价格区间
+                top_bins = np.argsort(vol_profile)[-3:]
+                for b in top_bins:
+                    mid_price = (bin_edges[b] + bin_edges[b+1]) / 2
+                    if mid_price < curr and (curr - mid_price) / curr < 0.08:
+                        supports.append(("密集成交区", round(float(mid_price), 2)))
+                    elif mid_price > curr and (mid_price - curr) / curr < 0.08:
+                        resistances.append(("密集成交区", round(float(mid_price), 2)))
+
+        # --- 4. 跳空缺口 ---
+        gaps = []
+        for i in range(max(1, n-60), n):
+            if l[i] > h[i-1]:  # 向上跳空
+                gaps.append({"type": "up", "top": float(l[i]), "bottom": float(h[i-1])})
+                if h[i-1] < curr:
+                    supports.append(("上跳缺口上沿", round(float(h[i-1]), 2)))
+            elif h[i] < l[i-1]:  # 向下跳空
+                gaps.append({"type": "down", "top": float(l[i-1]), "bottom": float(h[i])})
+                if l[i-1] > curr:
+                    resistances.append(("下跳缺口下沿", round(float(l[i-1]), 2)))
+        result["gaps"] = gaps[-5:]  # 最近5个缺口
+
+        # --- 5. 整数关口 ---
+        magnitude = 10 ** max(0, int(np.log10(curr + 1e-8)) - 1)
+        round_level = round(curr / magnitude) * magnitude
+        for mul in [-1, 0, 1]:
+            rl = round_level + mul * magnitude
+            if rl > 0 and abs(rl - curr) / curr < 0.06:
+                if rl < curr:
+                    supports.append(("整数关口", rl))
+                elif rl > curr:
+                    resistances.append(("整数关口", rl))
+
+        # --- 去重与排序 ---
+        seen_s, seen_r = set(), set()
+        unique_supports, unique_resistances = [], []
+        for label, price in sorted(supports, key=lambda x: x[1], reverse=True):
+            rp = round(price, 2)
+            if rp not in seen_s:
+                seen_s.add(rp)
+                unique_supports.append({"label": label, "price": rp})
+        for label, price in sorted(resistances, key=lambda x: x[1]):
+            rp = round(price, 2)
+            if rp not in seen_r:
+                seen_r.add(rp)
+                unique_resistances.append({"label": label, "price": rp})
+
+        result["support_levels"] = unique_supports[:8]
+        result["resistance_levels"] = unique_resistances[:8]
+
+        # 最近支撑/阻力
+        if unique_supports:
+            result["nearest_support"] = unique_supports[0]
+        if unique_resistances:
+            result["nearest_resistance"] = unique_resistances[0]
+
+        # 评估价格位置
+        sr_score = 0
+        if unique_supports and unique_resistances:
+            ns = unique_supports[0]["price"]
+            nr = unique_resistances[0]["price"]
+            total_range = nr - ns if nr > ns else 1
+            pos_ratio = (curr - ns) / total_range
+            if pos_ratio < 0.25:
+                result["price_position"] = "near_support"
+                sr_score += 15
+                descs.append(f"价格{curr:.2f}接近支撑位{ns:.2f}")
+            elif pos_ratio > 0.75:
+                result["price_position"] = "near_resistance"
+                sr_score -= 15
+                descs.append(f"价格{curr:.2f}接近阻力位{nr:.2f}")
+        elif unique_supports and not unique_resistances:
+            sr_score += 10
+            descs.append("上方无明显阻力位")
+        elif unique_resistances and not unique_supports:
+            sr_score -= 10
+            descs.append("下方无明显支撑位")
+
+        result["sr_score"] = sr_score
+        result["desc"] = "; ".join(descs) if descs else f"当前价{curr:.2f}处于支撑阻力区间中部"
+        return result
+
+    @staticmethod
+    def _detect_chart_patterns(close, high, low, n: int) -> dict[str, Any]:
+        """检测大级别图形形态（20-60根K线），包括三角形、旗形、楔形、箱体、杯柄、圆弧底/顶。
+
+        返回 dict 包含检测到的形态列表及综合评分。
+        """
+        import numpy as np
+
+        result: dict[str, Any] = {
+            "patterns": [],        # [{name, direction, confidence, desc}]
+            "chart_pattern_score": 0,  # -40~+40
+            "desc": "",
+        }
+        if n < 25:
+            return result
+
+        h = high.values.astype(float)
+        l = low.values.astype(float)
+        c = close.values.astype(float)
+        patterns = []
+        score = 0
+
+        # 使用最近60根K线分析
+        lookback = min(60, n)
+        h60 = h[-lookback:]
+        l60 = l[-lookback:]
+        c60 = c[-lookback:]
+        x = np.arange(lookback)
+
+        # --- 1. 三角形（收敛形态）---
+        if lookback >= 30:
+            # 高点趋势线（线性回归）
+            high_slope = np.polyfit(x, h60, 1)[0]
+            low_slope = np.polyfit(x, l60, 1)[0]
+            # 收敛条件：高点下降+低点上升
+            h_range_first = h60[:lookback//3].max() - h60[:lookback//3].min()
+            h_range_last = h60[-lookback//3:].max() - h60[-lookback//3:].min()
+
+            if high_slope < 0 and low_slope > 0:
+                # 对称三角形
+                patterns.append({
+                    "name": "对称三角形",
+                    "direction": "neutral",
+                    "confidence": 65,
+                    "desc": "高点下行低点上行,价格区间收窄,即将选择方向突破",
+                })
+            elif high_slope < -0.001 and abs(low_slope) < abs(high_slope) * 0.3:
+                # 下降三角形（高点下降，低点平坦）
+                patterns.append({
+                    "name": "下降三角形",
+                    "direction": "bearish",
+                    "confidence": 68,
+                    "desc": "高点持续下降而低点水平支撑,向下突破概率较大",
+                })
+                score -= 12
+            elif low_slope > 0.001 and abs(high_slope) < abs(low_slope) * 0.3:
+                # 上升三角形（低点上升，高点平坦）
+                patterns.append({
+                    "name": "上升三角形",
+                    "direction": "bullish",
+                    "confidence": 70,
+                    "desc": "低点持续抬升逼近水平压力位,向上突破概率较大",
+                })
+                score += 15
+
+        # --- 2. 箱体震荡 ---
+        if lookback >= 30:
+            range_high = h60.max()
+            range_low = l60.min()
+            price_range = range_high - range_low
+            mean_price = c60.mean()
+            # 箱体条件：振幅<15%，且最近价格在箱体中间
+            if price_range / mean_price < 0.15 and abs(np.polyfit(x, c60, 1)[0]) < mean_price * 0.001:
+                upper = h60[-lookback//2:].max()
+                lower = l60[-lookback//2:].min()
+                pos = (c60[-1] - lower) / (upper - lower) if upper > lower else 0.5
+                direction = "bullish" if pos < 0.3 else ("bearish" if pos > 0.7 else "neutral")
+                patterns.append({
+                    "name": "箱体震荡",
+                    "direction": direction,
+                    "confidence": 72,
+                    "desc": f"价格在[{lower:.2f}-{upper:.2f}]区间震荡,当前位于{'底部' if pos < 0.3 else '顶部' if pos > 0.7 else '中部'}",
+                })
+                if pos < 0.3:
+                    score += 10
+                elif pos > 0.7:
+                    score -= 10
+
+        # --- 3. 旗形/楔形 ---
+        if lookback >= 30:
+            # 先检查前半段是否有明显趋势（急涨/急跌=旗杆）
+            mid = lookback // 2
+            first_half_move = (c60[mid] - c60[0]) / c60[0] * 100
+            second_half_slope = np.polyfit(np.arange(lookback - mid), c60[mid:], 1)[0]
+            second_half_range = (h60[mid:].max() - l60[mid:].min()) / c60[mid:].mean() * 100
+
+            if first_half_move > 15 and second_half_range < 8 and second_half_slope <= 0:
+                patterns.append({
+                    "name": "上升旗形",
+                    "direction": "bullish",
+                    "confidence": 71,
+                    "desc": f"急涨{first_half_move:.1f}%后进入窄幅回调整理,旗形向上突破概率大",
+                })
+                score += 14
+            elif first_half_move < -15 and second_half_range < 8 and second_half_slope >= 0:
+                patterns.append({
+                    "name": "下降旗形",
+                    "direction": "bearish",
+                    "confidence": 71,
+                    "desc": f"急跌{abs(first_half_move):.1f}%后进入窄幅反弹整理,旗形向下突破概率大",
+                })
+                score -= 14
+
+        # --- 4. 杯柄形态（Cup & Handle）---
+        if lookback >= 40:
+            # 找U型底：前1/3下跌，中1/3触底，后1/3回升
+            third = lookback // 3
+            seg1 = c60[:third]
+            seg2 = c60[third:2*third]
+            seg3 = c60[2*third:]
+            if (seg1[0] > seg2.min() and seg3[-1] > seg2.min()
+                and seg3[-1] > seg1[0] * 0.95  # 杯口基本持平
+                and seg2.min() < seg1[0] * 0.9):  # 杯底深度>10%
+                # 检查柄部（最近10%K线的小幅回调）
+                handle = c60[-lookback//10:]
+                if len(handle) >= 3 and handle[-1] < handle.max() and handle[-1] > seg2.min():
+                    patterns.append({
+                        "name": "杯柄形态",
+                        "direction": "bullish",
+                        "confidence": 75,
+                        "desc": f"U型底部{seg2.min():.2f}后回升至杯口,柄部回调中,突破即买入信号",
+                    })
+                    score += 18
+
+        # --- 5. 圆弧底/圆弧顶 ---
+        if lookback >= 40:
+            # 圆弧底：拟合二次曲线，开口向上（a>0）且近期在上升段
+            coeffs = np.polyfit(x, c60, 2)
+            a, b = coeffs[0], coeffs[1]
+            residual = np.sqrt(np.mean((np.polyval(coeffs, x) - c60) ** 2))
+            fit_quality = 1 - residual / (c60.std() + 1e-8)
+
+            if a > 0 and fit_quality > 0.5 and c60[-1] > c60.mean():
+                patterns.append({
+                    "name": "圆弧底",
+                    "direction": "bullish",
+                    "confidence": int(60 + fit_quality * 15),
+                    "desc": "价格走势呈U型圆弧底形态,中长期看涨信号",
+                })
+                score += 15
+            elif a < 0 and fit_quality > 0.5 and c60[-1] < c60.mean():
+                patterns.append({
+                    "name": "圆弧顶",
+                    "direction": "bearish",
+                    "confidence": int(60 + fit_quality * 15),
+                    "desc": "价格走势呈倒U型圆弧顶形态,中长期看跌信号",
+                })
+                score -= 15
+
+        result["patterns"] = patterns
+        result["chart_pattern_score"] = max(-40, min(40, score))
+        if patterns:
+            result["desc"] = "; ".join(f"{p['name']}({p['direction']},{p['confidence']}%)" for p in patterns)
+        else:
+            result["desc"] = "未检测到明显图形形态"
+        return result
+
+    @staticmethod
+    def _detect_chanlun_signals(close, high, low, n: int) -> dict[str, Any]:
+        """缠论（缠中说禅）核心信号检测：分型→笔→线段→中枢→买卖点。
+
+        简化实现：
+        1. 顶分型/底分型 检测（3根K线）
+        2. 笔（Bi）构造：顶分型→底分型为下笔，底分型→顶分型为上笔
+        3. 中枢（Hub/Pivot）：至少3笔重叠区间
+        4. 三类买卖点判定
+
+        返回 dict 包含分型列表、笔列表、中枢、买卖点信号。
+        """
+        import numpy as np
+
+        result: dict[str, Any] = {
+            "fractals": [],       # 分型列表 [{type, index, price}]
+            "bi_list": [],        # 笔列表 [{dir, start_idx, end_idx, start_price, end_price}]
+            "zhongshu": [],       # 中枢列表 [{high, low, start_idx, end_idx}]
+            "buy_signals": [],    # 买点信号 [{type, price, desc}]
+            "sell_signals": [],   # 卖点信号 [{type, price, desc}]
+            "chanlun_score": 0,   # -50~+50
+            "desc": "",
+        }
+        if n < 15:
+            return result
+
+        h = high.values.astype(float)
+        l = low.values.astype(float)
+        c = close.values.astype(float)
+
+        # === 1. K线包含处理（合并包含关系）===
+        # 方向：当前K线高点>=前K线高点为上，否则为下
+        merged_h = [h[0]]
+        merged_l = [l[0]]
+        merged_idx = [0]
+        for i in range(1, n):
+            prev_h, prev_l = merged_h[-1], merged_l[-1]
+            cur_h, cur_l = h[i], l[i]
+            # 包含关系：一根K线完全包含另一根
+            if (cur_h <= prev_h and cur_l >= prev_l) or (cur_h >= prev_h and cur_l <= prev_l):
+                # 上升趋势取高高，下降趋势取低低
+                if len(merged_h) >= 2 and merged_h[-1] > merged_h[-2]:
+                    merged_h[-1] = max(prev_h, cur_h)
+                    merged_l[-1] = max(prev_l, cur_l)
+                else:
+                    merged_h[-1] = min(prev_h, cur_h)
+                    merged_l[-1] = min(prev_l, cur_l)
+            else:
+                merged_h.append(cur_h)
+                merged_l.append(cur_l)
+                merged_idx.append(i)
+
+        mh = np.array(merged_h)
+        ml = np.array(merged_l)
+        mn = len(mh)
+
+        # === 2. 分型检测（顶分型/底分型）===
+        fractals = []  # (type, merged_index, original_index, price)
+        for i in range(1, mn - 1):
+            if mh[i] > mh[i-1] and mh[i] > mh[i+1]:
+                # 顶分型
+                fractals.append(("top", i, merged_idx[i] if i < len(merged_idx) else i, float(mh[i])))
+            elif ml[i] < ml[i-1] and ml[i] < ml[i+1]:
+                # 底分型
+                fractals.append(("bot", i, merged_idx[i] if i < len(merged_idx) else i, float(ml[i])))
+
+        result["fractals"] = [
+            {"type": f[0], "index": f[2], "price": f[3]}
+            for f in fractals[-20:]  # 只保留最近20个
+        ]
+
+        # === 3. 笔（Bi）构造 ===
+        # 交替出现的顶底分型之间构成一笔，至少间隔4根合并K线
+        bi_list = []
+        if len(fractals) >= 2:
+            last_fractal = fractals[0]
+            for f in fractals[1:]:
+                # 必须交替出现（顶→底 或 底→顶）
+                if f[0] == last_fractal[0]:
+                    # 同类型，取更极端的
+                    if f[0] == "top" and f[3] > last_fractal[3]:
+                        last_fractal = f
+                    elif f[0] == "bot" and f[3] < last_fractal[3]:
+                        last_fractal = f
+                    continue
+                # 检查间隔（至少4根合并K线）
+                if abs(f[1] - last_fractal[1]) < 4:
+                    continue
+                direction = "up" if last_fractal[0] == "bot" else "down"
+                bi_list.append({
+                    "dir": direction,
+                    "start_idx": last_fractal[2],
+                    "end_idx": f[2],
+                    "start_price": last_fractal[3],
+                    "end_price": f[3],
+                })
+                last_fractal = f
+
+        result["bi_list"] = bi_list[-15:]  # 最近15笔
+
+        # === 4. 中枢（Zhongshu/Hub）检测 ===
+        # 至少3笔有重叠区间构成中枢
+        zhongshu_list = []
+        if len(bi_list) >= 3:
+            i = 0
+            while i <= len(bi_list) - 3:
+                # 取连续3笔的重叠区间
+                ranges = []
+                for j in range(i, min(i + 3, len(bi_list))):
+                    bi = bi_list[j]
+                    hi = max(bi["start_price"], bi["end_price"])
+                    lo = min(bi["start_price"], bi["end_price"])
+                    ranges.append((lo, hi))
+                # 计算重叠区间
+                zs_high = min(r[1] for r in ranges)
+                zs_low = max(r[0] for r in ranges)
+                if zs_high > zs_low:
+                    # 中枢成立，尝试扩展
+                    end_j = i + 3
+                    while end_j < len(bi_list):
+                        bi = bi_list[end_j]
+                        hi = max(bi["start_price"], bi["end_price"])
+                        lo = min(bi["start_price"], bi["end_price"])
+                        new_high = min(zs_high, hi)
+                        new_low = max(zs_low, lo)
+                        if new_high > new_low:
+                            end_j += 1
+                        else:
+                            break
+                    zhongshu_list.append({
+                        "high": round(zs_high, 2),
+                        "low": round(zs_low, 2),
+                        "start_idx": bi_list[i]["start_idx"],
+                        "end_idx": bi_list[end_j - 1]["end_idx"],
+                        "bi_count": end_j - i,
+                    })
+                    i = end_j
+                else:
+                    i += 1
+
+        result["zhongshu"] = zhongshu_list[-5:]  # 最近5个中枢
+
+        # === 5. 买卖点判定 ===
+        chanlun_score = 0
+        buy_signals = []
+        sell_signals = []
+        curr_price = float(c[-1])
+
+        if zhongshu_list and bi_list:
+            last_zs = zhongshu_list[-1]
+            last_bi = bi_list[-1]
+
+            # --- 一买：跌破中枢后出现底分型（背驰段结束）---
+            if last_bi["dir"] == "down" and last_bi["end_price"] < last_zs["low"]:
+                # 检查是否有底分型确认
+                recent_bots = [f for f in fractals if f[0] == "bot" and f[2] >= last_bi["end_idx"] - 3]
+                if recent_bots:
+                    buy_signals.append({
+                        "type": "一买",
+                        "price": round(last_bi["end_price"], 2),
+                        "desc": f"价格{last_bi['end_price']:.2f}跌破中枢下沿{last_zs['low']:.2f}后出现底分型,一类买点"
+                    })
+                    chanlun_score += 25
+
+            # --- 二买：一买后回踩不破一买低点 ---
+            if len(bi_list) >= 3:
+                prev_bi = bi_list[-3]  # 可能的一买段
+                mid_bi = bi_list[-2]   # 反弹段
+                if (prev_bi["dir"] == "down" and mid_bi["dir"] == "up" and last_bi["dir"] == "down"
+                    and last_bi["end_price"] > prev_bi["end_price"]):
+                    buy_signals.append({
+                        "type": "二买",
+                        "price": round(last_bi["end_price"], 2),
+                        "desc": f"回踩低点{last_bi['end_price']:.2f}未破前低{prev_bi['end_price']:.2f},二类买点"
+                    })
+                    chanlun_score += 20
+
+            # --- 三买：回踩中枢上沿不跌入中枢 ---
+            if (last_bi["dir"] == "down" and last_bi["end_price"] > last_zs["high"]
+                and curr_price > last_zs["high"]):
+                buy_signals.append({
+                    "type": "三买",
+                    "price": round(last_bi["end_price"], 2),
+                    "desc": f"回踩{last_bi['end_price']:.2f}未跌入中枢上沿{last_zs['high']:.2f},三类买点"
+                })
+                chanlun_score += 18
+
+            # --- 一卖：涨破中枢后出现顶分型 ---
+            if last_bi["dir"] == "up" and last_bi["end_price"] > last_zs["high"]:
+                recent_tops = [f for f in fractals if f[0] == "top" and f[2] >= last_bi["end_idx"] - 3]
+                if recent_tops:
+                    sell_signals.append({
+                        "type": "一卖",
+                        "price": round(last_bi["end_price"], 2),
+                        "desc": f"价格{last_bi['end_price']:.2f}涨破中枢上沿{last_zs['high']:.2f}后出现顶分型,一类卖点"
+                    })
+                    chanlun_score -= 25
+
+            # --- 二卖：一卖后反弹不破一卖高点 ---
+            if len(bi_list) >= 3:
+                prev_bi = bi_list[-3]
+                mid_bi = bi_list[-2]
+                if (prev_bi["dir"] == "up" and mid_bi["dir"] == "down" and last_bi["dir"] == "up"
+                    and last_bi["end_price"] < prev_bi["end_price"]):
+                    sell_signals.append({
+                        "type": "二卖",
+                        "price": round(last_bi["end_price"], 2),
+                        "desc": f"反弹高点{last_bi['end_price']:.2f}未破前高{prev_bi['end_price']:.2f},二类卖点"
+                    })
+                    chanlun_score -= 20
+
+            # --- 三卖：回升至中枢下沿受阻 ---
+            if (last_bi["dir"] == "up" and last_bi["end_price"] < last_zs["low"]
+                and curr_price < last_zs["low"]):
+                sell_signals.append({
+                    "type": "三卖",
+                    "price": round(last_bi["end_price"], 2),
+                    "desc": f"反弹{last_bi['end_price']:.2f}未回到中枢下沿{last_zs['low']:.2f},三类卖点"
+                })
+                chanlun_score -= 18
+
+        # 额外：当前价格在中枢内 → 震荡
+        if zhongshu_list:
+            last_zs = zhongshu_list[-1]
+            if last_zs["low"] <= curr_price <= last_zs["high"]:
+                chanlun_score = int(chanlun_score * 0.5)  # 中枢内震荡，信号减半
+
+        result["buy_signals"] = buy_signals
+        result["sell_signals"] = sell_signals
+        result["chanlun_score"] = max(-50, min(50, chanlun_score))
+
+        descs = []
+        if zhongshu_list:
+            last_zs = zhongshu_list[-1]
+            descs.append(f"最近中枢[{last_zs['low']:.2f}-{last_zs['high']:.2f}]({last_zs['bi_count']}笔)")
+        if buy_signals:
+            descs.append("买点:" + ",".join(s["type"] for s in buy_signals))
+        if sell_signals:
+            descs.append("卖点:" + ",".join(s["type"] for s in sell_signals))
+        if bi_list:
+            last_bi = bi_list[-1]
+            descs.append(f"最近笔:{last_bi['dir']} {last_bi['start_price']:.2f}→{last_bi['end_price']:.2f}")
+        result["desc"] = "; ".join(descs) if descs else "缠论信号不足"
+
+        return result
 
     @staticmethod
     def _snapshot_from_klines(symbol: str, name: str, day_df) -> MarketSnapshot | None:

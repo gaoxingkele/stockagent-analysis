@@ -32,6 +32,17 @@
       "grok",
       "gemini"
     ],
+    "default_providers": [
+      "deepseek",
+      "grok",
+      "glm"
+    ],
+    "candidate_providers": [
+      "kimi",
+      "gemini",
+      "doubao",
+      "minmax"
+    ],
     "supported_providers": [
       "kimi",
       "grok",
@@ -49,6 +60,8 @@
     "temperature": 0.3,
     "max_tokens": 600,
     "request_timeout_sec": 25,
+    "provider_timeout_sec": 1800,
+    "agent_call_timeout_sec": 300,
     "multi_turn_default": true
   },
   "output_dir": "output/runs"

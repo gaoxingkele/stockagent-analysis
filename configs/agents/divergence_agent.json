@@ -1,0 +1,21 @@
+{
+  "agent_id": "divergence_agent",
+  "agent_type": "divergence",
+  "dim_code": "DIVERGENCE",
+  "name": "MACD/RSI背离检测Agent",
+  "role": "技术背离分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.10,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tdx", "akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": [
+      "日/周/月K线",
+      "MACD",
+      "RSI",
+      "MACD/RSI背离信号"
+    ]
+  }
+}

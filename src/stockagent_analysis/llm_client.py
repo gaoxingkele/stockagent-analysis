@@ -3,9 +3,11 @@ import json
 import logging
 import os
 import re
+import threading
 from typing import Any, Optional
 
 import requests
+from requests.adapters import HTTPAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -194,11 +196,11 @@ def score_agent_analysis(
     name: str,
     reason: str,
     data_context: str | None,
-) -> float:
+) -> float | None:
     """
     请大模型对某 Agent 的分析结论打分（0-100）。
     reason: Agent 的原始结论/研判；data_context: 数据摘要
-    返回: 0~100 的分数，解析失败时返回 50
+    返回: 0~100 的分数，解析失败时返回 None（由调用方决定是否回退到备选Provider）
     """
     ctx_block = f"\n\n【数据摘要】\n{data_context}\n" if data_context else ""
     prompt = (
@@ -218,8 +220,8 @@ def score_agent_analysis(
         )
         text = router._chat(prompt, multi_turn=True)
         if not text:
-            logger.warning("score_agent_analysis: empty response for %s", agent_id)
-            return 50.0
+            logger.warning("score_agent_analysis: empty response for %s (provider=%s)", agent_id, provider_hint)
+            return None
         text = text.strip()
         provider_hint = getattr(router, "provider", "")
         score = _parse_score_from_response(text, provider_hint)
@@ -233,10 +235,10 @@ def score_agent_analysis(
             agent_id,
             snippet,
         )
-        return 50.0
+        return None
     except Exception as e:
         logger.warning("score_agent_analysis: exception provider=%s agent=%s %s", getattr(router, "provider", ""), agent_id, e)
-        return 50.0
+        return None
 
 
 def generate_scenario_and_position(
@@ -338,6 +340,42 @@ class LLMRouter:
         self.max_tokens = max_tokens
         self.request_timeout_sec = request_timeout_sec
         self.multi_turn = multi_turn  # 默认多轮对话模式
+        self._session = self._create_session()
+        self._session_lock = threading.Lock()
+
+    # ── Session 管理 ──
+
+    def _create_session(self) -> requests.Session:
+        """创建新的 requests.Session，配置连接池参数。"""
+        s = requests.Session()
+        adapter = HTTPAdapter(pool_connections=2, pool_maxsize=2)
+        s.mount("http://", adapter)
+        s.mount("https://", adapter)
+        return s
+
+    def close_session(self) -> None:
+        """关闭当前 Session（中断正在进行的 HTTP 请求）并重建连接池。
+        由超时取消线程调用，强制终止卡住的 requests.post()。"""
+        with self._session_lock:
+            try:
+                self._session.close()
+            except Exception:
+                pass
+            self._session = self._create_session()
+
+    def _safe_post(self, url: str, **kwargs) -> requests.Response:
+        """带连接错误恢复的 POST 请求。首次连接失败时重建 Session 并重试一次。"""
+        try:
+            return self._session.post(url, **kwargs)
+        except (requests.exceptions.ConnectionError, ConnectionResetError, OSError) as e:
+            logger.warning("连接异常，重建Session并重试: %s", e)
+            with self._session_lock:
+                try:
+                    self._session.close()
+                except Exception:
+                    pass
+                self._session = self._create_session()
+            return self._session.post(url, **kwargs)
 
     def supports_vision(self) -> bool:
         return _supports_vision(self.provider)
@@ -408,8 +446,8 @@ class LLMRouter:
             base_url = "https://api.moonshot.cn/v1/chat/completions"
         elif self.provider == "minmax":
             api_key = os.getenv("MINMAX_API_KEY", "")
-            model = os.getenv("MINMAX_MODEL", "MiniMax-Text-01")
-            base_url = os.getenv("MINMAX_BASE_URL", "https://api.minimax.chat/v1/text/chatcompletion_v2")
+            model = os.getenv("MINMAX_MODEL", "MiniMax-M2.5")
+            base_url = os.getenv("MINMAX_BASE_URL", "https://api.minimaxi.com/v1/chat/completions")
         elif self.provider == "glm":
             api_key = os.getenv("GLM_API_KEY", "")
             model = os.getenv("GLM_MODEL", "glm-4.5")
@@ -441,26 +479,19 @@ class LLMRouter:
         messages = [{"role": "user", "content": prompt}]
         if multi_turn:
             messages = [{"role": "system", "content": "你是一位专业的中国股市分析员，请基于提供的数据给出客观、可执行的研判。"}] + messages
+        # 部分推理模型（kimi-k2.5、deepseek-reasoner 等）只允许 temperature=1
+        temp = self.temperature
+        _FIXED_TEMP_MODELS = {"kimi-k2.5", "deepseek-reasoner"}
+        if model.lower() in _FIXED_TEMP_MODELS:
+            temp = 1.0
         payload = {
             "model": model,
             "messages": messages,
-            "temperature": self.temperature,
+            "temperature": temp,
             "max_tokens": self.max_tokens,
         }
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        # MiniMax非严格OpenAI兼容时，允许body字段名差异通过base_url自定义处理
-        if "minimax.chat" in base_url and "chatcompletion_v2" in base_url:
-            msgs = [{"sender_type": "USER", "text": prompt}]
-            if multi_turn:
-                msgs = [{"sender_type": "BOT", "text": "你是专业股市分析员。"}, {"sender_type": "USER", "text": prompt}]
-            payload = {
-                "model": model,
-                "messages": msgs,
-                "temperature": self.temperature,
-                "tokens_to_generate": self.max_tokens,
-            }
-            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        resp = requests.post(base_url, headers=headers, json=payload, timeout=self.request_timeout_sec, proxies=_get_llm_proxies(self.provider))
+        resp = self._safe_post(base_url, headers=headers, json=payload, timeout=self.request_timeout_sec, proxies=_get_llm_proxies(self.provider))
         if not resp.ok:
             if resp.status_code == 400 and "perplexity" in base_url.lower():
                 try:
@@ -478,10 +509,12 @@ class LLMRouter:
             if isinstance(content, list):
                 parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
                 content = " ".join(parts) if parts else ""
-            return content if isinstance(content, str) else str(content)
-        # MiniMax兜底
-        if "reply" in data:
-            return data.get("reply")
+            if not isinstance(content, str):
+                content = str(content)
+            # 部分模型（如 MiniMax-M2.5, DeepSeek-R1）返回 <think>...</think> 思考过程，提取正文
+            if "<think>" in content:
+                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+            return content
         return None
 
     def _chat_gemini(self, prompt: str, multi_turn: bool = True) -> Optional[str]:
@@ -490,7 +523,7 @@ class LLMRouter:
         if not api_key:
             return None
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-        resp = requests.post(
+        resp = self._safe_post(
             url,
             json={"contents": [{"parts": [{"text": prompt}]}]},
             timeout=self.request_timeout_sec,
@@ -515,7 +548,7 @@ class LLMRouter:
         }
         if multi_turn:
             body["system"] = "你是一位专业的中国股市分析员，请基于提供的数据给出客观、可执行的研判。"
-        resp = requests.post(
+        resp = self._safe_post(
             "https://api.anthropic.com/v1/messages",
             headers={
                 "x-api-key": api_key,
@@ -549,8 +582,8 @@ class LLMRouter:
                 ]
             }]
         }
-        resp = requests.post(url, json=body, timeout=self.request_timeout_sec,
-                             proxies=_get_llm_proxies("gemini"))
+        resp = self._safe_post(url, json=body, timeout=self.request_timeout_sec,
+                              proxies=_get_llm_proxies("gemini"))
         resp.raise_for_status()
         data = resp.json()
         cands = data.get("candidates", [])
@@ -575,7 +608,7 @@ class LLMRouter:
                 ],
             }],
         }
-        resp = requests.post(
+        resp = self._safe_post(
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
             json=body,
@@ -626,9 +659,9 @@ class LLMRouter:
         payload = {"model": model, "messages": messages,
                    "temperature": self.temperature, "max_tokens": self.max_tokens}
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        resp = requests.post(base_url, headers=headers, json=payload,
-                             timeout=self.request_timeout_sec,
-                             proxies=_get_llm_proxies(self.provider))
+        resp = self._safe_post(base_url, headers=headers, json=payload,
+                              timeout=self.request_timeout_sec,
+                              proxies=_get_llm_proxies(self.provider))
         resp.raise_for_status()
         data = resp.json()
         if "choices" in data and data["choices"]:

@@ -1,0 +1,20 @@
+{
+  "agent_id": "volume_price_agent",
+  "agent_type": "volume_price",
+  "dim_code": "VOLUME_PRICE",
+  "name": "量价关系分析Agent",
+  "role": "量价关系分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.08,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tdx", "akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": [
+      "日/周/月K线",
+      "成交额",
+      "量价关系信号"
+    ]
+  }
+}

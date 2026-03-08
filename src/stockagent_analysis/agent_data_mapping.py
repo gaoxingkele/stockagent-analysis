@@ -53,6 +53,7 @@ LOCAL_DATA_MAPPING: dict[str, list[str]] = {
     "StochRSI": ["kline_indicators", "features"],
     "波动率": ["kline_indicators", "features.volatility_20"],
     "3-5根K线组合": ["kline_indicators", "features"],
+    "K线形态组合": ["kline_indicators", "features"],
     "长期趋势线": ["kline_indicators", "features"],
     "主力控盘迹象": ["features", "snapshot"],
     "分时资金流": ["snapshot", "features"],
@@ -82,6 +83,12 @@ LOCAL_DATA_MAPPING: dict[str, list[str]] = {
     "换手率": ["snapshot", "fundamentals.turnover_rate"],
     "盘口深度": ["snapshot", "features"],
     "委比量比": ["snapshot", "features.volume_ratio"],
+    # 背离/量价/支撑阻力 智能体
+    "MACD/RSI背离信号": ["kline_indicators", "features"],
+    "量价关系信号": ["kline_indicators", "features"],
+    "支撑阻力位": ["kline_indicators", "features"],
+    "缠论买卖点信号": ["kline_indicators", "features"],
+    "图形形态信号": ["kline_indicators", "features"],
     # K线视觉智能体专用
     "1h/日/周/月K线图像": ["chart_files", "kline_indicators"],
     "日线K线图像": ["chart_files", "kline_indicators"],

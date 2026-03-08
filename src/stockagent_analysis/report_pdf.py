@@ -483,78 +483,72 @@ def _add_weighted_score_table(
     level_color_map: dict[str, str],
     final_score: float,
 ) -> None:
-    """9维度加权评分汇总表（类参考报告结构）。"""
+    """全智能体加权评分汇总表：列出所有Agent，9核心在前，扩展在后。"""
     votes = result.get("agent_votes", [])
     if not votes:
         return
 
-    # 9 核心维度优先展示，其余合并为"扩展智能体"
     CORE_DIMS = ["TREND", "TECH", "DERIV_MARGIN", "LIQ", "CAPITAL_FLOW", "BETA",
                  "SECTOR_POLICY", "SENTIMENT", "FUNDAMENTAL"]
-    core_votes = {v.get("dim_code", ""): v for v in votes if v.get("dim_code", "") in CORE_DIMS}
+    core_votes = [v for v in votes if v.get("dim_code", "") in CORE_DIMS]
     other_votes = [v for v in votes if v.get("dim_code", "") not in CORE_DIMS]
+    # 核心维度按 CORE_DIMS 顺序排列
+    core_order = {d: i for i, d in enumerate(CORE_DIMS)}
+    core_votes.sort(key=lambda v: core_order.get(v.get("dim_code", ""), 99))
+    ordered_votes = core_votes + other_votes
 
-    flow.append(Paragraph("核心9维度加权评分体系", st_h))
-    multi_mode = result.get("multi_model_weight_mode")
+    flow.append(Paragraph("多智能体加权评分体系", st_h))
     total_weight = sum(float(v.get("weight", 0)) for v in votes) or 1.0
 
-    if multi_mode:
-        table_data = [["Agent", "评分", "五级建议", "置信度"]]
-    else:
-        table_data = [["Agent / 维度", "评分", "五级建议", "权重", "加权贡献"]]
+    # 表头：序号 | 智能体 | 评分 | 五级建议 | 权重
+    table_data = [["#", "智能体", "评分", "五级建议", "权重"]]
 
-    for dim in CORE_DIMS:
-        v = core_votes.get(dim)
-        if not v:
-            continue
-        role = v.get("role", dim)[:14]
+    for idx, v in enumerate(ordered_votes, 1):
+        role = v.get("role", v.get("dim_code", ""))
+        # 截断到12个字符（约6中文字）
+        if len(role) > 12:
+            role = role[:12]
         score = float(v.get("score_0_100", 50))
         level_cn = _score_to_decision_level_cn(score)
-        if multi_mode:
-            conf = float(v.get("confidence_0_1", 0.5))
-            table_data.append([role, f"{score:.1f}", level_cn, f"{conf:.2f}"])
-        else:
-            weight = float(v.get("weight", 0))
-            weight_pct = weight / total_weight if total_weight else 0
-            contrib = score * weight_pct
-            table_data.append([role, f"{score:.1f}", level_cn, f"{weight_pct:.1%}", f"{contrib:.2f}"])
-
-    # 扩展智能体合并行
-    if other_votes:
-        ext_score = sum(float(v.get("score_0_100", 50)) for v in other_votes) / len(other_votes)
-        ext_level = _score_to_decision_level_cn(ext_score)
-        if multi_mode:
-            table_data.append([f"扩展智能体×{len(other_votes)}", f"{ext_score:.1f}", ext_level, "-"])
-        else:
-            ext_w = sum(float(v.get("weight", 0)) for v in other_votes)
-            ext_pct = ext_w / total_weight if total_weight else 0
-            table_data.append([f"扩展智能体×{len(other_votes)}", f"{ext_score:.1f}", ext_level,
-                                f"{ext_pct:.1%}", f"{ext_score * ext_pct:.2f}"])
+        weight = float(v.get("weight", 0))
+        weight_pct = weight / total_weight if total_weight else 0
+        # 核心维度标记 *
+        is_core = v.get("dim_code", "") in CORE_DIMS
+        num_str = f"{idx}" if not is_core else f"{idx}*"
+        table_data.append([num_str, role, f"{score:.1f}", level_cn, f"{weight_pct:.1%}"])
 
     # 合计行
-    if multi_mode:
-        table_data.append(["", f"综合：{final_score:.2f}", "—", "—"])
-        col_w = [55 * mm, 25 * mm, 28 * mm, 20 * mm]
-    else:
-        table_data.append(["", "", "合计", "100%", f"{final_score:.2f}"])
-        col_w = [50 * mm, 22 * mm, 22 * mm, 20 * mm, 28 * mm]
+    table_data.append(["", "综合评分", f"{final_score:.1f}",
+                        _score_to_decision_level_cn(final_score), "100%"])
 
+    col_w = [10 * mm, 48 * mm, 18 * mm, 26 * mm, 18 * mm]
     table = Table(table_data, colWidths=col_w)
+
+    n_core = len(core_votes)
     tbl_style = [
         ("FONTNAME", (0, 0), (-1, -1), body_font),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF2FF")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0D3B66")),
         ("FONTNAME", (0, 0), (-1, 0), bold_font),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D0D7DE")),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D0D7DE")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        # 合计行底色
         ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#F0F4F8")),
+        ("FONTNAME", (0, -1), (-1, -1), bold_font),
+        # 核心维度行浅底色
+        ("BACKGROUND", (0, 1), (-1, n_core), colors.HexColor("#FAFCFF")),
     ]
-    level_col = 2
+    # 核心与扩展分隔线
+    if n_core < len(ordered_votes):
+        tbl_style.append(("LINEBELOW", (0, n_core), (-1, n_core), 1.0, colors.HexColor("#0D3B66")))
+
+    # 五级建议列着色
+    level_col = 3
     for i, row in enumerate(table_data[1:], 1):
         if len(row) > level_col:
             lvl = row[level_col]
@@ -565,7 +559,7 @@ def _add_weighted_score_table(
     flow.append(table)
     flow.append(
         Paragraph(
-            "<b>计算说明：</b>最终评分 = Σ(各Agent评分×权重) / Σ(权重)。"
+            "<b>说明：</b>带*为9核心维度。最终评分 = Σ(各Agent评分×LLM权重) / Σ(权重)。"
             "五级映射：强烈买入(≥85)、弱买入(70-85)、观望(50-70)、弱卖出(40-50)、强烈卖出(&lt;40)。",
             st_body,
         )
@@ -860,6 +854,10 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
         flow.append(Paragraph(f"<b>短线建议：</b>{short_hold}；<b>中长线建议：</b>{medium_hold}。", st_body))
     flow.append(Spacer(1, 8))
 
+    # ── 全智能体评分总表（首页核心） ──
+    _add_weighted_score_table(flow, result, st_h, st_body, body_font, bold_font,
+                              level_color_map, final_score)
+
     # ── 多模型权重表（若启用多模型模式）──
     if result.get("multi_model_weight_mode") and result.get("model_weights") and result.get("model_totals"):
         _add_multi_model_table(flow, result, body_font, bold_font, st_h, st_body)
@@ -940,10 +938,6 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
         ))
         flow.append(Paragraph(f"<b>Judge 仲裁：</b>{debate.get('judge_msg', '')}", st_body))
         flow.append(Spacer(1, 6))
-
-    # ── 核心9维度加权评分表 ──
-    _add_weighted_score_table(flow, result, st_h, st_body, body_font, bold_font,
-                              level_color_map, final_score)
 
     # ── 行业竞争格局 ──
     _add_industry_competition(flow, result, st_h, st_body, body_font)

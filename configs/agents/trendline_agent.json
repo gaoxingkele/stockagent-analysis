@@ -1,0 +1,20 @@
+{
+  "agent_id": "trendline_agent",
+  "agent_type": "trendline",
+  "dim_code": "TRENDLINE",
+  "name": "趋势线突破检测Agent",
+  "role": "趋势线突破分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.06,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tdx", "akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": [
+      "日/周/月K线",
+      "长期趋势线",
+      "MA5-250"
+    ]
+  }
+}
