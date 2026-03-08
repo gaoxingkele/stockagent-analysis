@@ -483,51 +483,105 @@ def _add_weighted_score_table(
     level_color_map: dict[str, str],
     final_score: float,
 ) -> None:
-    """全智能体加权评分汇总表：列出所有Agent，9核心在前，扩展在后。"""
+    """全智能体加权评分汇总表：按短线/中长期分组显示。"""
     votes = result.get("agent_votes", [])
     if not votes:
         return
 
-    CORE_DIMS = ["TREND", "TECH", "DERIV_MARGIN", "LIQ", "CAPITAL_FLOW", "BETA",
-                 "SECTOR_POLICY", "SENTIMENT", "FUNDAMENTAL"]
-    core_votes = [v for v in votes if v.get("dim_code", "") in CORE_DIMS]
-    other_votes = [v for v in votes if v.get("dim_code", "") not in CORE_DIMS]
-    # 核心维度按 CORE_DIMS 顺序排列
-    core_order = {d: i for i, d in enumerate(CORE_DIMS)}
-    core_votes.sort(key=lambda v: core_order.get(v.get("dim_code", ""), 99))
-    ordered_votes = core_votes + other_votes
+    # ── 短线参考（5日内）──
+    SHORT_TERM_DIMS = [
+        "KLINE_1H", "KLINE_DAY", "KLINE_PATTERN", "VOLUME_PRICE",
+        "SUPPORT_RESISTANCE", "TRENDLINE",
+        "SENTIMENT", "NLP_SENTIMENT", "CAPITAL_FLOW", "FLOW_DETAIL",
+        "MM_BEHAVIOR", "LIQ",
+    ]
+    # ── 中长期参考（1月以上）──
+    MID_LONG_DIMS = [
+        "KLINE_WEEK", "KLINE_MONTH", "TREND", "TECH",
+        "DIVERGENCE", "CHANLUN", "CHART_PATTERN", "TIMEFRAME_RESONANCE",
+        "TOP_STRUCTURE", "BOTTOM_STRUCTURE",
+        "FUNDAMENTAL", "DERIV_MARGIN", "BETA", "SECTOR_POLICY",
+        "MACRO", "INDUSTRY", "QUANT",
+    ]
+    short_order = {d: i for i, d in enumerate(SHORT_TERM_DIMS)}
+    mid_order = {d: i for i, d in enumerate(MID_LONG_DIMS)}
+
+    short_votes = sorted(
+        [v for v in votes if v.get("dim_code", "") in SHORT_TERM_DIMS],
+        key=lambda v: short_order.get(v.get("dim_code", ""), 99),
+    )
+    mid_votes = sorted(
+        [v for v in votes if v.get("dim_code", "") in MID_LONG_DIMS],
+        key=lambda v: mid_order.get(v.get("dim_code", ""), 99),
+    )
+    # 未归类的放到中长期末尾
+    classified = set(SHORT_TERM_DIMS) | set(MID_LONG_DIMS)
+    other_votes = [v for v in votes if v.get("dim_code", "") not in classified]
+    mid_votes.extend(other_votes)
 
     flow.append(Paragraph("多智能体加权评分体系", st_h))
     total_weight = sum(float(v.get("weight", 0)) for v in votes) or 1.0
 
-    # 表头：序号 | 智能体 | 评分 | 五级建议 | 权重
+    # 表头
     table_data = [["#", "智能体", "评分", "五级建议", "权重"]]
 
-    for idx, v in enumerate(ordered_votes, 1):
+    # ── 短线分组标题行 ──
+    table_data.append(["", "短线参考（5日内）", "", "", ""])
+    n_short_header = len(table_data) - 1  # 短线标题行索引
+
+    for idx, v in enumerate(short_votes, 1):
         role = v.get("role", v.get("dim_code", ""))
-        # 截断到12个字符（约6中文字）
         if len(role) > 12:
             role = role[:12]
         score = float(v.get("score_0_100", 50))
         level_cn = _score_to_decision_level_cn(score)
-        weight = float(v.get("weight", 0))
-        weight_pct = weight / total_weight if total_weight else 0
-        # 核心维度标记 *
-        is_core = v.get("dim_code", "") in CORE_DIMS
-        num_str = f"{idx}" if not is_core else f"{idx}*"
-        table_data.append([num_str, role, f"{score:.1f}", level_cn, f"{weight_pct:.1%}"])
+        weight_pct = float(v.get("weight", 0)) / total_weight
+        table_data.append([str(idx), role, f"{score:.1f}", level_cn, f"{weight_pct:.1%}"])
 
-    # 合计行
+    # 短线小计
+    if short_votes:
+        sw_total = sum(float(v.get("weight", 0)) for v in short_votes)
+        sw_scores = [float(v.get("score_0_100", 50)) for v in short_votes]
+        sw_weights = [float(v.get("weight", 0)) for v in short_votes]
+        sw_avg = sum(s * w for s, w in zip(sw_scores, sw_weights)) / sw_total if sw_total else 50.0
+        table_data.append(["", "短线小计", f"{sw_avg:.1f}",
+                            _score_to_decision_level_cn(sw_avg), f"{sw_total / total_weight:.1%}"])
+    n_short_subtotal = len(table_data) - 1  # 短线小计行索引
+
+    # ── 中长期分组标题行 ──
+    table_data.append(["", "中长期参考（1月以上）", "", "", ""])
+    n_mid_header = len(table_data) - 1  # 中长期标题行索引
+
+    for idx, v in enumerate(mid_votes, 1):
+        role = v.get("role", v.get("dim_code", ""))
+        if len(role) > 12:
+            role = role[:12]
+        score = float(v.get("score_0_100", 50))
+        level_cn = _score_to_decision_level_cn(score)
+        weight_pct = float(v.get("weight", 0)) / total_weight
+        table_data.append([str(idx), role, f"{score:.1f}", level_cn, f"{weight_pct:.1%}"])
+
+    # 中长期小计
+    if mid_votes:
+        mw_total = sum(float(v.get("weight", 0)) for v in mid_votes)
+        mw_scores = [float(v.get("score_0_100", 50)) for v in mid_votes]
+        mw_weights = [float(v.get("weight", 0)) for v in mid_votes]
+        mw_avg = sum(s * w for s, w in zip(mw_scores, mw_weights)) / mw_total if mw_total else 50.0
+        table_data.append(["", "中长期小计", f"{mw_avg:.1f}",
+                            _score_to_decision_level_cn(mw_avg), f"{mw_total / total_weight:.1%}"])
+    n_mid_subtotal = len(table_data) - 1  # 中长期小计行索引
+
+    # ── 综合评分行 ──
     table_data.append(["", "综合评分", f"{final_score:.1f}",
                         _score_to_decision_level_cn(final_score), "100%"])
 
     col_w = [10 * mm, 48 * mm, 18 * mm, 26 * mm, 18 * mm]
     table = Table(table_data, colWidths=col_w)
 
-    n_core = len(core_votes)
     tbl_style = [
         ("FONTNAME", (0, 0), (-1, -1), body_font),
         ("FONTSIZE", (0, 0), (-1, -1), 8),
+        # 表头
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF2FF")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0D3B66")),
         ("FONTNAME", (0, 0), (-1, 0), bold_font),
@@ -537,20 +591,31 @@ def _add_weighted_score_table(
         ("RIGHTPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        # 合计行底色
+        # 综合评分行
         ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#F0F4F8")),
         ("FONTNAME", (0, -1), (-1, -1), bold_font),
-        # 核心维度行浅底色
-        ("BACKGROUND", (0, 1), (-1, n_core), colors.HexColor("#FAFCFF")),
+        # 短线分组标题行样式
+        ("BACKGROUND", (0, n_short_header), (-1, n_short_header), colors.HexColor("#FFF3E0")),
+        ("FONTNAME", (0, n_short_header), (-1, n_short_header), bold_font),
+        ("TEXTCOLOR", (0, n_short_header), (-1, n_short_header), colors.HexColor("#E65100")),
+        ("SPAN", (1, n_short_header), (4, n_short_header)),
+        # 短线小计行样式
+        ("BACKGROUND", (0, n_short_subtotal), (-1, n_short_subtotal), colors.HexColor("#FFF8E1")),
+        ("FONTNAME", (0, n_short_subtotal), (-1, n_short_subtotal), bold_font),
+        # 中长期分组标题行样式
+        ("BACKGROUND", (0, n_mid_header), (-1, n_mid_header), colors.HexColor("#E3F2FD")),
+        ("FONTNAME", (0, n_mid_header), (-1, n_mid_header), bold_font),
+        ("TEXTCOLOR", (0, n_mid_header), (-1, n_mid_header), colors.HexColor("#0D47A1")),
+        ("SPAN", (1, n_mid_header), (4, n_mid_header)),
+        # 中长期小计行样式
+        ("BACKGROUND", (0, n_mid_subtotal), (-1, n_mid_subtotal), colors.HexColor("#E8EAF6")),
+        ("FONTNAME", (0, n_mid_subtotal), (-1, n_mid_subtotal), bold_font),
     ]
-    # 核心与扩展分隔线
-    if n_core < len(ordered_votes):
-        tbl_style.append(("LINEBELOW", (0, n_core), (-1, n_core), 1.0, colors.HexColor("#0D3B66")))
 
     # 五级建议列着色
     level_col = 3
     for i, row in enumerate(table_data[1:], 1):
-        if len(row) > level_col:
+        if len(row) > level_col and row[level_col]:
             lvl = row[level_col]
             lc = level_color_map.get(lvl, "#222222")
             tbl_style.append(("TEXTCOLOR", (level_col, i), (level_col, i), colors.HexColor(lc)))
@@ -559,7 +624,8 @@ def _add_weighted_score_table(
     flow.append(table)
     flow.append(
         Paragraph(
-            "<b>说明：</b>带*为9核心维度。最终评分 = Σ(各Agent评分×LLM权重) / Σ(权重)。"
+            "<b>说明：</b>短线参考以未来5个交易日为视角，中长期参考以1个月以上为视角。"
+            "最终评分 = Σ(各Agent评分×LLM权重) / Σ(权重)。"
             "五级映射：强烈买入(≥85)、弱买入(70-85)、观望(50-70)、弱卖出(40-50)、强烈卖出(&lt;40)。",
             st_body,
         )
