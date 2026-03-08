@@ -12,8 +12,9 @@ from .agents import AnalystAgent, AgentResult, AgentBaseResult, write_message, c
 from .config_loader import load_agent_configs, load_project_config, split_agents
 from .data_backend import DataBackend
 from .io_utils import dump_json, get_agent_logger
-from .llm_client import LLMRouter, assign_agent_weights, score_agent_analysis, generate_scenario_and_position
-from .progress_display import PipelineTracker, AgentNameRegistry
+from core.router import LLMRouter
+from core.progress import PipelineTracker, AgentNameRegistry
+from .llm_client import assign_agent_weights, score_agent_analysis, generate_scenario_and_position
 from .report_pdf import build_investor_pdf
 
 
@@ -103,7 +104,7 @@ def _merge_provider_results(
     analysis_context: dict[str, Any],
 ) -> tuple[list[AgentResult], dict[str, dict[str, float]], dict[str, dict[str, float]]]:
     """合并所有 Provider 的并行执行结果为统一的 submissions / model_weights / model_scores。"""
-    from .parallel_runner import ProviderResult
+    from core.runner import ProviderResult
 
     model_weights: dict[str, dict[str, float]] = {}
     model_scores: dict[str, dict[str, float]] = {}

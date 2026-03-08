@@ -1,167 +1,33 @@
 # -*- coding: utf-8 -*-
-"""并行化执行引擎：每个 LLM Provider 作为独立线程同时执行权重分配+研判增强+评分。"""
+"""并行化执行引擎：每个 LLM Provider 作为独立线程同时执行权重分配+研判增强+评分。
+
+通用并行基础设施已移至 core.runner，本文件保留领域相关的 worker 逻辑。
+"""
 from __future__ import annotations
 
-import json
 import logging
 import os
 import random
 import threading
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+# ── 从 core 导入通用基础设施 ──
+from core.runner import (
+    _timed_call, _create_fallback_router, _ProviderCancelled,
+    ProviderProgress, ProviderResult,
+    _save_provider_result, _load_existing_results,
+    _DEFAULT_PROVIDER_TIMEOUT_SEC, _AGENT_CALL_TIMEOUT_SEC,
+    _FALLBACK_PROVIDERS, _MAX_CANDIDATE_ATTEMPTS,
+)
+from core.router import LLMRouter, _supports_vision, _DEFAULT_VISION_FALLBACK
+
+# ── 领域相关导入 ──
 from .agents import AgentBaseResult
-from .llm_client import LLMRouter, assign_agent_weights, score_agent_analysis, _supports_vision, _DEFAULT_VISION_FALLBACK
+from .llm_client import assign_agent_weights, score_agent_analysis
 
 logger = logging.getLogger(__name__)
-
-# 默认每个 Provider 的最大超时（秒），可通过 project.json llm.provider_timeout_sec 覆盖
-_DEFAULT_PROVIDER_TIMEOUT_SEC = 720
-
-# 单Agent调用超时（秒）：单次enrich或score调用超过此时间则切换到备选Provider
-_AGENT_CALL_TIMEOUT_SEC = 300
-
-# 备选Provider列表（按优先级排序），用于单Agent超时后的切换
-_FALLBACK_PROVIDERS = ["doubao", "qwen", "gemini", "minmax"]
-
-# 候选Provider最大尝试次数
-_MAX_CANDIDATE_ATTEMPTS = 4
-
-
-class _ProviderCancelled(Exception):
-    """Worker 线程检测到取消信号时抛出，用于快速退出。"""
-    pass
-
-
-def _timed_call(fn, timeout_sec: float, cancel_event: threading.Event | None = None):
-    """在子线程中执行 fn()，超过 timeout_sec 秒返回 (None, True)。
-    成功返回 (result, False)，异常返回 (None, False) 并抛出原异常。
-    如果传入 cancel_event，会每秒检查取消信号，提前退出。"""
-    result_box: dict[str, Any] = {"value": None, "error": None}
-
-    def wrapper():
-        try:
-            result_box["value"] = fn()
-        except Exception as e:
-            result_box["error"] = e
-
-    t = threading.Thread(target=wrapper, daemon=True)
-    t.start()
-
-    if cancel_event:
-        # 每秒轮询，及时响应取消信号
-        deadline = time.time() + timeout_sec
-        while t.is_alive() and time.time() < deadline:
-            if cancel_event.is_set():
-                return None, True  # 外部取消，视为超时
-            t.join(timeout=1.0)
-    else:
-        t.join(timeout=timeout_sec)
-
-    if t.is_alive():
-        return None, True  # 超时
-    if result_box["error"]:
-        raise result_box["error"]
-    return result_box["value"], False
-
-
-def _create_fallback_router(
-    fallback_provider: str,
-    ref_router: LLMRouter,
-) -> LLMRouter | None:
-    """为备选Provider创建LLMRouter，API_KEY不存在则返回None。"""
-    api_key = os.getenv(f"{fallback_provider.upper()}_API_KEY", "").strip()
-    if not api_key:
-        return None
-    return LLMRouter(
-        provider=fallback_provider,
-        temperature=ref_router.temperature,
-        max_tokens=ref_router.max_tokens,
-        request_timeout_sec=ref_router.request_timeout_sec,
-    )
-
-
-
-@dataclass
-class ProviderProgress:
-    """每个 Provider 线程的进度状态。"""
-    provider: str
-    weight_done: bool = False
-    enrich_done: int = 0
-    enrich_total: int = 0
-    score_done: int = 0
-    score_total: int = 0
-    finished: bool = False
-    error: str | None = None
-    start_time: float = field(default_factory=time.time)
-    current_stage: str = ""      # 当前阶段: "权重", "研判", "评分"
-    current_agent: str = ""      # 当前正在处理的 agent_id
-    cancel_event: threading.Event = field(default_factory=threading.Event)  # 超时取消信号
-    agent_scores: dict[str, float] = field(default_factory=dict)   # 逐agent评分结果
-    agent_weights: dict[str, float] = field(default_factory=dict)  # 权重分配结果
-    agent_fallbacks: dict[str, str] = field(default_factory=dict)  # {agent_id: fallback_provider} 超时切换记录
-
-
-@dataclass
-class ProviderResult:
-    """每个 Provider 线程的输出结果。"""
-    provider: str
-    weights: dict[str, float] = field(default_factory=dict)
-    enrichments: dict[str, str] = field(default_factory=dict)   # {agent_id: enriched_text}
-    scores: dict[str, float] = field(default_factory=dict)      # {agent_id: score_0_100}
-    vision_results: dict[str, str] = field(default_factory=dict) # {agent_id: vision_text}
-    error: str | None = None
-    elapsed_sec: float = 0.0
-
-
-def _save_provider_result(run_dir: Path, provider: str, result: ProviderResult) -> None:
-    """每个Provider完成后立即将结果序列化存盘，实现增量持久化。"""
-    results_dir = run_dir / "data" / "provider_results"
-    results_dir.mkdir(parents=True, exist_ok=True)
-    path = results_dir / f"{provider}.json"
-    data = {
-        "provider": result.provider,
-        "weights": result.weights,
-        "enrichments": result.enrichments,
-        "scores": result.scores,
-        "vision_results": result.vision_results,
-        "error": result.error,
-        "elapsed_sec": result.elapsed_sec,
-    }
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    logger.info("provider result saved: %s -> %s", provider, path)
-
-
-def _load_existing_results(run_dir: Path, providers: list[str]) -> dict[str, ProviderResult]:
-    """从 run_dir/data/provider_results/ 加载已完成的Provider结果（跳过有error的）。"""
-    results_dir = run_dir / "data" / "provider_results"
-    if not results_dir.exists():
-        return {}
-    loaded: dict[str, ProviderResult] = {}
-    for p in providers:
-        path = results_dir / f"{p}.json"
-        if not path.exists():
-            continue
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if data.get("error"):
-                logger.info("skip cached result for %s (has error: %s)", p, data["error"])
-                continue
-            loaded[p] = ProviderResult(
-                provider=data["provider"],
-                weights=data.get("weights", {}),
-                enrichments=data.get("enrichments", {}),
-                scores=data.get("scores", {}),
-                vision_results=data.get("vision_results", {}),
-                error=None,
-                elapsed_sec=data.get("elapsed_sec", 0.0),
-            )
-            logger.info("loaded cached result for %s (elapsed=%.1fs)", p, loaded[p].elapsed_sec)
-        except Exception as e:
-            logger.warning("failed to load cached result for %s: %s", p, e)
-    return loaded
 
 
 def _provider_worker(

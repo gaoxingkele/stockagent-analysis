@@ -10,7 +10,7 @@ from typing import Any
 
 from .data_backend import DataBackend, MarketSnapshot
 from .io_utils import dump_json, get_agent_logger
-from .llm_client import LLMRouter, _supports_vision, _DEFAULT_VISION_FALLBACK
+from core.router import LLMRouter, _supports_vision, _DEFAULT_VISION_FALLBACK
 
 
 @dataclass
