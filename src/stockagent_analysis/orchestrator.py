@@ -245,7 +245,7 @@ def run_analysis(
                 provider=p,
                 temperature=float(llm_cfg.get("temperature", 0.3)),
                 max_tokens=int(llm_cfg.get("max_tokens", 600)),
-                request_timeout_sec=float(llm_cfg.get("request_timeout_sec", 25.0)),
+                request_timeout_sec=float(llm_cfg.get("request_timeout_sec", 45.0)),
                 multi_turn=multi_turn,
             )
     manager_logger = get_agent_logger(run_dir, manager_cfg["agent_id"])

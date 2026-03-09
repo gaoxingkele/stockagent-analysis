@@ -23,22 +23,21 @@
   },
   "llm": {
     "enabled": true,
-    "default_provider": "kimi",
+    "default_provider": "grok",
     "multi_eval_providers": [
-      "kimi"
+      "grok"
     ],
     "multi_model_weight_providers": [
-      "kimi",
       "grok",
       "gemini"
     ],
     "default_providers": [
       "grok",
-      "gemini",
-      "kimi"
+      "gemini"
     ],
     "candidate_providers": [
       "deepseek",
+      "kimi",
       "glm",
       "doubao",
       "minmax"
@@ -59,7 +58,7 @@
     ],
     "temperature": 0.3,
     "max_tokens": 600,
-    "request_timeout_sec": 25,
+    "request_timeout_sec": 45,
     "provider_timeout_sec": 600,
     "agent_call_timeout_sec": 120,
     "max_agent_concurrency": 6,

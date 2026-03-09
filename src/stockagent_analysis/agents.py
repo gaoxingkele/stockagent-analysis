@@ -651,7 +651,7 @@ class KlineVisionAgent(AnalystAgent):
                     provider=fallback_p,
                     temperature=ref.temperature if ref else 0.3,
                     max_tokens=ref.max_tokens if ref else 600,
-                    request_timeout_sec=ref.request_timeout_sec if ref else 25.0,
+                    request_timeout_sec=ref.request_timeout_sec if ref else 45.0,
                 )
                 vision_routers = {fallback_p: fallback_router}
                 self.logger.info(

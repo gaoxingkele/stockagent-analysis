@@ -67,6 +67,11 @@ def _provider_worker(
     _fb_router_cache: dict[str, LLMRouter | None] = {}
     _fb_cache_lock = threading.Lock()
 
+    # Provider 级别失败追踪：连续失败过多时跳过重试/跳过主 Provider
+    _primary_fail_count = [0]
+    _primary_success_count = [0]
+    _primary_track_lock = threading.Lock()
+
     def _get_fb_router(fp: str) -> LLMRouter | None:
         with _fb_cache_lock:
             if fp not in _fb_router_cache:
@@ -84,48 +89,72 @@ def _provider_worker(
         return 50.0
 
     def _enrich_and_score_with_fallback(agent_id: str, base: AgentBaseResult) -> tuple[str | None, float]:
-        """合并研判+评分：主Router→重试一次→随机候选Provider(最多4个)。"""
+        """合并研判+评分：主Router→重试一次→随机候选Provider(最多4个)。
+        自适应：主Provider连续失败>=3次跳过重试，>=6次跳过主Provider直接走候选。"""
         def _do_call(rtr: LLMRouter) -> tuple[str | None, float | None]:
             return enrich_and_score(
                 rtr, base.role, agent_id, symbol, name,
                 base.reason, base.data_context,
             )
 
-        # 第1次：主Router
-        try:
-            pair, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
-            if not timed_out and pair:
-                text, score = pair
-                if text and score is not None:
-                    return text, score
-        except Exception as e:
-            logger.warning("enrich_and_score primary error provider=%s agent=%s: %s",
-                          provider, agent_id, e)
+        # 读取失败追踪状态
+        with _primary_track_lock:
+            skip_primary = _primary_fail_count[0] >= 6 and _primary_success_count[0] == 0
+            skip_retry = _primary_fail_count[0] >= 3 and _primary_success_count[0] == 0
 
-        if cancelled.is_set():
-            return None, _avg_existing_score(agent_id)
+        primary_succeeded = False
 
-        # 第2次：重试主Router
-        logger.info("[重试] %s agent=%s 分析首次失败, 重试中...", provider, agent_id)
-        try:
-            pair, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
-            if not timed_out and pair:
-                text, score = pair
-                if text and score is not None:
-                    return text, score
-        except Exception as e:
-            logger.warning("enrich_and_score retry error provider=%s agent=%s: %s",
-                          provider, agent_id, e)
+        if not skip_primary:
+            # 第1次：主Router
+            try:
+                pair, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
+                if not timed_out and pair:
+                    text, score = pair
+                    if text and score is not None:
+                        primary_succeeded = True
+                        with _primary_track_lock:
+                            _primary_success_count[0] += 1
+                        return text, score
+            except Exception as e:
+                logger.warning("enrich_and_score primary error provider=%s agent=%s: %s",
+                              provider, agent_id, e)
 
-        if cancelled.is_set():
-            return None, _avg_existing_score(agent_id)
+            if not primary_succeeded:
+                with _primary_track_lock:
+                    _primary_fail_count[0] += 1
 
-        # 第3~6次：随机候选Provider（最多4个）
+            if cancelled.is_set():
+                return None, _avg_existing_score(agent_id)
+
+            # 第2次：重试主Router（skip_retry 时跳过）
+            if not skip_retry:
+                logger.info("[重试] %s agent=%s 分析首次失败, 重试中...", provider, agent_id)
+                try:
+                    pair, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
+                    if not timed_out and pair:
+                        text, score = pair
+                        if text and score is not None:
+                            with _primary_track_lock:
+                                _primary_success_count[0] += 1
+                            return text, score
+                except Exception as e:
+                    logger.warning("enrich_and_score retry error provider=%s agent=%s: %s",
+                                  provider, agent_id, e)
+
+                if cancelled.is_set():
+                    return None, _avg_existing_score(agent_id)
+        else:
+            logger.info("[跳过主Provider] %s agent=%s 已累计%d次失败, 直接使用候选",
+                       provider, agent_id, _primary_fail_count[0])
+            print(f"[跳过] {provider} agent={agent_id} 累计{_primary_fail_count[0]}次失败→候选", flush=True)
+
+        # 候选Provider（最多4个）
         fb_list = [fp for fp in _fb_providers if fp != provider]
         random.shuffle(fb_list)
         tried = 0
-        logger.info("[切换] %s agent=%s 分析重试仍失败, 尝试候选Provider (池: %s)",
-                   provider, agent_id, fb_list[:_MAX_CANDIDATE_ATTEMPTS])
+        if not skip_primary:
+            logger.info("[切换] %s agent=%s 尝试候选Provider (池: %s)",
+                       provider, agent_id, fb_list[:_MAX_CANDIDATE_ATTEMPTS])
         for fp in fb_list:
             if tried >= _MAX_CANDIDATE_ATTEMPTS or cancelled.is_set():
                 break
@@ -147,13 +176,15 @@ def _provider_worker(
                 continue
 
         # 全部失败
-        logger.warning("[放弃] %s agent=%s 分析全部失败(尝试%d次)", provider, agent_id, 2 + tried)
-        print(f"[放弃] {provider} agent={agent_id} {2 + tried}次全部失败, 使用平均分", flush=True)
+        attempts = (0 if skip_primary else (1 if skip_retry else 2)) + tried
+        logger.warning("[放弃] %s agent=%s 分析全部失败(尝试%d次)", provider, agent_id, attempts)
+        print(f"[放弃] {provider} agent={agent_id} {attempts}次全部失败, 使用平均分", flush=True)
         return None, _avg_existing_score(agent_id)
 
     def _vision_enrich_with_fallback(agent_id: str, base: AgentBaseResult,
                                       vision_rtr: LLMRouter | None) -> str | None:
-        """视觉Agent研判增强（保持原两步）：主Router→重试→候选。"""
+        """视觉Agent研判增强（保持原两步）：主Router→重试→候选。
+        复用 _primary_fail_count 自适应跳过。"""
         def _do_call(rtr: LLMRouter) -> str | None:
             if vision_rtr:
                 actual_rtr = vision_rtr
@@ -170,29 +201,42 @@ def _provider_worker(
                                         data_context=base.data_context)
                 return txt.strip() if txt else None
 
-        # 第1次：主Router
-        try:
-            text, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
-            if not timed_out and text:
-                return text
-        except Exception as e:
-            logger.warning("vision enrich primary error provider=%s agent=%s: %s",
-                          provider, agent_id, e)
+        with _primary_track_lock:
+            skip_primary = _primary_fail_count[0] >= 6 and _primary_success_count[0] == 0
+            skip_retry = _primary_fail_count[0] >= 3 and _primary_success_count[0] == 0
 
-        if cancelled.is_set():
-            return None
+        if not skip_primary:
+            # 第1次：主Router
+            try:
+                text, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
+                if not timed_out and text:
+                    with _primary_track_lock:
+                        _primary_success_count[0] += 1
+                    return text
+            except Exception as e:
+                logger.warning("vision enrich primary error provider=%s agent=%s: %s",
+                              provider, agent_id, e)
 
-        # 第2次：重试
-        try:
-            text, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
-            if not timed_out and text:
-                return text
-        except Exception as e:
-            logger.warning("vision enrich retry error provider=%s agent=%s: %s",
-                          provider, agent_id, e)
+            with _primary_track_lock:
+                _primary_fail_count[0] += 1
 
-        if cancelled.is_set():
-            return None
+            if cancelled.is_set():
+                return None
+
+            # 第2次：重试（skip_retry 时跳过）
+            if not skip_retry:
+                try:
+                    text, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
+                    if not timed_out and text:
+                        with _primary_track_lock:
+                            _primary_success_count[0] += 1
+                        return text
+                except Exception as e:
+                    logger.warning("vision enrich retry error provider=%s agent=%s: %s",
+                                  provider, agent_id, e)
+
+                if cancelled.is_set():
+                    return None
 
         # 候选Provider
         fb_list = [fp for fp in _fb_providers if fp != provider]
@@ -217,34 +261,48 @@ def _provider_worker(
 
     def _vision_score_with_fallback(agent_id: str, base: AgentBaseResult,
                                      reason_text: str) -> float:
-        """视觉Agent评分（保持原两步）：主Router→重试→候选→平均分。"""
+        """视觉Agent评分（保持原两步）：主Router→重试→候选→平均分。
+        复用 _primary_fail_count 自适应跳过。"""
         def _do_score(rtr: LLMRouter) -> float:
             return score_agent_analysis(
                 rtr, base.role, agent_id, symbol, name,
                 reason_text, base.data_context,
             )
 
-        # 第1次
-        try:
-            score, timed_out = _timed_call(lambda: _do_score(router), agent_call_timeout_sec, cancelled)
-            if not timed_out and score is not None:
-                return score
-        except Exception:
-            pass
+        with _primary_track_lock:
+            skip_primary = _primary_fail_count[0] >= 6 and _primary_success_count[0] == 0
+            skip_retry = _primary_fail_count[0] >= 3 and _primary_success_count[0] == 0
 
-        if cancelled.is_set():
-            return _avg_existing_score(agent_id)
+        if not skip_primary:
+            # 第1次
+            try:
+                score, timed_out = _timed_call(lambda: _do_score(router), agent_call_timeout_sec, cancelled)
+                if not timed_out and score is not None:
+                    with _primary_track_lock:
+                        _primary_success_count[0] += 1
+                    return score
+            except Exception:
+                pass
 
-        # 第2次
-        try:
-            score, timed_out = _timed_call(lambda: _do_score(router), agent_call_timeout_sec, cancelled)
-            if not timed_out and score is not None:
-                return score
-        except Exception:
-            pass
+            with _primary_track_lock:
+                _primary_fail_count[0] += 1
 
-        if cancelled.is_set():
-            return _avg_existing_score(agent_id)
+            if cancelled.is_set():
+                return _avg_existing_score(agent_id)
+
+            # 第2次（skip_retry 时跳过）
+            if not skip_retry:
+                try:
+                    score, timed_out = _timed_call(lambda: _do_score(router), agent_call_timeout_sec, cancelled)
+                    if not timed_out and score is not None:
+                        with _primary_track_lock:
+                            _primary_success_count[0] += 1
+                        return score
+                except Exception:
+                    pass
+
+                if cancelled.is_set():
+                    return _avg_existing_score(agent_id)
 
         # 候选
         preferred_fb = progress.agent_fallbacks.get(agent_id)

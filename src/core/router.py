@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 import requests
 from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ def _get_llm_proxies(provider: str = "") -> dict | None:
 _VISION_PROVIDERS = {"gemini", "claude", "openai", "chatgpt", "grok"}
 
 # 默认视觉回退提供商
-_DEFAULT_VISION_FALLBACK = "kimi"
+_DEFAULT_VISION_FALLBACK = "gemini"
 
 # 各国内提供商的视觉模型与文字模型环境变量映射
 _DOMESTIC_VISION_ENV_MAP: dict[str, tuple[str, str]] = {
@@ -125,7 +126,7 @@ class LLMRouter:
         provider: str = "grok",
         temperature: float = 0.3,
         max_tokens: int = 600,
-        request_timeout_sec: float = 8.0,
+        request_timeout_sec: float = 45.0,
         multi_turn: bool = True,
         system_message: str | None = None,
     ):
@@ -142,10 +143,24 @@ class LLMRouter:
 
     def _create_session(self) -> requests.Session:
         s = requests.Session()
-        adapter = HTTPAdapter(pool_connections=10, pool_maxsize=10)
+        retry = Retry(
+            total=2,
+            backoff_factor=0.5,
+            status_forcelist=[429, 502, 503],
+            allowed_methods=["POST", "GET"],
+            respect_retry_after_header=True,
+        )
+        adapter = HTTPAdapter(pool_connections=10, pool_maxsize=10, max_retries=retry)
         s.mount("http://", adapter)
         s.mount("https://", adapter)
         return s
+
+    def _timeout(self, is_vision: bool = False) -> tuple[float, float]:
+        """返回 (connect_timeout, read_timeout) 元组。"""
+        read = self.request_timeout_sec
+        if is_vision:
+            read = max(read * 1.5, 60.0)
+        return (8.0, read)
 
     def close_session(self) -> None:
         """关闭当前 Session（中断正在进行的 HTTP 请求）并重建连接池。"""
@@ -160,7 +175,8 @@ class LLMRouter:
         """带连接错误恢复的 POST 请求。"""
         try:
             return self._session.post(url, **kwargs)
-        except (requests.exceptions.ConnectionError, ConnectionResetError, OSError) as e:
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
+                ConnectionResetError, OSError) as e:
             logger.warning("连接异常，重建Session并重试: %s", e)
             with self._session_lock:
                 try:
@@ -293,7 +309,7 @@ class LLMRouter:
             "max_tokens": self.max_tokens,
         }
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        resp = self._safe_post(base_url, headers=headers, json=payload, timeout=self.request_timeout_sec, proxies=_get_llm_proxies(self.provider))
+        resp = self._safe_post(base_url, headers=headers, json=payload, timeout=self._timeout(), proxies=_get_llm_proxies(self.provider))
         if not resp.ok:
             if resp.status_code == 400 and "perplexity" in base_url.lower():
                 try:
@@ -326,7 +342,7 @@ class LLMRouter:
         resp = self._safe_post(
             url,
             json={"contents": [{"parts": [{"text": prompt}]}]},
-            timeout=self.request_timeout_sec,
+            timeout=self._timeout(),
             proxies=_get_llm_proxies("gemini"),
         )
         resp.raise_for_status()
@@ -356,7 +372,7 @@ class LLMRouter:
                 "content-type": "application/json",
             },
             json=body,
-            timeout=self.request_timeout_sec,
+            timeout=self._timeout(),
             proxies=_get_llm_proxies("claude"),
         )
         resp.raise_for_status()
@@ -382,7 +398,7 @@ class LLMRouter:
                 ]
             }]
         }
-        resp = self._safe_post(url, json=body, timeout=self.request_timeout_sec,
+        resp = self._safe_post(url, json=body, timeout=self._timeout(is_vision=True),
                               proxies=_get_llm_proxies("gemini"))
         resp.raise_for_status()
         data = resp.json()
@@ -413,7 +429,7 @@ class LLMRouter:
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
             json=body,
-            timeout=self.request_timeout_sec,
+            timeout=self._timeout(is_vision=True),
             proxies=_get_llm_proxies("claude"),
         )
         resp.raise_for_status()
@@ -460,7 +476,7 @@ class LLMRouter:
                    "temperature": self.temperature, "max_tokens": self.max_tokens}
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         resp = self._safe_post(base_url, headers=headers, json=payload,
-                              timeout=self.request_timeout_sec,
+                              timeout=self._timeout(is_vision=True),
                               proxies=_get_llm_proxies(self.provider))
         resp.raise_for_status()
         data = resp.json()
