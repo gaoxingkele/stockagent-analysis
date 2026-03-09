@@ -26,7 +26,7 @@ from core.runner import (
     _DEFAULT_PROVIDER_TIMEOUT_SEC, _AGENT_CALL_TIMEOUT_SEC,
     _FALLBACK_PROVIDERS, _MAX_CANDIDATE_ATTEMPTS,
 )
-from core.router import LLMRouter, _supports_vision, _DEFAULT_VISION_FALLBACK
+from core.router import LLMRouter, _supports_vision, _DEFAULT_VISION_FALLBACK, _DOMESTIC_VISION_FALLBACK_ORDER
 
 # ── 领域相关导入 ──
 from .agents import AgentBaseResult
@@ -49,7 +49,7 @@ def _provider_worker(
     name: str,
     task_summary: str | None,
     progress: ProviderProgress,
-    vision_fallback_router: LLMRouter | None = None,
+    vision_fallback_routers: list[LLMRouter] | None = None,
     agent_call_timeout_sec: float = _AGENT_CALL_TIMEOUT_SEC,
     fallback_providers: list[str] | None = None,
     max_agent_concurrency: int = _DEFAULT_MAX_AGENT_CONCURRENCY,
@@ -182,39 +182,61 @@ def _provider_worker(
         return None, _avg_existing_score(agent_id)
 
     def _vision_enrich_with_fallback(agent_id: str, base: AgentBaseResult,
-                                      vision_rtr: LLMRouter | None) -> str | None:
-        """视觉Agent研判增强（保持原两步）：主Router→重试→候选。
-        复用 _primary_fail_count 自适应跳过。"""
-        def _do_call(rtr: LLMRouter) -> str | None:
-            if vision_rtr:
-                actual_rtr = vision_rtr
-                txt = actual_rtr.chat_with_image(base.vision_prompt, base.image_b64)
-                if txt:
+                                      vision_routers: list[LLMRouter]) -> str | None:
+        """视觉Agent研判增强：依次尝试视觉Router链 → 降级文本研判。
+
+        vision_routers: 按优先级排序的视觉Router列表（Provider自身 + 国产视觉回退链）。
+        """
+        # ── 1. 依次尝试视觉路径 ──
+        for v_rtr in vision_routers:
+            if cancelled.is_set():
+                return None
+            v_name = getattr(v_rtr, "provider", "?")
+            try:
+                txt, timed_out = _timed_call(
+                    lambda rtr=v_rtr: rtr.chat_with_image(base.vision_prompt, base.image_b64),
+                    agent_call_timeout_sec, cancelled,
+                )
+                if not timed_out and txt:
                     result.vision_results[agent_id] = txt.strip()
+                    with _primary_track_lock:
+                        _primary_success_count[0] += 1
+                    if v_name != provider:
+                        logger.info("[视觉回退] %s agent=%s 视觉由 %s 完成", provider, agent_id, v_name)
+                        print(f"[视觉回退] {provider} agent={agent_id} → {v_name}", flush=True)
                     return txt.strip()
-                # 视觉失败降级文本
-                txt = rtr.enrich_reason(base.role, symbol, base.reason,
-                                        data_context=base.data_context)
-                return txt.strip() if txt else None
-            else:
-                txt = rtr.enrich_reason(base.role, symbol, base.reason,
-                                        data_context=base.data_context)
-                return txt.strip() if txt else None
+                else:
+                    logger.warning("vision enrich empty/timeout provider=%s agent=%s via=%s",
+                                  provider, agent_id, v_name)
+            except Exception as e:
+                logger.warning("vision enrich error provider=%s agent=%s via=%s: %s",
+                              provider, agent_id, v_name, e)
+
+        # ── 2. 所有视觉都失败，降级文本研判 ──
+        if vision_routers:
+            tried_names = [getattr(r, "provider", "?") for r in vision_routers]
+            logger.info("[视觉降级] %s agent=%s 视觉全部失败(tried: %s), 降级文本",
+                       provider, agent_id, tried_names)
+            print(f"[视觉降级] {provider} agent={agent_id} → 文本研判", flush=True)
+
+        def _do_text(rtr: LLMRouter) -> str | None:
+            txt = rtr.enrich_reason(base.role, symbol, base.reason,
+                                    data_context=base.data_context)
+            return txt.strip() if txt else None
 
         with _primary_track_lock:
             skip_primary = _primary_fail_count[0] >= 6 and _primary_success_count[0] == 0
             skip_retry = _primary_fail_count[0] >= 3 and _primary_success_count[0] == 0
 
         if not skip_primary:
-            # 第1次：主Router
             try:
-                text, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
+                text, timed_out = _timed_call(lambda: _do_text(router), agent_call_timeout_sec, cancelled)
                 if not timed_out and text:
                     with _primary_track_lock:
                         _primary_success_count[0] += 1
                     return text
             except Exception as e:
-                logger.warning("vision enrich primary error provider=%s agent=%s: %s",
+                logger.warning("text enrich primary error provider=%s agent=%s: %s",
                               provider, agent_id, e)
 
             with _primary_track_lock:
@@ -223,22 +245,21 @@ def _provider_worker(
             if cancelled.is_set():
                 return None
 
-            # 第2次：重试（skip_retry 时跳过）
             if not skip_retry:
                 try:
-                    text, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
+                    text, timed_out = _timed_call(lambda: _do_text(router), agent_call_timeout_sec, cancelled)
                     if not timed_out and text:
                         with _primary_track_lock:
                             _primary_success_count[0] += 1
                         return text
                 except Exception as e:
-                    logger.warning("vision enrich retry error provider=%s agent=%s: %s",
+                    logger.warning("text enrich retry error provider=%s agent=%s: %s",
                                   provider, agent_id, e)
 
                 if cancelled.is_set():
                     return None
 
-        # 候选Provider
+        # 候选Provider（文本）
         fb_list = [fp for fp in _fb_providers if fp != provider]
         random.shuffle(fb_list)
         tried = 0
@@ -250,7 +271,7 @@ def _provider_worker(
                 continue
             tried += 1
             try:
-                text, timed_out2 = _timed_call(lambda r=fb_rtr: _do_call(r), agent_call_timeout_sec, cancelled)
+                text, timed_out2 = _timed_call(lambda r=fb_rtr: _do_text(r), agent_call_timeout_sec, cancelled)
                 if not timed_out2 and text:
                     progress.agent_fallbacks[agent_id] = fp
                     return text
@@ -345,15 +366,16 @@ def _provider_worker(
 
         try:
             if is_vision_agent:
-                # 视觉Agent：两步走
-                has_vision = router.supports_vision()
-                vision_router = None
-                if has_vision:
-                    vision_router = router
-                elif vision_fallback_router:
-                    vision_router = vision_fallback_router
+                # 视觉Agent：两步走，构建视觉Router链（自身 + 国产回退）
+                v_routers: list[LLMRouter] = []
+                if router.supports_vision():
+                    v_routers.append(router)
+                _vf_routers = vision_fallback_routers or []
+                for vfr in _vf_routers:
+                    if vfr.provider != router.provider:
+                        v_routers.append(vfr)
 
-                text = _vision_enrich_with_fallback(agent_id, base, vision_router)
+                text = _vision_enrich_with_fallback(agent_id, base, v_routers)
                 if text:
                     result.enrichments[agent_id] = text
                 reason_for_score = text or base.reason
@@ -518,33 +540,48 @@ def run_providers_parallel(
     routers = dict(llm_routers)
     all_providers = list(routers.keys())
 
-    # 构建共享视觉回退 router：供无视觉能力的 provider 线程借用
-    _vision_fallback_router: LLMRouter | None = None
+    # 构建共享国产视觉回退链：供无视觉能力的 provider 线程借用
+    _vision_fallback_routers: list[LLMRouter] = []
     has_vision_need = any(
         b.agent_type == "kline_vision" and b.image_b64
         for b in base_results.values()
     )
     if has_vision_need:
-        fallback_p = os.getenv("VISION_FALLBACK_PROVIDER", _DEFAULT_VISION_FALLBACK)
-        # 优先从已有 router 中找到一个支持视觉的
-        for p, r in routers.items():
-            if r.supports_vision():
-                _vision_fallback_router = r
-                break
-        # 若已有 router 中无视觉能力，创建回退 router
-        if not _vision_fallback_router:
-            fallback_key = os.getenv(f"{fallback_p.upper()}_API_KEY", "").strip()
-            if fallback_key and _supports_vision(fallback_p):
+        # 按 _DOMESTIC_VISION_FALLBACK_ORDER 构建国产视觉回退链
+        for domestic_p in _DOMESTIC_VISION_FALLBACK_ORDER:
+            if not _supports_vision(domestic_p):
+                continue
+            api_key = os.getenv(f"{domestic_p.upper()}_API_KEY", "").strip()
+            if not api_key:
+                continue
+            if domestic_p in routers:
+                _vision_fallback_routers.append(routers[domestic_p])
+            else:
                 ref = next(iter(routers.values()))
-                _vision_fallback_router = LLMRouter(
-                    provider=fallback_p,
+                _vision_fallback_routers.append(LLMRouter(
+                    provider=domestic_p,
                     temperature=ref.temperature,
                     max_tokens=ref.max_tokens,
                     request_timeout_sec=ref.request_timeout_sec,
-                )
-        if _vision_fallback_router:
-            fb_name = getattr(_vision_fallback_router, "provider", "?")
-            print(f"[并行] 视觉回退: 无视觉能力的Provider将借用 {fb_name} 视觉模型", flush=True)
+                ))
+        # 如果国产链为空，降级到海外回退
+        if not _vision_fallback_routers:
+            fallback_p = os.getenv("VISION_FALLBACK_PROVIDER", _DEFAULT_VISION_FALLBACK)
+            fallback_key = os.getenv(f"{fallback_p.upper()}_API_KEY", "").strip()
+            if fallback_key and _supports_vision(fallback_p):
+                if fallback_p in routers:
+                    _vision_fallback_routers.append(routers[fallback_p])
+                else:
+                    ref = next(iter(routers.values()))
+                    _vision_fallback_routers.append(LLMRouter(
+                        provider=fallback_p,
+                        temperature=ref.temperature,
+                        max_tokens=ref.max_tokens,
+                        request_timeout_sec=ref.request_timeout_sec,
+                    ))
+    if _vision_fallback_routers:
+        fb_names = [r.provider for r in _vision_fallback_routers]
+        print(f"[并行] 视觉回退链: {fb_names} (无视觉能力的Provider将按此顺序借用)", flush=True)
 
     # ── 断点续传：加载已完成的Provider结果 ──
     cached_results: dict[str, ProviderResult] = {}
@@ -603,12 +640,8 @@ def run_providers_parallel(
             p, routers[p], base_results, analyst_cfg,
             symbol, name, task_summary,
             progresses[p],
-            # 仅对无视觉能力的 provider 传入回退 router
-            vision_fallback_router=(
-                _vision_fallback_router
-                if _vision_fallback_router and not routers[p].supports_vision()
-                else None
-            ),
+            # 国产视觉回退链（所有Provider共享，_process_single_agent 内去重）
+            vision_fallback_routers=_vision_fallback_routers or None,
             agent_call_timeout_sec=_agent_timeout,
             fallback_providers=_fb_providers,
             max_agent_concurrency=max_agent_concurrency,

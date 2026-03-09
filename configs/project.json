@@ -33,10 +33,11 @@
     ],
     "default_providers": [
       "grok",
-      "gemini"
+      "qwen",
+      "deepseek"
     ],
     "candidate_providers": [
-      "deepseek",
+      "gemini",
       "kimi",
       "glm",
       "doubao",

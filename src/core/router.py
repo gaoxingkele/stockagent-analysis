@@ -35,8 +35,12 @@ def _get_llm_proxies(provider: str = "") -> dict | None:
 # 支持图像输入的提供商（视觉模型原生支持）
 _VISION_PROVIDERS = {"gemini", "claude", "openai", "chatgpt", "grok"}
 
-# 默认视觉回退提供商
+# 默认视觉回退提供商（海外兜底）
 _DEFAULT_VISION_FALLBACK = "gemini"
+
+# 国产视觉回退顺序：当Provider无视觉能力时，按此顺序尝试国产视觉API
+# minmax 的 OpenAI 兼容接口不支持图片输入，不纳入回退链
+_DOMESTIC_VISION_FALLBACK_ORDER = ["qwen", "glm", "kimi", "doubao"]
 
 # 各国内提供商的视觉模型与文字模型环境变量映射
 _DOMESTIC_VISION_ENV_MAP: dict[str, tuple[str, str]] = {
@@ -457,6 +461,18 @@ class LLMRouter:
             api_key = os.getenv("QWEN_API_KEY", "")
             model = os.getenv("QWEN_VISION_MODEL", os.getenv("QWEN_MODEL", "qwen-vl-max"))
             base_url = os.getenv("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
+        elif self.provider == "glm":
+            api_key = os.getenv("GLM_API_KEY", "")
+            model = os.getenv("GLM_VISION_MODEL", os.getenv("GLM_MODEL", "glm-4v-plus"))
+            base_url = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/chat/completions")
+        elif self.provider == "doubao":
+            api_key = os.getenv("DOUBAO_API_KEY", "")
+            model = os.getenv("DOUBAO_VISION_MODEL", os.getenv("DOUBAO_MODEL", "doubao-seed-2-0-pro-260215"))
+            base_url = os.getenv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/chat/completions")
+        elif self.provider == "minmax":
+            api_key = os.getenv("MINMAX_API_KEY", "")
+            model = os.getenv("MINMAX_VISION_MODEL", os.getenv("MINMAX_MODEL", "MiniMax-M2.5"))
+            base_url = os.getenv("MINMAX_BASE_URL", "https://api.minimaxi.com/v1/chat/completions")
         else:
             api_key = os.getenv("OPENAI_API_KEY", "")
             model = os.getenv("OPENAI_VISION_MODEL", os.getenv("OPENAI_MODEL", "gpt-4o"))
