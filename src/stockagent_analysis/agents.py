@@ -276,10 +276,10 @@ class AnalystAgent:
             ind = kli.get(tf)
             if not isinstance(ind, dict) or not ind.get("ok"):
                 continue
-            upper = float(ind.get("upper_shadow_ratio", 0))
-            lower = float(ind.get("lower_shadow_ratio", 0))
-            mom_tf = float(ind.get("momentum_10", 0))
-            amp = float(ind.get("amplitude_20", 0))
+            upper = float(ind.get("upper_shadow_ratio") or 0)
+            lower = float(ind.get("lower_shadow_ratio") or 0)
+            mom_tf = float(ind.get("momentum_10") or 0)
+            amp = float(ind.get("amplitude_20") or 0)
             # 顶部结构：长上影线+负动量 或 高振幅+负动量（头肩顶/M顶/长上影线）
             tf_top = 0.0
             if upper > 40 and mom_tf < 0:
@@ -342,7 +342,7 @@ class AnalystAgent:
         for _tf, _w in (("month", 0.40), ("week", 0.35), ("day", 0.25)):
             _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
             _dv = _td.get("divergence", {}) if isinstance(_td, dict) else {}
-            _ds = float(_dv.get("divergence_score", 0))
+            _ds = float(_dv.get("divergence_score") or 0)
             if _ds != 0:
                 div_score += _ds * _w * 0.8  # 放大缩放
                 div_total_w += _w
@@ -356,7 +356,7 @@ class AnalystAgent:
         for _tf, _w in (("day", 0.50), ("week", 0.30), ("month", 0.20)):
             _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
             _vp = _td.get("volume_price", {}) if isinstance(_td, dict) else {}
-            _vs = float(_vp.get("volume_price_score", 0))
+            _vs = float(_vp.get("volume_price_score") or 0)
             if _vs != 0:
                 vp_score += _vs * _w * 1.0
                 vp_total_w += _w
@@ -366,7 +366,7 @@ class AnalystAgent:
 
         # SUPPORT_RESISTANCE：支撑阻力位信号（仅日线,最直接）
         sr_data = (kli.get("day", {}) or {}).get("support_resistance", {})
-        sr_raw = float(sr_data.get("sr_score", 0)) if isinstance(sr_data, dict) else 0
+        sr_raw = float(sr_data.get("sr_score") or 0) if isinstance(sr_data, dict) else 0
         base_dim["SUPPORT_RESISTANCE"] = max(10.0, min(90.0, 50.0 + sr_raw))
 
         # CHANLUN：缠论买卖点信号（多周期加权: 日0.45 + 周0.35 + 月0.20）
@@ -375,7 +375,7 @@ class AnalystAgent:
         for _tf, _w in (("day", 0.45), ("week", 0.35), ("month", 0.20)):
             _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
             _cl = _td.get("chanlun", {}) if isinstance(_td, dict) else {}
-            _cs = float(_cl.get("chanlun_score", 0))
+            _cs = float(_cl.get("chanlun_score") or 0)
             if _cs != 0:
                 cl_score += _cs * _w * 1.0
                 cl_total_w += _w
@@ -389,7 +389,7 @@ class AnalystAgent:
         for _tf, _w in (("day", 0.50), ("week", 0.30), ("month", 0.20)):
             _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
             _cp = _td.get("chart_patterns", {}) if isinstance(_td, dict) else {}
-            _cps = float(_cp.get("chart_pattern_score", 0))
+            _cps = float(_cp.get("chart_pattern_score") or 0)
             if _cps != 0:
                 cp_score += _cps * _w * 0.8
                 cp_total_w += _w
@@ -404,8 +404,8 @@ class AnalystAgent:
             _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
             if not isinstance(_td, dict) or not _td.get("ok"):
                 continue
-            _slope = float(_td.get("trend_slope_pct", 0))
-            _mom = float(_td.get("momentum_10", 0))
+            _slope = float(_td.get("trend_slope_pct") or 0)
+            _mom = float(_td.get("momentum_10") or 0)
             if _slope > 0.05 and _mom > 0:
                 tf_directions[_tf] = "bullish"
             elif _slope < -0.05 and _mom < 0:
@@ -434,8 +434,8 @@ class AnalystAgent:
         tl_score = 50.0
         day_data = kli.get("day", {}) if isinstance(kli, dict) else {}
         if isinstance(day_data, dict) and day_data.get("ok"):
-            slope = float(day_data.get("trend_slope_pct", 0))
-            day_mom = float(day_data.get("momentum_10", 0))
+            slope = float(day_data.get("trend_slope_pct") or 0)
+            day_mom = float(day_data.get("momentum_10") or 0)
             day_vr = vr  # volume ratio
             # 趋势线转向+量能配合 = 突破信号
             if slope > 0.1 and day_mom > 3:
@@ -449,7 +449,7 @@ class AnalystAgent:
             # 斜率反转信号
             week_data = kli.get("week", {}) if isinstance(kli, dict) else {}
             if isinstance(week_data, dict) and week_data.get("ok"):
-                week_slope = float(week_data.get("trend_slope_pct", 0))
+                week_slope = float(week_data.get("trend_slope_pct") or 0)
                 if slope > 0 and week_slope < 0:
                     tl_score += 8  # 日线拐头向上但周线仍下，可能是反转初期
                 elif slope < 0 and week_slope > 0:
@@ -797,7 +797,7 @@ class DivergenceAgent(AnalystAgent):
                 continue
             dv = td.get("divergence", {})
             vp = td.get("volume_price", {})
-            lines = [f"[{label}] RSI={td.get('rsi', 'N/A')} | MACD DIF={td.get('macd_dif', 'N/A')} | 动量={td.get('momentum_10', 0):.1f}%"]
+            lines = [f"[{label}] RSI={td.get('rsi', 'N/A')} | MACD DIF={td.get('macd_dif', 'N/A')} | 动量={td.get('momentum_10') or 0:.1f}%"]
             if dv:
                 if dv.get("macd_top_div"):
                     lines.append(f"  !! {dv.get('macd_div_desc', 'MACD顶背离')}")
@@ -837,7 +837,7 @@ class VolumePriceAgent(AnalystAgent):
             if not isinstance(td, dict) or not td.get("ok"):
                 continue
             vp = td.get("volume_price", {})
-            lines = [f"[{label}] 动量={td.get('momentum_10', 0):.1f}%"]
+            lines = [f"[{label}] 动量={td.get('momentum_10') or 0:.1f}%"]
             if vp:
                 flags = []
                 if vp.get("volume_breakout"): flags.append("放量突破")
@@ -1087,8 +1087,8 @@ class KlinePatternAgent(AnalystAgent):
                 parts.append(f"[{label}] 数据不足")
                 continue
             lines = [f"[{label}] {td.get('rows', 0)}根K线 | 收盘={td.get('close', 'N/A')} "
-                     f"| 动量={td.get('momentum_10', 0):.1f}% | RSI={td.get('rsi', 'N/A')} "
-                     f"| 趋势斜率={td.get('trend_slope_pct', 0):.4f}%/bar"]
+                     f"| 动量={td.get('momentum_10') or 0:.1f}% | RSI={td.get('rsi', 'N/A')} "
+                     f"| 趋势斜率={td.get('trend_slope_pct') or 0:.4f}%/bar"]
             pats = td.get("kline_patterns", [])
             if pats:
                 for p in pats:

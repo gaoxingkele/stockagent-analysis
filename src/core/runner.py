@@ -101,6 +101,8 @@ class ProviderProgress:
     agent_scores: dict[str, float] = field(default_factory=dict)
     agent_weights: dict[str, float] = field(default_factory=dict)
     agent_fallbacks: dict[str, str] = field(default_factory=dict)
+    agents_in_progress: set[str] = field(default_factory=set)
+    _agents_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 @dataclass

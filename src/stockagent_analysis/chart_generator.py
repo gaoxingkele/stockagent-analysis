@@ -104,7 +104,7 @@ def generate_kline_chart(
             df[col] = pd.to_numeric(df[col], errors="coerce")
         df["volume"] = pd.to_numeric(df.get("volume", 0), errors="coerce").fillna(0)
         df = df.dropna(subset=["open", "high", "low", "close"])
-        if len(df) < 5:
+        if len(df) < 2:
             return None
 
         # 限制根数

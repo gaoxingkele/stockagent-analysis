@@ -184,6 +184,87 @@ def score_agent_analysis(
         return None
 
 
+def enrich_and_score(
+    router: Any,
+    role: str,
+    agent_id: str,
+    symbol: str,
+    name: str,
+    base_reason: str,
+    data_context: str | None,
+) -> tuple[str | None, float | None]:
+    """合并研判增强+评分为一次LLM调用，返回 (enriched_text, score)。"""
+    ctx_block = ""
+    if data_context:
+        ctx_block = f"\n【本地已获取数据】\n{data_context}\n"
+    prompt = (
+        f"你是中国股市{role}分析员。请基于以下数据与结论完成两个任务：\n"
+        f"1. 将原结论精炼为2-3句客观、可执行的结论（不夸张、不编造数据）\n"
+        f"2. 给出评分（0-100整数）\n\n"
+        f"股票: {symbol} {name}\n"
+        f"分析师: {role}（{agent_id}）\n"
+        f"原结论: {base_reason}"
+        f"{ctx_block}\n"
+        '请严格按JSON格式输出：{"analysis":"精炼结论","score":72}'
+    )
+    try:
+        provider_hint = getattr(router, "provider", "")
+        reason_brief = (base_reason or "")[:100].replace("\n", " ")
+        logger.info(
+            "[LLM提交] 合并研判+评分 provider=%s agent=%s | 结论=%s...",
+            provider_hint, agent_id, reason_brief,
+        )
+        text = router._chat(prompt, multi_turn=True)
+        if not text:
+            return None, None
+        text = text.strip()
+        # 优先JSON解析
+        try:
+            # 尝试从可能包裹的markdown代码块中提取JSON
+            json_text = text
+            m = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text)
+            if m:
+                json_text = m.group(1)
+            elif "{" in text:
+                start = text.find("{")
+                depth, end = 0, -1
+                for i, c in enumerate(text[start:], start):
+                    if c == "{":
+                        depth += 1
+                    elif c == "}":
+                        depth -= 1
+                        if depth == 0:
+                            end = i
+                            break
+                if end >= 0:
+                    json_text = text[start:end + 1]
+            obj = json.loads(json_text)
+            if isinstance(obj, dict):
+                analysis = obj.get("analysis", "")
+                score_val = obj.get("score")
+                if score_val is not None:
+                    score_val = float(score_val)
+                    if 0 <= score_val <= 100:
+                        return analysis or text, round(score_val, 2)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+        # JSON失败：用正则提score，全文当enrichment
+        score = _parse_score_from_response(text, getattr(router, "provider", ""))
+        return text, score
+    except Exception as e:
+        logger.warning("enrich_and_score exception provider=%s agent=%s: %s",
+                       getattr(router, "provider", ""), agent_id, e)
+        return None, None
+
+
+def config_weights(agents: list[dict]) -> dict[str, float]:
+    """从配置文件权重直接计算归一化权重，无需LLM调用。"""
+    weights = {a["agent_id"]: max(0.01, float(a.get("weight", 1 / max(len(agents), 1))))
+               for a in agents}
+    total = sum(weights.values()) or 1.0
+    return {k: v / total for k, v in weights.items()}
+
+
 def generate_scenario_and_position(
     router: Any,
     symbol: str,

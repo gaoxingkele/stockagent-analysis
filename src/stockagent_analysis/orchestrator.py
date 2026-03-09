@@ -81,8 +81,9 @@ def _verify_data_readiness(
             if not Path(chart_path_str).exists():
                 missing.append(f"K线图表 {tf}: {chart_path_str}")
         else:
-            # chart_files 中没有此 timeframe 的条目
-            missing.append(f"K线图表 {tf}: 未生成")
+            # chart_files 中没有此 timeframe — 数据行数太少无法生成图表，降级跳过
+            manager_logger.info("kline_vision chart %s not generated (data rows too few for chart) — degraded (non-fatal)", tf)
+            continue
 
     if missing:
         manager_logger.warning("data readiness check FAILED: missing=%s", missing)
@@ -346,8 +347,9 @@ def run_analysis(
 
         # 仅默认Provider启动并行子任务，候选Provider作为共享备选池（按需激活）
         parallel_routers = {p: llm_routers[p] for p in default_providers if p in llm_routers}
-        provider_timeout = float(llm_cfg.get("provider_timeout_sec", 720))
-        agent_call_timeout = float(llm_cfg.get("agent_call_timeout_sec", 300))
+        provider_timeout = float(llm_cfg.get("provider_timeout_sec", 600))
+        agent_call_timeout = float(llm_cfg.get("agent_call_timeout_sec", 120))
+        max_agent_concurrency = int(llm_cfg.get("max_agent_concurrency", 6))
         provider_results = run_providers_parallel(
             parallel_routers, base_results, analyst_cfg, symbol, name, task_summary,
             run_dir=run_dir,
@@ -356,6 +358,7 @@ def run_analysis(
             agent_call_timeout_sec=agent_call_timeout,
             default_providers=default_providers,
             candidate_providers=candidate_providers,
+            max_agent_concurrency=max_agent_concurrency,
         )
 
         # ── 阶段4: 合并评分 ──

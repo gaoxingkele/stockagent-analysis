@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
-"""并行化执行引擎：每个 LLM Provider 作为独立线程同时执行权重分配+研判增强+评分。
+"""并行化执行引擎：每个 LLM Provider 作为独立线程，内部 Agent 并发执行。
 
-通用并行基础设施已移至 core.runner，本文件保留领域相关的 worker 逻辑。
+优化:
+- 研判+评分合并为1次LLM调用 (enrich_and_score)
+- Provider内Agent并发 (ThreadPoolExecutor, max_agent_concurrency)
+- 权重直接从配置读取，不再调LLM分配
+- 视觉Agent保持 enrich → score 两步调用
 """
 from __future__ import annotations
 
@@ -10,6 +14,7 @@ import os
 import random
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -25,9 +30,14 @@ from core.router import LLMRouter, _supports_vision, _DEFAULT_VISION_FALLBACK
 
 # ── 领域相关导入 ──
 from .agents import AgentBaseResult
-from .llm_client import assign_agent_weights, score_agent_analysis
+from .llm_client import (
+    assign_agent_weights, score_agent_analysis, enrich_and_score, config_weights,
+)
 
 logger = logging.getLogger(__name__)
+
+# 默认 Provider 内 Agent 并发数
+_DEFAULT_MAX_AGENT_CONCURRENCY = 6
 
 
 def _provider_worker(
@@ -42,9 +52,9 @@ def _provider_worker(
     vision_fallback_router: LLMRouter | None = None,
     agent_call_timeout_sec: float = _AGENT_CALL_TIMEOUT_SEC,
     fallback_providers: list[str] | None = None,
+    max_agent_concurrency: int = _DEFAULT_MAX_AGENT_CONCURRENCY,
 ) -> ProviderResult:
-    """单个 Provider 线程的工作函数：权重分配 → 研判增强 → 独立评分。
-    当单个Agent调用超过 agent_call_timeout_sec 时，自动切换到备选Provider。"""
+    """单个 Provider 线程：配置权重 → Agent并发(研判+评分合并) → 完成。"""
     t0 = time.time()
     result = ProviderResult(provider=provider)
     agent_count = len(base_results)
@@ -53,16 +63,100 @@ def _provider_worker(
 
     cancelled = progress.cancel_event
     _fb_providers = fallback_providers or _FALLBACK_PROVIDERS
-    # 备选Router缓存（避免重复创建）
+    # 备选Router缓存（线程安全）
     _fb_router_cache: dict[str, LLMRouter | None] = {}
+    _fb_cache_lock = threading.Lock()
 
-    def _enrich_with_fallback(agent_id: str, base: AgentBaseResult, is_vision: bool,
-                              vision_rtr: LLMRouter | None) -> str | None:
-        """研判增强：主Router→重试一次→随机候选Provider(最多4个)。"""
+    def _get_fb_router(fp: str) -> LLMRouter | None:
+        with _fb_cache_lock:
+            if fp not in _fb_router_cache:
+                _fb_router_cache[fp] = _create_fallback_router(fp, router)
+            return _fb_router_cache[fp]
+
+    def _avg_existing_score(agent_id: str) -> float:
+        """全部失败时，采用已成功agent的平均分数。"""
+        existing = list(progress.agent_scores.values())
+        if existing:
+            avg = sum(existing) / len(existing)
+            logger.info("[平均分] %s agent=%s 全部失败, 使用已成功%d个agent平均分 %.1f",
+                       provider, agent_id, len(existing), avg)
+            return avg
+        return 50.0
+
+    def _enrich_and_score_with_fallback(agent_id: str, base: AgentBaseResult) -> tuple[str | None, float]:
+        """合并研判+评分：主Router→重试一次→随机候选Provider(最多4个)。"""
+        def _do_call(rtr: LLMRouter) -> tuple[str | None, float | None]:
+            return enrich_and_score(
+                rtr, base.role, agent_id, symbol, name,
+                base.reason, base.data_context,
+            )
+
+        # 第1次：主Router
+        try:
+            pair, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
+            if not timed_out and pair:
+                text, score = pair
+                if text and score is not None:
+                    return text, score
+        except Exception as e:
+            logger.warning("enrich_and_score primary error provider=%s agent=%s: %s",
+                          provider, agent_id, e)
+
+        if cancelled.is_set():
+            return None, _avg_existing_score(agent_id)
+
+        # 第2次：重试主Router
+        logger.info("[重试] %s agent=%s 分析首次失败, 重试中...", provider, agent_id)
+        try:
+            pair, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
+            if not timed_out and pair:
+                text, score = pair
+                if text and score is not None:
+                    return text, score
+        except Exception as e:
+            logger.warning("enrich_and_score retry error provider=%s agent=%s: %s",
+                          provider, agent_id, e)
+
+        if cancelled.is_set():
+            return None, _avg_existing_score(agent_id)
+
+        # 第3~6次：随机候选Provider（最多4个）
+        fb_list = [fp for fp in _fb_providers if fp != provider]
+        random.shuffle(fb_list)
+        tried = 0
+        logger.info("[切换] %s agent=%s 分析重试仍失败, 尝试候选Provider (池: %s)",
+                   provider, agent_id, fb_list[:_MAX_CANDIDATE_ATTEMPTS])
+        for fp in fb_list:
+            if tried >= _MAX_CANDIDATE_ATTEMPTS or cancelled.is_set():
+                break
+            fb_rtr = _get_fb_router(fp)
+            if fb_rtr is None:
+                continue
+            tried += 1
+            try:
+                pair, timed_out2 = _timed_call(lambda r=fb_rtr: _do_call(r), agent_call_timeout_sec, cancelled)
+                if not timed_out2 and pair:
+                    text, score = pair
+                    if text and score is not None:
+                        progress.agent_fallbacks[agent_id] = fp
+                        logger.info("[切换] %s agent=%s 分析已切换到 %s", provider, agent_id, fp)
+                        print(f"[切换] {provider}→{fp} agent={agent_id}", flush=True)
+                        return text, score
+            except Exception:
+                logger.warning("[切换] %s agent=%s 候选%s也失败", provider, agent_id, fp)
+                continue
+
+        # 全部失败
+        logger.warning("[放弃] %s agent=%s 分析全部失败(尝试%d次)", provider, agent_id, 2 + tried)
+        print(f"[放弃] {provider} agent={agent_id} {2 + tried}次全部失败, 使用平均分", flush=True)
+        return None, _avg_existing_score(agent_id)
+
+    def _vision_enrich_with_fallback(agent_id: str, base: AgentBaseResult,
+                                      vision_rtr: LLMRouter | None) -> str | None:
+        """视觉Agent研判增强（保持原两步）：主Router→重试→候选。"""
         def _do_call(rtr: LLMRouter) -> str | None:
-            if is_vision and vision_rtr:
-                # 视觉agent用vision_router
-                actual_rtr = vision_rtr if vision_rtr else rtr
+            if vision_rtr:
+                actual_rtr = vision_rtr
                 txt = actual_rtr.chat_with_image(base.vision_prompt, base.image_b64)
                 if txt:
                     result.vision_results[agent_id] = txt.strip()
@@ -82,37 +176,32 @@ def _provider_worker(
             if not timed_out and text:
                 return text
         except Exception as e:
-            logger.warning("enrich primary error provider=%s agent=%s: %s",
+            logger.warning("vision enrich primary error provider=%s agent=%s: %s",
                           provider, agent_id, e)
 
         if cancelled.is_set():
             return None
 
-        # 第2次：重试主Router
-        logger.info("[重试] %s agent=%s 研判首次失败, 重试中...", provider, agent_id)
+        # 第2次：重试
         try:
             text, timed_out = _timed_call(lambda: _do_call(router), agent_call_timeout_sec, cancelled)
             if not timed_out and text:
                 return text
         except Exception as e:
-            logger.warning("enrich retry error provider=%s agent=%s: %s",
+            logger.warning("vision enrich retry error provider=%s agent=%s: %s",
                           provider, agent_id, e)
 
         if cancelled.is_set():
             return None
 
-        # 第3~6次：随机候选Provider（最多4个）
+        # 候选Provider
         fb_list = [fp for fp in _fb_providers if fp != provider]
         random.shuffle(fb_list)
         tried = 0
-        logger.info("[切换] %s agent=%s 研判重试仍失败, 尝试候选Provider (池: %s)",
-                   provider, agent_id, fb_list[:_MAX_CANDIDATE_ATTEMPTS])
         for fp in fb_list:
             if tried >= _MAX_CANDIDATE_ATTEMPTS or cancelled.is_set():
                 break
-            if fp not in _fb_router_cache:
-                _fb_router_cache[fp] = _create_fallback_router(fp, router)
-            fb_rtr = _fb_router_cache[fp]
+            fb_rtr = _get_fb_router(fp)
             if fb_rtr is None:
                 continue
             tried += 1
@@ -120,79 +209,56 @@ def _provider_worker(
                 text, timed_out2 = _timed_call(lambda r=fb_rtr: _do_call(r), agent_call_timeout_sec, cancelled)
                 if not timed_out2 and text:
                     progress.agent_fallbacks[agent_id] = fp
-                    logger.info("[切换] %s agent=%s 研判已切换到 %s", provider, agent_id, fp)
-                    print(f"[切换] {provider}→{fp} agent={agent_id} (研判)", flush=True)
                     return text
             except Exception:
-                logger.warning("[切换] %s agent=%s 候选%s也失败", provider, agent_id, fp)
                 continue
 
-        # 全部失败（默认+重试+候选共5次）
-        logger.warning("[放弃] %s agent=%s 研判全部失败(尝试%d次)", provider, agent_id, 2 + tried)
         return None
 
-    def _score_with_fallback(agent_id: str, base: AgentBaseResult,
-                             reason_text: str) -> float:
-        """评分：主Router→重试一次→随机候选Provider(最多4个)→已成功agent平均分。"""
+    def _vision_score_with_fallback(agent_id: str, base: AgentBaseResult,
+                                     reason_text: str) -> float:
+        """视觉Agent评分（保持原两步）：主Router→重试→候选→平均分。"""
         def _do_score(rtr: LLMRouter) -> float:
             return score_agent_analysis(
                 rtr, base.role, agent_id, symbol, name,
                 reason_text, base.data_context,
             )
 
-        def _avg_existing_score() -> float:
-            """全部失败时，采用已成功agent的平均分数。"""
-            existing = list(progress.agent_scores.values())
-            if existing:
-                avg = sum(existing) / len(existing)
-                logger.info("[平均分] %s agent=%s 全部失败, 使用已成功%d个agent平均分 %.1f",
-                           provider, agent_id, len(existing), avg)
-                return avg
-            return 50.0
-
-        # 第1次：主Router
+        # 第1次
         try:
             score, timed_out = _timed_call(lambda: _do_score(router), agent_call_timeout_sec, cancelled)
             if not timed_out and score is not None:
                 return score
-        except Exception as e:
-            logger.warning("score primary error provider=%s agent=%s: %s",
-                          provider, agent_id, e)
+        except Exception:
+            pass
 
         if cancelled.is_set():
-            return _avg_existing_score()
+            return _avg_existing_score(agent_id)
 
-        # 第2次：重试主Router
-        logger.info("[重试] %s agent=%s 评分首次失败, 重试中...", provider, agent_id)
+        # 第2次
         try:
             score, timed_out = _timed_call(lambda: _do_score(router), agent_call_timeout_sec, cancelled)
             if not timed_out and score is not None:
                 return score
-        except Exception as e:
-            logger.warning("score retry error provider=%s agent=%s: %s",
-                          provider, agent_id, e)
+        except Exception:
+            pass
 
         if cancelled.is_set():
-            return _avg_existing_score()
+            return _avg_existing_score(agent_id)
 
-        # 第3~6次：候选Provider（优先用研判阶段已成功的候选保持一致性）
+        # 候选
         preferred_fb = progress.agent_fallbacks.get(agent_id)
         fb_order = [fp for fp in _fb_providers if fp != provider]
         random.shuffle(fb_order)
-        # 优先用研判阶段已成功的候选
         if preferred_fb and preferred_fb in fb_order:
             fb_order.remove(preferred_fb)
             fb_order.insert(0, preferred_fb)
 
         tried = 0
-        logger.info("[切换] %s agent=%s 评分重试仍失败, 尝试候选Provider (池: %s)",
-                   provider, agent_id, fb_order[:_MAX_CANDIDATE_ATTEMPTS])
         for fp in fb_order:
             if tried >= _MAX_CANDIDATE_ATTEMPTS or cancelled.is_set():
                 break
-            if fp not in _fb_router_cache:
-                _fb_router_cache[fp] = _create_fallback_router(fp, router)
-            fb_rtr = _fb_router_cache[fp]
+            fb_rtr = _get_fb_router(fp)
             if fb_rtr is None:
                 continue
             tried += 1
@@ -201,20 +267,56 @@ def _provider_worker(
                 if not timed_out2 and score is not None:
                     if agent_id not in progress.agent_fallbacks:
                         progress.agent_fallbacks[agent_id] = fp
-                    logger.info("[切换] %s agent=%s 评分已切换到 %s", provider, agent_id, fp)
-                    print(f"[切换] {provider}→{fp} agent={agent_id} (评分)", flush=True)
                     return score
             except Exception:
-                logger.warning("[切换] %s agent=%s 评分候选%s也失败", provider, agent_id, fp)
                 continue
 
-        # 全部失败（默认+重试+候选共5次），采用已成功agent平均分
-        logger.warning("[放弃] %s agent=%s 评分全部失败(尝试%d次), 使用平均分", provider, agent_id, 2 + tried)
-        print(f"[放弃] {provider} agent={agent_id} 评分{2 + tried}次全部失败, 使用已成功agent平均分", flush=True)
-        return _avg_existing_score()
+        return _avg_existing_score(agent_id)
+
+    def _process_single_agent(agent_id: str, base: AgentBaseResult) -> tuple[str, str | None, float]:
+        """处理单个Agent：视觉保持两步，普通合并一步。返回 (agent_id, text, score)。"""
+        is_vision_agent = (
+            base.agent_type == "kline_vision"
+            and base.image_b64
+            and base.vision_prompt
+        )
+
+        # 标记进行中
+        with progress._agents_lock:
+            progress.agents_in_progress.add(agent_id)
+
+        try:
+            if is_vision_agent:
+                # 视觉Agent：两步走
+                has_vision = router.supports_vision()
+                vision_router = None
+                if has_vision:
+                    vision_router = router
+                elif vision_fallback_router:
+                    vision_router = vision_fallback_router
+
+                text = _vision_enrich_with_fallback(agent_id, base, vision_router)
+                if text:
+                    result.enrichments[agent_id] = text
+                reason_for_score = text or base.reason
+                score = _vision_score_with_fallback(agent_id, base, reason_for_score)
+            else:
+                # 普通Agent：合并一步
+                text, score = _enrich_and_score_with_fallback(agent_id, base)
+                if text:
+                    result.enrichments[agent_id] = text
+        except Exception as e:
+            logger.warning("agent processing failed provider=%s agent=%s: %s", provider, agent_id, e)
+            text = None
+            score = _avg_existing_score(agent_id)
+        finally:
+            with progress._agents_lock:
+                progress.agents_in_progress.discard(agent_id)
+
+        return agent_id, text, score
 
     try:
-        # ── Step 1: 权重分配 ──
+        # ── Step 1: 配置权重（无LLM调用） ──
         progress.current_stage = "权重"
         progress.current_agent = ""
         if cancelled.is_set():
@@ -228,65 +330,40 @@ def _provider_worker(
             }
             for c in analyst_cfg
         ]
-        result.weights = assign_agent_weights(
-            router, agent_list, symbol, name,
-            provider_name=provider, task_summary=task_summary,
-        )
+        result.weights = config_weights(agent_list)
         progress.weight_done = True
         progress.agent_weights = dict(result.weights)
 
-        # ── Step 2: 研判增强 / 视觉分析（含超时切换） ──
-        progress.current_stage = "研判"
-        has_vision = router.supports_vision()
-        for agent_id, base in base_results.items():
-            if cancelled.is_set():
-                raise _ProviderCancelled(provider)
-            progress.current_agent = agent_id
-            try:
-                is_vision_agent = (
-                    base.agent_type == "kline_vision"
-                    and base.image_b64
-                    and base.vision_prompt
-                )
-                # 选择视觉路由
-                vision_router = None
-                if is_vision_agent:
-                    if has_vision:
-                        vision_router = router
-                    elif vision_fallback_router:
-                        vision_router = vision_fallback_router
+        # ── Step 2: Agent并发分析（研判+评分合并） ──
+        progress.current_stage = "分析"
+        max_concurrent = min(max_agent_concurrency, agent_count)
 
-                text = _enrich_with_fallback(agent_id, base, is_vision_agent, vision_router)
-                if text:
-                    result.enrichments[agent_id] = text
-            except _ProviderCancelled:
-                raise
-            except Exception as e:
-                logger.warning(
-                    "enrich failed provider=%s agent=%s: %s", provider, agent_id, e,
-                )
-            progress.enrich_done += 1
-
-        # ── Step 3: 独立评分（含超时切换） ──
-        progress.current_stage = "评分"
-        for agent_id, base in base_results.items():
-            if cancelled.is_set():
-                raise _ProviderCancelled(provider)
-            progress.current_agent = agent_id
-            try:
-                reason_for_score = result.enrichments.get(agent_id, base.reason)
-                score = _score_with_fallback(agent_id, base, reason_for_score)
-                result.scores[agent_id] = score
-                progress.agent_scores[agent_id] = score
-            except _ProviderCancelled:
-                raise
-            except Exception as e:
-                logger.warning(
-                    "score failed provider=%s agent=%s: %s", provider, agent_id, e,
-                )
-                result.scores[agent_id] = 50.0
-                progress.agent_scores[agent_id] = 50.0
-            progress.score_done += 1
+        with ThreadPoolExecutor(max_workers=max_concurrent) as agent_exec:
+            futures = {
+                agent_exec.submit(_process_single_agent, aid, b): aid
+                for aid, b in base_results.items()
+            }
+            for future in as_completed(futures):
+                if cancelled.is_set():
+                    # 取消剩余任务
+                    for f in futures:
+                        f.cancel()
+                    raise _ProviderCancelled(provider)
+                try:
+                    aid, text, score = future.result()
+                    result.scores[aid] = score
+                    progress.agent_scores[aid] = score
+                    progress.enrich_done += 1
+                    progress.score_done += 1
+                except _ProviderCancelled:
+                    raise
+                except Exception as e:
+                    aid = futures[future]
+                    logger.warning("agent future failed provider=%s agent=%s: %s", provider, aid, e)
+                    result.scores[aid] = 50.0
+                    progress.agent_scores[aid] = 50.0
+                    progress.enrich_done += 1
+                    progress.score_done += 1
 
     except _ProviderCancelled:
         elapsed = time.time() - t0
@@ -367,9 +444,10 @@ def run_providers_parallel(
     fallback_providers: list[str] | None = None,
     default_providers: list[str] | None = None,
     candidate_providers: list[str] | None = None,
+    max_agent_concurrency: int = _DEFAULT_MAX_AGENT_CONCURRENCY,
 ) -> dict[str, ProviderResult]:
     """主调度：为每个 Provider 启动线程并行执行，收集结果。支持增量持久化、断点续传与超时取消。"""
-    from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
+    from concurrent.futures import TimeoutError as FuturesTimeoutError
     from .progress_display import ProviderProgressDisplay, run_display_loop
 
     max_wait = provider_timeout_sec or _DEFAULT_PROVIDER_TIMEOUT_SEC
@@ -428,7 +506,7 @@ def run_providers_parallel(
     if cached_results:
         print(f"[并行] 待运行Providers: {pending_providers} (跳过已完成: {list(cached_results.keys())})", flush=True)
 
-    print(f"[并行] Provider超时上限: {max_wait:.0f}s | 单Agent超时: {_agent_timeout:.0f}s | 重试: 1次+{_MAX_CANDIDATE_ATTEMPTS}候选", flush=True)
+    print(f"[并行] Provider超时: {max_wait:.0f}s | Agent超时: {_agent_timeout:.0f}s | Agent并发: {max_agent_concurrency} | 重试: 1次+{_MAX_CANDIDATE_ATTEMPTS}候选", flush=True)
     print(f"[并行] 默认Provider: {pending_providers}", flush=True)
     if _fb_providers:
         print(f"[并行] 候选备选池: {_fb_providers} (仅在agent失败时按需激活)", flush=True)
@@ -475,6 +553,7 @@ def run_providers_parallel(
             ),
             agent_call_timeout_sec=_agent_timeout,
             fallback_providers=_fb_providers,
+            max_agent_concurrency=max_agent_concurrency,
         ): p
         for p in pending_providers
     }
@@ -505,8 +584,7 @@ def run_providers_parallel(
             elapsed = time.time() - prog.start_time
             msg = (
                 f"超时取消 ({elapsed:.0f}s), "
-                f"研判 {prog.enrich_done}/{prog.enrich_total}, "
-                f"评分 {prog.score_done}/{prog.score_total}"
+                f"分析 {prog.enrich_done}/{prog.enrich_total}"
             )
             prog.error = msg
             logger.warning("provider %s timed out: %s", p, msg)

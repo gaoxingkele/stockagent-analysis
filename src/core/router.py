@@ -21,13 +21,13 @@ _DOMESTIC_PROVIDERS = {"kimi", "deepseek", "glm", "doubao", "qwen", "minmax"}
 
 
 def _get_llm_proxies(provider: str = "") -> dict | None:
-    """读取 LLM 调用专用代理。国内模型直连不走代理。
-    返回 None 时 requests 使用系统默认代理；返回空 dict {} 时强制直连。"""
+    """读取 LLM 调用专用代理。国内模型强制直连；海外模型走 LLM_PROXY。
+    返回 {} 强制直连（绕过系统代理）；返回 {"http":..., "https":...} 走指定代理。"""
     if provider.lower() in _DOMESTIC_PROVIDERS:
-        return None
+        return {}  # 空 dict = 强制直连，不走系统代理
     proxy = os.getenv("LLM_PROXY", "").strip()
     if not proxy:
-        return None
+        return {}  # 未配置代理时也强制直连
     return {"http": proxy, "https": proxy}
 
 
@@ -142,7 +142,7 @@ class LLMRouter:
 
     def _create_session(self) -> requests.Session:
         s = requests.Session()
-        adapter = HTTPAdapter(pool_connections=2, pool_maxsize=2)
+        adapter = HTTPAdapter(pool_connections=10, pool_maxsize=10)
         s.mount("http://", adapter)
         s.mount("https://", adapter)
         return s

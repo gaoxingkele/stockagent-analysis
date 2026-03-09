@@ -10,12 +10,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# 数据源域名加入 NO_PROXY，确保数据采集不走 LLM 代理。
-# 仅包含 Tushare（HTTP，代理可能不兼容）；AKShare 域名（东财/腾讯/新浪）
-# 使用 HTTPS，在有系统代理的环境下反而需要代理才能连通，因此不再强制绕过。
-# 如需绕过更多域名，可通过 DATA_NO_PROXY 环境变量追加（逗号分隔）。
+# 国内数据源全部直连，不走系统代理（海外 LLM 代理会阻断国内站点）。
+# 覆盖：Tushare、东财(AKShare)、腾讯财经、新浪财经、同花顺 等。
+# 如需追加，可设 DATA_NO_PROXY 环境变量（逗号分隔）。
 _DATA_NO_PROXY = (
-    "api.tushare.pro,api.waditu.com"
+    # Tushare
+    "api.tushare.pro,api.waditu.com,"
+    # 东方财富 (AKShare 主力源)
+    ".eastmoney.com,push2his.eastmoney.com,push2.eastmoney.com,"
+    "datacenter-web.eastmoney.com,data.eastmoney.com,"
+    # 腾讯财经
+    ".gtimg.cn,stock.gtimg.cn,web.ifzq.gtimg.cn,qt.gtimg.cn,"
+    "web.sqt.gtimg.cn,proxy.finance.qq.com,"
+    # 新浪财经
+    ".sinajs.cn,.sina.com.cn,hq.sinajs.cn,"
+    "vip.stock.finance.sina.com.cn,"
+    # 同花顺 / 其他国内站点
+    ".10jqka.com.cn,.mairui.club,.akshare.akfamily.xyz"
 )
 # 兼容旧引用
 _AKSHARE_NO_PROXY = _DATA_NO_PROXY
@@ -342,7 +353,7 @@ class DataBackend:
     ) -> dict[str, dict[str, Any]]:
         """K线抓取：通达信本地 → Tushare → AKShare，依次降级。每周期最多重试 3 次。"""
         # 确保顺序：通达信本地最优先，其次 Tushare，最后 AKShare
-        ordered_sources = ["tdx", "tushare", "akshare"]
+        ordered_sources = ["tdx", "akshare", "tushare"]
         for s in sources:
             if s not in ordered_sources:
                 ordered_sources.append(s)
@@ -367,8 +378,8 @@ class DataBackend:
                             data = self._fetch_kline_tushare(symbol, tf, limit)
                         else:
                             raise ValueError(f"unsupported source: {source}")
-                        min_rows = min(limit, 30)
-                        if data is not None and not data.empty and len(data) >= min_rows:
+                        # 新股K线少，有多少拿多少，只要非空即可
+                        if data is not None and not data.empty and len(data) >= 1:
                             ok = True
                             used_source = source
                             break
@@ -453,8 +464,7 @@ class DataBackend:
             result[c] = pd.to_numeric(result[c], errors="coerce").fillna(0.0)
         result = result.sort_values("ts").reset_index(drop=True)
 
-        min_rows = min(limit, 30)
-        if len(result) < min_rows:
+        if len(result) < 1:
             raise RuntimeError(f"tdx_{timeframe}_rows_not_enough (got {len(result)})")
 
         return result.tail(limit).reset_index(drop=True)
@@ -589,8 +599,7 @@ class DataBackend:
                     }
                 )
             df = pd.DataFrame(rows)
-        min_rows = min(limit, 30)
-        if len(df) < min_rows:
+        if len(df) < 1:
             raise RuntimeError(f"akshare_{timeframe}_rows_not_enough")
         return df.tail(limit)
 
@@ -916,7 +925,7 @@ class DataBackend:
                         "pct_above": round(pct_above, 2),
                     }
                 else:
-                    ma_system[f"ma{period}"] = {"value": None, "pct_above": None}
+                    ma_system[f"ma{period}"] = {"value": 0, "pct_above": 0}
 
             # 背离检测（MACD/RSI顶底背离）
             divergence = self._detect_divergence(close, high, low, n)
@@ -930,6 +939,15 @@ class DataBackend:
             # 支撑阻力位
             support_resistance = self._detect_support_resistance(close, high, low, vol_series, n)
 
+            # 数值字段：数据不足时用 0 兜底，避免下游 float(None) / f"{None:.2f}" 崩溃
+            def _r(val, ndigits=4, default=0):
+                return round(val, ndigits) if val is not None else default
+
+            def _ri(seq, idx, ndigits=4, default=0):
+                if seq and len(seq) > idx and seq[idx] is not None:
+                    return round(seq[idx], ndigits)
+                return default
+
             out[tf] = {
                 "ok": True,
                 "rows": int(n),
@@ -939,20 +957,20 @@ class DataBackend:
                 "amplitude_20": round(amp, 4),
                 "upper_shadow_ratio": round(upper_shadow, 4),
                 "lower_shadow_ratio": round(lower_shadow, 4),
-                "rsi": round(rsi_val, 2) if rsi_val is not None else None,
-                "macd_dif": round(macd_val[0], 4) if macd_val else None,
-                "macd_dea": round(macd_val[1], 4) if macd_val and len(macd_val) > 1 else None,
-                "macd_hist": round(macd_val[2], 4) if macd_val and len(macd_val) > 2 else None,
-                "kdj_k": round(kdj_val[0], 2) if kdj_val else None,
-                "kdj_d": round(kdj_val[1], 2) if kdj_val and len(kdj_val) > 1 else None,
-                "kdj_j": round(kdj_val[2], 2) if kdj_val and len(kdj_val) > 2 else None,
-                "boll_upper": round(boll_val[0], 4) if boll_val else None,
-                "boll_mid": round(boll_val[1], 4) if boll_val and len(boll_val) > 1 else None,
-                "boll_lower": round(boll_val[2], 4) if boll_val and len(boll_val) > 2 else None,
-                "stoch_rsi": round(stoch_rsi_val, 2) if stoch_rsi_val is not None else None,
+                "rsi": _r(rsi_val, 2),
+                "macd_dif": _ri(macd_val, 0),
+                "macd_dea": _ri(macd_val, 1),
+                "macd_hist": _ri(macd_val, 2),
+                "kdj_k": _ri(kdj_val, 0, 2),
+                "kdj_d": _ri(kdj_val, 1, 2),
+                "kdj_j": _ri(kdj_val, 2, 2),
+                "boll_upper": _ri(boll_val, 0),
+                "boll_mid": _ri(boll_val, 1),
+                "boll_lower": _ri(boll_val, 2),
+                "stoch_rsi": _r(stoch_rsi_val, 2),
                 "kline_combo_5": k_combo,
                 "kline_patterns": kline_patterns,
-                "trend_slope_pct": round(trend_slope, 4) if trend_slope is not None else None,
+                "trend_slope_pct": _r(trend_slope),
                 "ma_system": ma_system,
                 "close": round(curr_price, 4),
                 "divergence": divergence,

@@ -210,18 +210,9 @@ class ProviderProgressDisplay:
             return "--"
         if not prog.weight_done:
             return ".."
-        if prog.current_stage == "评分":
-            if idx == prog.score_done and prog.current_agent == agent_id:
-                return ">评"
-            if idx > prog.score_done:
-                return "研"
-            return "研"
-        if prog.current_stage == "研判":
-            if idx < prog.enrich_done:
-                return "研"
-            if idx == prog.enrich_done and prog.current_agent == agent_id:
-                return ">研"
-            return ".."
+        # 并发模式：检查是否正在处理
+        if agent_id in prog.agents_in_progress:
+            return ">分"
         return ".."
 
     def _provider_total(self, prog: "ProviderProgress") -> str:
