@@ -193,9 +193,9 @@ class LLMRouter:
                 f"\n\n【本地已获取数据（供参考，不得编造）】\n{data_context}\n"
             )
         prompt = (
-            f"你是{role}分析员。请基于以下数据与结论，精炼为2-3句，"
+            f"你是中国股市{role}分析员。请基于以下数据与结论，精炼为2-3句，"
             f"保持客观、可执行，不夸张，不编造数据。\n"
-            f"标的: {symbol}\n"
+            f"股票: {symbol}\n"
             f"原结论: {base_reason}"
             f"{ctx_block}"
         )
@@ -280,7 +280,7 @@ class LLMRouter:
             return None
         messages = [{"role": "user", "content": prompt}]
         if multi_turn:
-            sys_msg = self._get_system_message("你是一位专业的分析员，请基于提供的数据给出客观、可执行的研判。")
+            sys_msg = self._get_system_message("你是一位专业的中国股市分析员，请基于提供的数据给出客观、可执行的研判。")
             messages = [{"role": "system", "content": sys_msg}] + messages
         temp = self.temperature
         _FIXED_TEMP_MODELS = {"kimi-k2.5", "deepseek-reasoner"}
@@ -347,7 +347,7 @@ class LLMRouter:
             "messages": [{"role": "user", "content": prompt}],
         }
         if multi_turn:
-            body["system"] = self._get_system_message("你是一位专业的分析员，请基于提供的数据给出客观、可执行的研判。")
+            body["system"] = self._get_system_message("你是一位专业的中国股市分析员，请基于提供的数据给出客观、可执行的研判。")
         resp = self._safe_post(
             "https://api.anthropic.com/v1/messages",
             headers={
@@ -396,7 +396,7 @@ class LLMRouter:
         model = os.getenv("ANTHROPIC_VISION_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-opus-4-6"))
         if not api_key:
             return None
-        sys_msg = self._get_system_message("你是一位专业的技术分析员，请基于图表给出客观、可执行的研判。")
+        sys_msg = self._get_system_message("你是一位专业的中国股市技术分析员，请基于K线图给出客观、可执行的研判。")
         body = {
             "model": model,
             "max_tokens": self.max_tokens,
@@ -448,7 +448,7 @@ class LLMRouter:
         if not api_key:
             return None
         data_url = f"data:{mime_type};base64,{image_b64}"
-        sys_msg = self._get_system_message("你是一位专业的技术分析员，请基于图表给出客观、可执行的研判。")
+        sys_msg = self._get_system_message("你是一位专业的中国股市技术分析员，请基于K线图给出客观、可执行的研判。")
         messages = [
             {"role": "system", "content": sys_msg},
             {"role": "user", "content": [
