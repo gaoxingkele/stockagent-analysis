@@ -457,12 +457,18 @@ def run_analysis(
                 "confidence_0_1": result.confidence_0_1,
                 "reason": result.reason,
                 "llm_multi_evaluations": result.llm_multi_evaluations,
+                "llm_scores": {p: sc.get(a.agent_id) for p, sc in model_scores.items() if sc.get(a.agent_id) is not None},
             }
         )
 
     model_totals: dict[str, float] = {}
     # TOP_STRUCTURE 评分语义: 高分=顶部信号强(卖出)，在加权时需反转(100-score)使其拉低总分
     _INVERT_DIMS = {"TOP_STRUCTURE"}
+    # 评分融合配置：本地评分与LLM评分加权融合
+    _fusion_cfg = project_cfg.get("score_fusion", {})
+    _local_w = float(_fusion_cfg.get("local_weight", 0.6))
+    _llm_w = float(_fusion_cfg.get("llm_weight", 0.4))
+
     if use_multi_model_weights and model_weights:
         # 构建 agent_id → 本地评分 映射
         local_scores = {d["agent_id"]: d["score_0_100"] for d in detail}
@@ -471,8 +477,13 @@ def run_analysis(
             total = 0.0
             for a, res in zip(analysts, submissions):
                 w = w_map.get(a.agent_id, 1.0 / len(analysts))
-                # 使用本地数据驱动评分（非LLM评分），LLM仅提供权重
-                score = local_scores.get(a.agent_id, res.score_0_100)
+                # 融合本地评分与LLM评分
+                local_s = local_scores.get(a.agent_id, res.score_0_100)
+                llm_s = model_scores.get(p, {}).get(a.agent_id)
+                if llm_s is not None and 0 <= llm_s <= 100:
+                    score = local_s * _local_w + llm_s * _llm_w
+                else:
+                    score = local_s
                 # TOP_STRUCTURE: 高分=顶部强→反转后拉低总分
                 if _dim_map.get(a.agent_id) in _INVERT_DIMS:
                     score = 100.0 - score
@@ -494,8 +505,15 @@ def run_analysis(
             for a, r in zip(analysts, submissions)
         )
         final_score = weighted_score / total_weight
-    buy_th = float(project_cfg.get("decision_threshold_buy", 70.0))
-    sell_th = float(project_cfg.get("decision_threshold_sell", 50.0))
+    # 基于市场状态动态调整阈值
+    _regime = analysis_context.get("features", {}).get("market_regime", {}).get("regime", "unknown")
+    if _regime == "bull":
+        buy_th, sell_th = 65.0, 45.0
+    elif _regime == "bear":
+        buy_th, sell_th = 78.0, 55.0
+    else:
+        buy_th = float(project_cfg.get("decision_threshold_buy", 70.0))
+        sell_th = float(project_cfg.get("decision_threshold_sell", 50.0))
     if final_score >= buy_th:
         final_decision = "buy"
     elif final_score < sell_th:
@@ -515,7 +533,7 @@ def run_analysis(
         decision_level = "strong_sell"
     done += 1
     print(
-        f"[评分] 最终={final_decision} score={final_score:.2f} (阈值: buy>={buy_th} sell<{sell_th})",
+        f"[评分] 最终={final_decision} score={final_score:.2f} (阈值: buy>={buy_th} sell<{sell_th}) 市场={_regime}",
         flush=True,
     )
 
@@ -592,4 +610,19 @@ def run_analysis(
     manager_logger.info("final_decision=%s score=%.4f", final_decision, final_score)
     pipeline.finish()
     print(f"[完成] PDF={pdf_path.name}", flush=True)
+
+    # ── 记录信号到回测数据库 ──
+    try:
+        from .backtest import record_signal
+        _features = analysis_context.get("features", {})
+        _snap = {
+            "symbol": symbol,
+            "name": name,
+            "close": _features.get("close"),
+        }
+        _fd = {"score": final_score, "decision": final_decision}
+        record_signal(_fd, detail, _snap, _features)
+    except Exception:
+        pass
+
     return output

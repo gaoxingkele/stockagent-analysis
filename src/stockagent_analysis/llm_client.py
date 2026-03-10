@@ -198,14 +198,22 @@ def enrich_and_score(
     if data_context:
         ctx_block = f"\n【本地已获取数据】\n{data_context}\n"
     prompt = (
-        f"你是中国股市{role}分析员。请基于以下数据与结论完成两个任务：\n"
-        f"1. 将原结论精炼为2-3句客观、可执行的结论（不夸张、不编造数据）\n"
-        f"2. 给出评分（0-100整数）\n\n"
+        f"你是中国股市{role}分析员。基于以下数据与本地分析结论，给出你的独立研判。\n\n"
         f"股票: {symbol} {name}\n"
         f"分析师: {role}（{agent_id}）\n"
-        f"原结论: {base_reason}"
+        f"本地结论: {base_reason}"
         f"{ctx_block}\n"
-        '请严格按JSON格式输出：{"analysis":"精炼结论","score":72}'
+        f"【评分标准校准】\n"
+        f"- 80-100: 强烈看多，未来20日上涨概率>75%\n"
+        f"- 60-79: 偏多，上涨概率55-75%\n"
+        f"- 40-59: 中性/不确定\n"
+        f"- 20-39: 偏空，下跌概率55-75%\n"
+        f"- 0-19: 强烈看空，下跌概率>75%\n\n"
+        f"【输出示例】\n"
+        f'{{"analysis":"MACD金叉配合放量突破20日均线，趋势转强，但RSI接近超买区需警惕短期回调。",'
+        f'"score":68,'
+        f'"risk":"RSI超买+上方前高压力"}}\n\n'
+        f"请仅输出一个JSON对象，包含 analysis(2-3句精炼结论)、score(0-100整数)、risk(主要风险，1句话)："
     )
     try:
         provider_hint = getattr(router, "provider", "")
@@ -241,11 +249,15 @@ def enrich_and_score(
             obj = json.loads(json_text)
             if isinstance(obj, dict):
                 analysis = obj.get("analysis", "")
+                risk = obj.get("risk", "")
                 score_val = obj.get("score")
                 if score_val is not None:
                     score_val = float(score_val)
                     if 0 <= score_val <= 100:
-                        return analysis or text, round(score_val, 2)
+                        enriched = analysis or text
+                        if risk:
+                            enriched += f"\n[风险提示] {risk}"
+                        return enriched, round(score_val, 2)
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
         # JSON失败：用正则提score，全文当enrichment

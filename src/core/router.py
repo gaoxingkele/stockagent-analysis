@@ -71,21 +71,20 @@ def _supports_vision(provider: str) -> bool:
 
 
 def _parse_score_from_response(text: str, provider_hint: str = "") -> float | None:
-    """从大模型回复中解析 0-100 的评分。通用解析器。"""
+    """从大模型回复中解析 0-100 的评分。通用解析器。优先JSON，回退正则。"""
     if not text or not isinstance(text, str):
         return None
     text = text.strip()
-    for pat in [
-        r"[评打]分[：:\s]*([0-9]{1,3}\.?\d*)",
-        r"score\s*[：:\s]*([0-9]{1,3}\.?\d*)",
-        r"([0-9]{1,3}\.?\d*)\s*分",
-        r"([0-9]{1,3}\.?\d*)\s*/\s*100",
-    ]:
-        m = re.search(pat, text, re.I)
-        if m:
-            v = float(m.group(1))
-            if 0 <= v <= 100:
-                return round(v, 2)
+    # 1. 优先尝试提取 JSON 中的 score
+    try:
+        json_match = re.search(r'\{[^{}]*"score"\s*:\s*\d+[^{}]*\}', text, re.S)
+        if json_match:
+            obj = json.loads(json_match.group())
+            s = float(obj["score"])
+            if 0 <= s <= 100:
+                return round(s, 2)
+    except (json.JSONDecodeError, TypeError, ValueError, KeyError):
+        pass
     try:
         obj = json.loads(text)
         if isinstance(obj, dict) and "score" in obj:
@@ -98,10 +97,24 @@ def _parse_score_from_response(text: str, provider_hint: str = "") -> float | No
                 return round(v, 2)
     except (json.JSONDecodeError, TypeError, ValueError):
         pass
+    # 2. 正则模式匹配
+    for pat in [
+        r"[评打]分[：:\s]*([0-9]{1,3}\.?\d*)",
+        r"score\s*[：:\s]*([0-9]{1,3}\.?\d*)",
+        r"([0-9]{1,3}\.?\d*)\s*分",
+        r"([0-9]{1,3}\.?\d*)\s*/\s*100",
+    ]:
+        m = re.search(pat, text, re.I)
+        if m:
+            v = float(m.group(1))
+            if 0 <= v <= 100:
+                return round(v, 2)
+    # 3. 纯数字
     if text.isdigit():
         v = float(text)
         if 0 <= v <= 100:
             return round(v, 2)
+    # 4. 最后一个合理数字
     candidates = []
     for m in re.finditer(r"\b(100|[0-9]{1,2})(?:\.\d+)?\b", text):
         v = float(m.group(1))

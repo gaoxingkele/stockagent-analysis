@@ -65,5 +65,9 @@
     "max_agent_concurrency": 6,
     "multi_turn_default": true
   },
-  "output_dir": "output/runs"
+  "output_dir": "output/runs",
+  "score_fusion": {
+    "local_weight": 0.6,
+    "llm_weight": 0.4
+  }
 }
