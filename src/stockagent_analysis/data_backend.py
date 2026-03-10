@@ -64,6 +64,22 @@ def _ensure_akshare_no_proxy() -> None:
     os.environ["no_proxy"] = os.environ["NO_PROXY"]
 
 
+_INDUSTRY_ETF_MAP: dict[str, str] = {
+    "银行": "515290", "证券": "512880", "保险": "512070",
+    "房地产": "512200", "医药生物": "512010", "食品饮料": "515170",
+    "家用电器": "159996", "汽车": "516110", "电力设备": "516160",
+    "机械设备": "516960", "电子": "515260", "半导体": "512480",
+    "计算机": "512720", "通信": "515880", "传媒": "516880",
+    "国防军工": "512660", "钢铁": "515210", "有色金属": "512400",
+    "化工": "516220", "煤炭": "515220", "石油石化": "516060",
+    "电力": "159611", "农林牧渔": "516670", "光伏": "515790",
+    "白酒": "512690", "中药": "560080", "创新药": "516260",
+    "芯片": "512480", "游戏": "516010", "建筑材料": "516750",
+    "医疗器械": "159883", "新能源汽车": "515030", "稀土": "516150",
+    "航空航天": "515850",
+}
+
+
 @dataclass
 class MarketSnapshot:
     symbol: str
@@ -242,6 +258,19 @@ class DataBackend:
         if progress_cb:
             progress_cb("因子与指标计算", "开始")
         features = self._compute_features(snapshot, day_df, fundamentals, news, kline_bundle)
+        # 融资融券 + 北向资金（Tushare权限不足时返回空dict，不影响主流程）
+        features["margin_data"] = self._fetch_margin_data(symbol)
+        features["hsgt_data"] = self._fetch_hsgt_data(symbol)
+        # 市场状态识别
+        features["market_regime"] = self._detect_market_regime()
+        # 相对强弱分析（个股 vs 沪深300）
+        features["relative_strength"] = self._fetch_and_compute_rs(kline_bundle)
+        # 相对强弱分析（个股 vs 行业板块指数）
+        features["rs_vs_industry"] = self._fetch_and_compute_rs_industry(kline_bundle, fundamentals)
+        # 相对强弱分析（个股 vs 板块龙头TOP3）
+        features["rs_vs_leaders"] = self._fetch_and_compute_rs_leaders(kline_bundle, fundamentals, symbol)
+        # 相对强弱分析（个股 vs 行业ETF）
+        features["rs_vs_etf"] = self._fetch_and_compute_rs_etf(kline_bundle, fundamentals)
         (data_dir / "factors.json").write_text(
             json.dumps(features, ensure_ascii=False, indent=2), encoding="utf-8"
         )
@@ -718,7 +747,34 @@ class DataBackend:
                         "turnover_rate": self._safe_float(row.get("turnover_rate")),
                         "total_mv": self._safe_float(row.get("total_mv")),
                     }
-                    return data
+                # 追加财务指标（ROE/毛利率/增速等）
+                try:
+                    _tushare_throttle()
+                    fina = pro.fina_indicator(ts_code=ts_code, limit=1)
+                    if fina is not None and not fina.empty:
+                        row_f = fina.iloc[0]
+                        data["roe"] = self._safe_float(row_f.get("roe"))
+                        data["grossprofit_margin"] = self._safe_float(row_f.get("grossprofit_margin"))
+                        data["netprofit_margin"] = self._safe_float(row_f.get("netprofit_margin"))
+                        data["debt_to_assets"] = self._safe_float(row_f.get("debt_to_assets"))
+                        data["revenue_yoy"] = self._safe_float(row_f.get("tr_yoy"))
+                        data["netprofit_yoy"] = self._safe_float(row_f.get("q_profit_yoy"))
+                        data["eps"] = self._safe_float(row_f.get("eps"))
+                        data["cfps"] = self._safe_float(row_f.get("cfps"))
+                except Exception:
+                    pass
+                # 获取行业名称（用于RS vs行业分析）
+                if not data.get("industry"):
+                    try:
+                        import akshare as ak
+                        info = ak.stock_individual_info_em(symbol=symbol)
+                        for _, r in info.iterrows():
+                            if str(r.iloc[0]).strip() == "行业":
+                                data["industry"] = str(r.iloc[1]).strip()
+                                break
+                    except Exception:
+                        pass
+                return data
             except Exception:
                 pass
         # 兜底 akshare
@@ -736,6 +792,7 @@ class DataBackend:
                 "pe_ttm": self._safe_float(kv.get("市盈率-动态") or kv.get("市盈率动态")),
                 "pb": self._safe_float(kv.get("市净率")),
                 "total_mv": self._safe_float(kv.get("总市值")),
+                "industry": kv.get("行业", ""),
             }
         except Exception:
             data = {"source": "unknown"}
@@ -759,6 +816,73 @@ class DataBackend:
                 pass
         return data
 
+    def _fetch_margin_data(self, symbol: str) -> dict[str, Any]:
+        """获取融资融券数据（最近20个交易日）。"""
+        if not self._tushare_token:
+            return {}
+        try:
+            import tushare as ts
+            _tushare_throttle()
+            ts.set_token(self._tushare_token)
+            pro = ts.pro_api(timeout=self._tushare_timeout)
+            ts_code = self._to_ts_code(symbol)
+            margin = pro.margin_detail(ts_code=ts_code, limit=20)
+            if margin is None or margin.empty:
+                return {}
+            latest = margin.iloc[0]
+            return {
+                "rzye": self._safe_float(latest.get("rzye")),
+                "rzmre": self._safe_float(latest.get("rzmre")),
+                "rqye": self._safe_float(latest.get("rqye")),
+                "rqmcl": self._safe_float(latest.get("rqmcl")),
+                "rzye_change_5d": self._calc_series_change(margin, "rzye", 5),
+                "rzye_change_10d": self._calc_series_change(margin, "rzye", 10),
+                "source": "tushare",
+            }
+        except Exception:
+            return {}
+
+    def _fetch_hsgt_data(self, symbol: str) -> dict[str, Any]:
+        """获取北向资金（沪深港通）持股数据。"""
+        if not self._tushare_token:
+            return {}
+        try:
+            import tushare as ts
+            _tushare_throttle()
+            ts.set_token(self._tushare_token)
+            pro = ts.pro_api(timeout=self._tushare_timeout)
+            ts_code = self._to_ts_code(symbol)
+            hsgt = pro.hk_hold(ts_code=ts_code, limit=20)
+            if hsgt is None or hsgt.empty:
+                return {}
+            latest = hsgt.iloc[0]
+            prev = hsgt.iloc[-1] if len(hsgt) > 1 else latest
+            vol = self._safe_float(latest.get("vol"))
+            ratio = self._safe_float(latest.get("ratio"))
+            prev_vol = self._safe_float(prev.get("vol"))
+            change_pct = ((vol - prev_vol) / prev_vol * 100) if prev_vol and prev_vol > 0 else 0
+            return {
+                "hk_hold_vol": vol,
+                "hk_hold_ratio": ratio,
+                "hk_hold_change_pct": round(change_pct, 2),
+                "source": "tushare",
+            }
+        except Exception:
+            return {}
+
+    def _calc_series_change(self, df, col: str, days: int) -> float | None:
+        """计算某列过去N日变化百分比。"""
+        try:
+            if len(df) < days + 1 or col not in df.columns:
+                return None
+            latest = float(df.iloc[0][col])
+            prev = float(df.iloc[min(days, len(df) - 1)][col])
+            if prev == 0:
+                return None
+            return round((latest - prev) / abs(prev) * 100, 2)
+        except Exception:
+            return None
+
     def _fetch_news(self, symbol: str) -> list[dict[str, Any]]:
         try:
             import akshare as ak
@@ -779,6 +903,283 @@ class DataBackend:
         except Exception:
             return []
 
+    def _fetch_and_compute_rs(self, kline_bundle: dict[str, dict[str, Any]] | None) -> dict[str, Any]:
+        """获取沪深300日线并计算个股相对强弱。"""
+        if not kline_bundle:
+            return {"ok": False}
+        day_item = kline_bundle.get("day", {})
+        day_df = day_item.get("df") if isinstance(day_item, dict) else None
+        if day_df is None or day_df.empty:
+            return {"ok": False}
+        try:
+            import akshare as ak
+            idx = ak.stock_zh_index_daily(symbol="sh000300")
+            if idx is None or len(idx) < 60:
+                return {"ok": False}
+            stock_close = day_df["close"].astype(float)
+            index_close = idx["close"].astype(float)
+            return self._compute_relative_strength(stock_close, index_close)
+        except Exception:
+            return {"ok": False}
+
+    def _fetch_industry_index_daily(self, industry_name: str):
+        """获取东财行业板块指数日线收盘价序列。"""
+        if not industry_name:
+            return None
+        try:
+            import akshare as ak
+            time.sleep(0.5)
+            end_d = datetime.now().strftime("%Y%m%d")
+            start_d = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
+            df = ak.stock_board_industry_hist_em(
+                symbol=industry_name, period="日k",
+                start_date=start_d, end_date=end_d, adjust="",
+            )
+            if df is None or len(df) < 20:
+                return None
+            return df["收盘"].astype(float).reset_index(drop=True)
+        except Exception:
+            return None
+
+    def _fetch_and_compute_rs_industry(self, kline_bundle, fundamentals):
+        """计算个股 vs 行业板块指数的相对强弱。"""
+        if not kline_bundle:
+            return {"ok": False}
+        day_df = (kline_bundle.get("day") or {}).get("df")
+        if day_df is None or day_df.empty:
+            return {"ok": False}
+        industry = fundamentals.get("industry", "")
+        if not industry:
+            return {"ok": False}
+        ind_close = self._fetch_industry_index_daily(industry)
+        if ind_close is None:
+            return {"ok": False}
+        result = self._compute_relative_strength(day_df["close"].astype(float), ind_close)
+        result["benchmark"] = f"行业:{industry}"
+        return result
+
+    def _fetch_sector_leaders(self, industry_name, exclude_symbol="", top_n=3):
+        """获取行业板块内成交额最大的TOP N个股代码。"""
+        if not industry_name:
+            return []
+        try:
+            import akshare as ak
+            time.sleep(0.5)
+            df = ak.stock_board_industry_cons_em(symbol=industry_name)
+            if df is None or df.empty:
+                return []
+            # 排除自身
+            if exclude_symbol:
+                df = df[df["代码"].astype(str) != exclude_symbol]
+            # 按成交额降序（市值列名不稳定，成交额更可靠）
+            if "成交额" in df.columns:
+                df = df.sort_values("成交额", ascending=False)
+            return df["代码"].astype(str).head(top_n).tolist()
+        except Exception:
+            return []
+
+    def _fetch_and_compute_rs_leaders(self, kline_bundle, fundamentals, symbol=""):
+        """计算个股 vs 板块龙头TOP3均值的相对强弱。"""
+        if not kline_bundle:
+            return {"ok": False}
+        day_df = (kline_bundle.get("day") or {}).get("df")
+        if day_df is None or day_df.empty:
+            return {"ok": False}
+        industry = fundamentals.get("industry", "")
+        if not industry:
+            return {"ok": False}
+        codes = self._fetch_sector_leaders(industry, exclude_symbol=symbol, top_n=3)
+        if not codes:
+            return {"ok": False}
+        try:
+            import akshare as ak
+            import pandas as pd
+            end_d = datetime.now().strftime("%Y%m%d")
+            start_d = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
+            normed = []
+            used_codes = []
+            for code in codes:
+                try:
+                    time.sleep(0.5)
+                    hist = ak.stock_zh_a_hist(
+                        symbol=code, period="daily",
+                        start_date=start_d, end_date=end_d, adjust="qfq",
+                    )
+                    if hist is not None and len(hist) >= 20:
+                        c = hist["收盘"].astype(float).reset_index(drop=True)
+                        normed.append(c / c.iloc[0])  # 归一化
+                        used_codes.append(code)
+                except Exception:
+                    continue
+            if not normed:
+                return {"ok": False}
+            min_len = min(len(s) for s in normed)
+            aligned = [s.tail(min_len).reset_index(drop=True) for s in normed]
+            avg_leader = pd.concat(aligned, axis=1).mean(axis=1)
+            stock_close = day_df["close"].astype(float)
+            result = self._compute_relative_strength(stock_close, avg_leader)
+            result["benchmark"] = f"龙头TOP{len(used_codes)}"
+            result["leader_codes"] = used_codes
+            return result
+        except Exception:
+            return {"ok": False}
+
+    @staticmethod
+    def _match_industry_etf(industry_name):
+        """模糊匹配行业名到ETF代码。"""
+        if not industry_name:
+            return None
+        if industry_name in _INDUSTRY_ETF_MAP:
+            return _INDUSTRY_ETF_MAP[industry_name]
+        for key, code in _INDUSTRY_ETF_MAP.items():
+            if key in industry_name or industry_name in key:
+                return code
+        return None
+
+    def _fetch_and_compute_rs_etf(self, kline_bundle, fundamentals):
+        """计算个股 vs 行业ETF的相对强弱。"""
+        if not kline_bundle:
+            return {"ok": False}
+        day_df = (kline_bundle.get("day") or {}).get("df")
+        if day_df is None or day_df.empty:
+            return {"ok": False}
+        industry = fundamentals.get("industry", "")
+        etf_code = self._match_industry_etf(industry)
+        if not etf_code:
+            return {"ok": False, "reason": f"no_etf_for_{industry}"}
+        try:
+            import akshare as ak
+            time.sleep(0.5)
+            end_d = datetime.now().strftime("%Y%m%d")
+            start_d = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
+            df = ak.fund_etf_hist_em(
+                symbol=etf_code, period="daily",
+                start_date=start_d, end_date=end_d, adjust="",
+            )
+            if df is None or len(df) < 20:
+                return {"ok": False}
+            etf_close = df["收盘"].astype(float).reset_index(drop=True)
+            stock_close = day_df["close"].astype(float)
+            result = self._compute_relative_strength(stock_close, etf_close)
+            result["benchmark"] = f"ETF:{etf_code}"
+            result["etf_code"] = etf_code
+            return result
+        except Exception:
+            return {"ok": False}
+
+    @staticmethod
+    def _detect_market_regime() -> dict[str, Any]:
+        """基于沪深300判断当前市场状态（bull/bear/range）。"""
+        try:
+            import akshare as ak
+            idx = ak.stock_zh_index_daily(symbol="sh000300")
+            if idx is None or len(idx) < 60:
+                return {"regime": "unknown"}
+            close = idx["close"].astype(float).tail(60)
+            ma20 = float(close.rolling(20).mean().iloc[-1])
+            ma60 = float(close.rolling(60).mean().iloc[-1])
+            curr = float(close.iloc[-1])
+            ret_20d = (curr / float(close.iloc[-20]) - 1) * 100
+            vol_20d = float(close.pct_change().tail(20).std() * 100)
+
+            if curr > ma20 > ma60 and ret_20d > 3:
+                regime = "bull"
+            elif curr < ma20 < ma60 and ret_20d < -3:
+                regime = "bear"
+            else:
+                regime = "range"
+
+            return {
+                "regime": regime,
+                "index_close": round(curr, 2),
+                "index_ma20": round(ma20, 2),
+                "index_ma60": round(ma60, 2),
+                "index_ret_20d": round(ret_20d, 2),
+                "index_vol_20d": round(vol_20d, 2),
+            }
+        except Exception:
+            return {"regime": "unknown"}
+
+    @staticmethod
+    def _compute_relative_strength(stock_close_series, index_close_series) -> dict[str, Any]:
+        """计算个股相对大盘指数的相对强弱指标。
+
+        stock_close_series / index_close_series: pandas Series，按时间升序，至少20根。
+        """
+        import numpy as np
+        result: dict[str, Any] = {"ok": False}
+        try:
+            stk = stock_close_series.astype(float).reset_index(drop=True)
+            idx = index_close_series.astype(float).reset_index(drop=True)
+            # 对齐长度（取较短的末尾对齐）
+            min_len = min(len(stk), len(idx))
+            if min_len < 20:
+                return result
+            stk = stk.tail(min_len).reset_index(drop=True)
+            idx = idx.tail(min_len).reset_index(drop=True)
+
+            # RS比率序列 = 个股 / 指数（归一化到起点=1）
+            rs = (stk / stk.iloc[0]) / (idx / idx.iloc[0])
+
+            # RS动量（5日/10日/20日）
+            def _rs_mom(n: int) -> float | None:
+                if len(rs) < n + 1:
+                    return None
+                return round(float((rs.iloc[-1] / rs.iloc[-1 - n] - 1) * 100), 2)
+
+            # 超额收益 = 个股涨幅 - 指数涨幅
+            def _excess(n: int) -> float | None:
+                if len(stk) < n + 1 or len(idx) < n + 1:
+                    return None
+                stk_ret = (float(stk.iloc[-1]) / float(stk.iloc[-1 - n]) - 1) * 100
+                idx_ret = (float(idx.iloc[-1]) / float(idx.iloc[-1 - n]) - 1) * 100
+                return round(stk_ret - idx_ret, 2)
+
+            rs_current = round(float(rs.iloc[-1]), 4)
+
+            # RS是否创20日新高/新低
+            rs_20 = rs.tail(20)
+            rs_new_high = bool(rs.iloc[-1] >= rs_20.max())
+            rs_new_low = bool(rs.iloc[-1] <= rs_20.min())
+
+            # RS趋势：RS的5日均线 vs 20日均线
+            rs_ma5 = float(rs.tail(5).mean())
+            rs_ma20 = float(rs.tail(20).mean())
+            if rs_ma5 > rs_ma20 * 1.005:
+                rs_trend = "up"
+            elif rs_ma5 < rs_ma20 * 0.995:
+                rs_trend = "down"
+            else:
+                rs_trend = "flat"
+
+            # 股价新高但RS没新高 → 看跌背离
+            stk_20 = stk.tail(20)
+            price_new_high = bool(stk.iloc[-1] >= stk_20.max())
+            price_new_low = bool(stk.iloc[-1] <= stk_20.min())
+            rs_divergence_bearish = price_new_high and not rs_new_high
+            rs_divergence_bullish = rs_new_high and not price_new_high
+
+            result = {
+                "ok": True,
+                "rs_current": rs_current,
+                "rs_momentum_5d": _rs_mom(5),
+                "rs_momentum_10d": _rs_mom(10),
+                "rs_momentum_20d": _rs_mom(20),
+                "excess_return_5d": _excess(5),
+                "excess_return_10d": _excess(10),
+                "excess_return_20d": _excess(20),
+                "rs_new_high": rs_new_high,
+                "rs_new_low": rs_new_low,
+                "rs_trend": rs_trend,
+                "price_new_high": price_new_high,
+                "price_new_low": price_new_low,
+                "rs_divergence_bearish": rs_divergence_bearish,
+                "rs_divergence_bullish": rs_divergence_bullish,
+            }
+        except Exception:
+            pass
+        return result
+
     def _compute_features(
         self,
         snap: MarketSnapshot,
@@ -794,6 +1195,14 @@ class DataBackend:
             "turnover_rate": snap.turnover_rate if snap.turnover_rate is not None else fundamentals.get("turnover_rate"),
             "pb": fundamentals.get("pb"),
             "total_mv": fundamentals.get("total_mv"),
+            "roe": fundamentals.get("roe"),
+            "grossprofit_margin": fundamentals.get("grossprofit_margin"),
+            "netprofit_margin": fundamentals.get("netprofit_margin"),
+            "debt_to_assets": fundamentals.get("debt_to_assets"),
+            "revenue_yoy": fundamentals.get("revenue_yoy"),
+            "netprofit_yoy": fundamentals.get("netprofit_yoy"),
+            "eps": fundamentals.get("eps"),
+            "cfps": fundamentals.get("cfps"),
             "momentum_20": 0.0,
             "volatility_20": 0.0,
             "drawdown_60": 0.0,

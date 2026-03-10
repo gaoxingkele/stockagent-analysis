@@ -89,6 +89,13 @@ LOCAL_DATA_MAPPING: dict[str, list[str]] = {
     "支撑阻力位": ["kline_indicators", "features"],
     "缠论买卖点信号": ["kline_indicators", "features"],
     "图形形态信号": ["kline_indicators", "features"],
+    # 相对强弱多层对标
+    "个股vs沪深300相对强弱": ["features.relative_strength", "features"],
+    "超额收益": ["features.relative_strength", "features"],
+    "RS趋势": ["features.relative_strength", "features"],
+    "个股vs行业板块相对强弱": ["features.rs_vs_industry", "features"],
+    "个股vs板块龙头相对强弱": ["features.rs_vs_leaders", "features"],
+    "个股vs行业ETF相对强弱": ["features.rs_vs_etf", "features"],
     # K线视觉智能体专用
     "1h/日/周/月K线图像": ["chart_files", "kline_indicators"],
     "日线K线图像": ["chart_files", "kline_indicators"],

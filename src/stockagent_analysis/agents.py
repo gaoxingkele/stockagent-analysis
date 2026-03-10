@@ -179,6 +179,25 @@ class AnalystAgent:
                 ok_tfs = [f"{tf}({v.get('rows',0)}根)" for tf, v in kli.items() if isinstance(v, dict) and v.get("ok")]
                 if ok_tfs:
                     parts.append("K线: " + ", ".join(ok_tfs))
+        # 基本面扩展字段
+        fund_parts = []
+        roe = f.get("roe")
+        if roe is not None:
+            fund_parts.append(f"ROE={roe:.1f}%")
+        rev_yoy = f.get("revenue_yoy")
+        if rev_yoy is not None:
+            fund_parts.append(f"营收增速={rev_yoy:.1f}%")
+        np_yoy = f.get("netprofit_yoy")
+        if np_yoy is not None:
+            fund_parts.append(f"净利润增速={np_yoy:.1f}%")
+        debt = f.get("debt_to_assets")
+        if debt is not None:
+            fund_parts.append(f"资产负债率={debt:.1f}%")
+        gm = f.get("grossprofit_margin")
+        if gm is not None:
+            fund_parts.append(f"毛利率={gm:.1f}%")
+        if fund_parts:
+            parts.append("基本面: " + " | ".join(fund_parts))
         news = ctx.get("news", [])[:5]
         if news:
             titles = [str(n.get("title", ""))[:40] for n in news if n.get("title")]
@@ -199,6 +218,57 @@ class AnalystAgent:
             for p, txt in llm_evals.items():
                 parts.append(f"{p}: {txt.replace(chr(10), ' ')[:90]}")
         return "综合评价（grok+gemini+kimi）：" + "；".join(parts)
+
+    @staticmethod
+    def _calc_fundamental_extra(f: dict) -> float:
+        """基于ROE/成长性/负债率计算额外基本面评分偏差。"""
+        bias = 0.0
+        roe = f.get("roe")
+        if roe is not None:
+            roe_v = float(roe)
+            if roe_v > 20: bias += 8
+            elif roe_v > 10: bias += 4
+            elif roe_v < 0: bias -= 6
+        rev_yoy = f.get("revenue_yoy")
+        np_yoy = f.get("netprofit_yoy")
+        if rev_yoy is not None and np_yoy is not None:
+            rv, nv = float(rev_yoy), float(np_yoy)
+            if rv > 30 and nv > 30: bias += 10
+            elif rv > 15 and nv > 15: bias += 5
+            elif rv < -10 or nv < -20: bias -= 8
+        debt = f.get("debt_to_assets")
+        if debt is not None:
+            dv = float(debt)
+            if dv > 80: bias -= 6
+            elif dv > 60: bias -= 3
+            elif dv < 30: bias += 3
+        return bias
+
+    @staticmethod
+    def _calc_margin_hsgt_bias(f: dict) -> float:
+        """基于融资融券和北向资金计算DERIV_MARGIN偏差。"""
+        bias = 0.0
+        margin = f.get("margin_data", {})
+        rzye_5d = float(margin.get("rzye_change_5d") or 0)
+        if rzye_5d > 5:
+            bias += 6
+        elif rzye_5d < -5:
+            bias -= 6
+        elif rzye_5d > 2:
+            bias += 3
+        elif rzye_5d < -2:
+            bias -= 3
+        hsgt = f.get("hsgt_data", {})
+        hk_chg = float(hsgt.get("hk_hold_change_pct") or 0)
+        if hk_chg > 3:
+            bias += 5
+        elif hk_chg < -3:
+            bias -= 5
+        elif hk_chg > 1:
+            bias += 2
+        elif hk_chg < -1:
+            bias -= 2
+        return bias
 
     def _simple_policy(self, snap: MarketSnapshot, analysis_context: dict[str, Any]) -> tuple[str, float, float, str]:
         f = analysis_context.get("features", {})
@@ -255,15 +325,99 @@ class AnalystAgent:
             "SECTOR_POLICY": 50 + news_c * 0.8 + 0.3 * mom,
             "BETA":          50 + 0.6 * trend + 0.5 * pct - 0.8 * vol + 0.15 * mom,
             "SENTIMENT":     50 + news_c + 0.3 * pct,
-            "FUNDAMENTAL":   50 + pe_bias + pb_bias + 0.25 * mom,
+            "FUNDAMENTAL":   50 + pe_bias + pb_bias + self._calc_fundamental_extra(f) + 0.15 * mom,
             "QUANT":         50 + 0.7 * mom - 0.35 * vol + (vr - 1.0) * 10,
             "MACRO":         50 + 0.25 * mom - 0.25 * vol + news_c * 0.5,
             "INDUSTRY":      50 + news_c * 0.8 + 0.3 * mom,
             "FLOW_DETAIL":   50 + (vr - 1.0) * 20 + 0.4 * pct,
             "MM_BEHAVIOR":   50 + (vr - 1.0) * 14 + news_c * 0.6 - 0.35 * vol,
             "NLP_SENTIMENT": 50 + news_c * 1.2 + 0.2 * mom,
-            "DERIV_MARGIN":  50 + 0.4 * pct - (vr - 1.0) * 8 - 0.2 * vol + 0.1 * mom,
+            "DERIV_MARGIN":  50 + self._calc_margin_hsgt_bias(f) + 0.3 * pct - 0.15 * vol,
         }
+        # ── RELATIVE_STRENGTH：相对强弱（个股 vs 大盘） ──
+        rs = f.get("relative_strength", {})
+        if isinstance(rs, dict) and rs.get("ok"):
+            rs_score = 50.0
+            # 超额收益
+            ex20 = float(rs.get("excess_return_20d") or 0)
+            ex10 = float(rs.get("excess_return_10d") or 0)
+            if ex20 > 15:
+                rs_score += 12
+            elif ex20 > 8:
+                rs_score += 8
+            elif ex20 > 3:
+                rs_score += 4
+            elif ex20 < -15:
+                rs_score -= 12
+            elif ex20 < -8:
+                rs_score -= 8
+            elif ex20 < -3:
+                rs_score -= 4
+            # RS趋势
+            rs_trend = rs.get("rs_trend", "flat")
+            if rs_trend == "up":
+                rs_score += 6
+            elif rs_trend == "down":
+                rs_score -= 6
+            # RS新高/新低
+            if rs.get("rs_new_high"):
+                rs_score += 5
+            if rs.get("rs_new_low"):
+                rs_score -= 5
+            # RS背离信号
+            if rs.get("rs_divergence_bearish"):
+                rs_score -= 8
+            if rs.get("rs_divergence_bullish"):
+                rs_score += 6
+            # 短期超额收益加速
+            if ex10 > 5 and ex20 > 8:
+                rs_score += 4
+            elif ex10 < -5 and ex20 < -8:
+                rs_score -= 4
+            # ── 多层RS修正：vs行业 (±8) ──
+            rs_ind = f.get("rs_vs_industry", {})
+            if isinstance(rs_ind, dict) and rs_ind.get("ok"):
+                ind_ex20 = float(rs_ind.get("excess_return_20d") or 0)
+                ind_trend = rs_ind.get("rs_trend", "flat")
+                if ind_ex20 > 10 and ind_trend == "up":
+                    rs_score += 6
+                elif ind_ex20 < -10 and ind_trend == "down":
+                    rs_score -= 6
+                if rs_ind.get("rs_new_high"):
+                    rs_score += 2
+                if rs_ind.get("rs_new_low"):
+                    rs_score -= 2
+            # ── 多层RS修正：vs龙头TOP3 (±6) ──
+            rs_ld = f.get("rs_vs_leaders", {})
+            if isinstance(rs_ld, dict) and rs_ld.get("ok"):
+                ld_ex20 = float(rs_ld.get("excess_return_20d") or 0)
+                if ld_ex20 > 5:
+                    rs_score += 4
+                elif ld_ex20 < -10:
+                    rs_score -= 4
+            # ── 多层RS修正：vs ETF (±4) ──
+            rs_etf = f.get("rs_vs_etf", {})
+            if isinstance(rs_etf, dict) and rs_etf.get("ok"):
+                etf_ex20 = float(rs_etf.get("excess_return_20d") or 0)
+                if etf_ex20 > 8:
+                    rs_score += 3
+                elif etf_ex20 < -8:
+                    rs_score -= 3
+            # ── 多层共振 (±5)：3层以上RS趋势一致 ──
+            trend_signals = []
+            for _rs_key in ("relative_strength", "rs_vs_industry", "rs_vs_leaders", "rs_vs_etf"):
+                _rs_d = f.get(_rs_key, {})
+                if isinstance(_rs_d, dict) and _rs_d.get("ok"):
+                    trend_signals.append(_rs_d.get("rs_trend", "flat"))
+            up_count = sum(1 for t in trend_signals if t == "up")
+            down_count = sum(1 for t in trend_signals if t == "down")
+            if up_count >= 3:
+                rs_score += 5
+            elif down_count >= 3:
+                rs_score -= 5
+            base_dim["RELATIVE_STRENGTH"] = max(5.0, min(95.0, rs_score))
+        else:
+            base_dim["RELATIVE_STRENGTH"] = 50.0
         # TOP_STRUCTURE / BOTTOM_STRUCTURE：基于 kline_indicators 多周期结构研判
         # 评分语义：TOP高分=顶部信号强(卖出警示)，BOTTOM高分=底部信号强(买入参考)
         # 两者独立评估，交叉印证；通常只有一个结构显著
@@ -1168,6 +1322,95 @@ class KlinePatternAgent(AnalystAgent):
         return "\n".join(parts)
 
 
+class RelativeStrengthAgent(AnalystAgent):
+    """相对强弱分析Agent：个股 vs 大盘指数的超额收益与RS趋势。"""
+
+    @staticmethod
+    def _build_data_context(ctx: dict[str, Any]) -> str:
+        parts = []
+        snap = ctx.get("snapshot", {})
+        if snap:
+            parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
+
+        f = ctx.get("features", {})
+        rs = f.get("relative_strength", {})
+        if isinstance(rs, dict) and rs.get("ok"):
+            lines = ["[相对强弱 vs 沪深300]"]
+            ex5 = rs.get("excess_return_5d")
+            ex10 = rs.get("excess_return_10d")
+            ex20 = rs.get("excess_return_20d")
+            lines.append(f"  超额收益: 5日={ex5}% | 10日={ex10}% | 20日={ex20}%")
+            rsm5 = rs.get("rs_momentum_5d")
+            rsm10 = rs.get("rs_momentum_10d")
+            lines.append(f"  RS动量: 5日={rsm5}% | 10日={rsm10}%")
+            lines.append(f"  RS趋势: {rs.get('rs_trend', 'unknown')}")
+            if rs.get("rs_new_high"):
+                lines.append("  ★ RS创20日新高（相对领涨）")
+            if rs.get("rs_new_low"):
+                lines.append("  ★ RS创20日新低（相对落后）")
+            if rs.get("rs_divergence_bearish"):
+                lines.append("  ⚠ 看跌背离：股价创新高但RS未创新高（涨势可能不持续）")
+            if rs.get("rs_divergence_bullish"):
+                lines.append("  ★ 看涨信号：RS创新高但股价未创新高（潜在补涨）")
+            parts.append("\n".join(lines))
+        else:
+            parts.append("[相对强弱] 数据不可用")
+
+        # vs 行业板块指数
+        rs_ind = f.get("rs_vs_industry", {})
+        if isinstance(rs_ind, dict) and rs_ind.get("ok"):
+            bm = rs_ind.get("benchmark", "行业")
+            lines2 = [f"[相对强弱 vs {bm}]"]
+            lines2.append(f"  超额收益: 5日={rs_ind.get('excess_return_5d')}% | 10日={rs_ind.get('excess_return_10d')}% | 20日={rs_ind.get('excess_return_20d')}%")
+            lines2.append(f"  RS趋势: {rs_ind.get('rs_trend', 'unknown')}")
+            if rs_ind.get("rs_new_high"):
+                lines2.append("  ★ RS创20日新高（行业内领涨）")
+            if rs_ind.get("rs_new_low"):
+                lines2.append("  ★ RS创20日新低（行业内落后）")
+            parts.append("\n".join(lines2))
+
+        # vs 板块龙头TOP3
+        rs_ld = f.get("rs_vs_leaders", {})
+        if isinstance(rs_ld, dict) and rs_ld.get("ok"):
+            bm = rs_ld.get("benchmark", "龙头")
+            codes_str = ",".join(rs_ld.get("leader_codes", []))
+            lines3 = [f"[相对强弱 vs {bm}] 对标: {codes_str}"]
+            lines3.append(f"  超额收益: 5日={rs_ld.get('excess_return_5d')}% | 10日={rs_ld.get('excess_return_10d')}% | 20日={rs_ld.get('excess_return_20d')}%")
+            lines3.append(f"  RS趋势: {rs_ld.get('rs_trend', 'unknown')}")
+            parts.append("\n".join(lines3))
+
+        # vs 行业ETF
+        rs_etf = f.get("rs_vs_etf", {})
+        if isinstance(rs_etf, dict) and rs_etf.get("ok"):
+            bm = rs_etf.get("benchmark", "ETF")
+            lines4 = [f"[相对强弱 vs {bm}]"]
+            lines4.append(f"  超额收益: 5日={rs_etf.get('excess_return_5d')}% | 20日={rs_etf.get('excess_return_20d')}%")
+            lines4.append(f"  RS趋势: {rs_etf.get('rs_trend', 'unknown')}")
+            parts.append("\n".join(lines4))
+
+        regime = f.get("market_regime", {})
+        if isinstance(regime, dict) and regime.get("regime") != "unknown":
+            parts.append(
+                f"[大盘环境] 状态={regime.get('regime')} | "
+                f"沪深300={regime.get('index_close')} | "
+                f"20日涨幅={regime.get('index_ret_20d')}%"
+            )
+
+        mom = f.get("momentum_20", 0)
+        parts.append(f"个股20日动量: {mom:.2f}%")
+
+        parts.append(
+            "\n分析要求：\n1.个股相对大盘是跑赢还是跑输？强弱趋势是否在变化？\n"
+            "2.个股相对行业板块/龙头的超额收益如何？是行业领涨还是跟涨？\n"
+            "3.超额收益是否可持续（加速/减速/反转）？\n"
+            "4.多层对标是否共振（大盘+行业+龙头+ETF趋势一致）？\n"
+            "5.是否存在RS背离信号？\n"
+            "6.结合大盘环境给出相对强弱综合结论\n\n"
+            "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
+        )
+        return "\n".join(parts)
+
+
 def create_agent(
     cfg: dict[str, Any],
     run_dir: Path,
@@ -1195,4 +1438,6 @@ def create_agent(
         return TimeframeResonanceAgent(cfg, run_dir, backend, llm_routers=llm_routers)
     if agent_type == "trendline":
         return TrendlineAgent(cfg, run_dir, backend, llm_routers=llm_routers)
+    if agent_type == "relative_strength":
+        return RelativeStrengthAgent(cfg, run_dir, backend, llm_routers=llm_routers)
     return AnalystAgent(cfg, run_dir, backend, llm_routers=llm_routers)

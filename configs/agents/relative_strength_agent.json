@@ -1,0 +1,16 @@
+{
+  "agent_id": "relative_strength_agent",
+  "dim_code": "RELATIVE_STRENGTH",
+  "agent_type": "relative_strength",
+  "name": "相对强弱分析Agent",
+  "role": "相对强弱分析师",
+  "enabled": true,
+  "mandatory": true,
+  "weight": 0.10,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["个股vs沪深300相对强弱", "超额收益", "RS趋势", "个股vs行业板块相对强弱", "个股vs板块龙头相对强弱", "个股vs行业ETF相对强弱"]
+  }
+}
