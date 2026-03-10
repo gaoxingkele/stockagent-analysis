@@ -334,6 +334,17 @@ class AnalystAgent:
             kp_total_w += _w
         if kp_total_w > 0:
             kp_score = 50.0 + (kp_score - 50.0) / kp_total_w
+        # 连续性修正（使用日线数据）
+        _day_td = kli.get("day", {}) if isinstance(kli, dict) else {}
+        _cs = _day_td.get("continuity_stats", {}) if isinstance(_day_td, dict) else {}
+        if _cs.get("consecutive_bull", 0) >= 3 and _cs.get("body_trend") == "escalating":
+            kp_score += 4
+        if _cs.get("consecutive_bear", 0) >= 3 and _cs.get("body_trend") == "escalating":
+            kp_score -= 4
+        if _cs.get("higher_highs", 0) >= 3:
+            kp_score += 2
+        if _cs.get("lower_lows", 0) >= 3:
+            kp_score -= 2
         base_dim["KLINE_PATTERN"] = max(10.0, min(90.0, kp_score))
 
         # DIVERGENCE：MACD/RSI背离信号（多周期加权: 月0.40 + 周0.35 + 日0.25）
@@ -1087,13 +1098,57 @@ class KlinePatternAgent(AnalystAgent):
                 parts.append(f"[{label}] 数据不足")
                 continue
             lines = [f"[{label}] {td.get('rows', 0)}根K线 | 收盘={td.get('close', 'N/A')} "
-                     f"| 动量={td.get('momentum_10') or 0:.1f}% | RSI={td.get('rsi', 'N/A')} "
-                     f"| 趋势斜率={td.get('trend_slope_pct') or 0:.4f}%/bar"]
+                     f"| 动量={td.get('momentum_10') or 0:.1f}% | RSI={td.get('rsi', 'N/A')}"]
+
+            # 连续性统计
+            cs = td.get("continuity_stats", {})
+            if cs:
+                cs_parts = []
+                if cs.get("consecutive_bull", 0) > 0:
+                    cs_parts.append(f"连阳{cs['consecutive_bull']}日")
+                elif cs.get("consecutive_bear", 0) > 0:
+                    cs_parts.append(f"连阴{cs['consecutive_bear']}日")
+                bt = cs.get("body_trend", "stable")
+                cs_parts.append(f"实体{'递增' if bt == 'escalating' else '递减' if bt == 'de-escalating' else '稳定'}")
+                if cs.get("higher_highs", 0) > 0:
+                    cs_parts.append(f"高点抬升{cs['higher_highs']}日")
+                if cs.get("lower_lows", 0) > 0:
+                    cs_parts.append(f"低点下移{cs['lower_lows']}日")
+                gap_parts = []
+                if cs.get("gap_up_count", 0) > 0:
+                    gap_parts.append(f"跳空高开{cs['gap_up_count']}次")
+                if cs.get("gap_down_count", 0) > 0:
+                    gap_parts.append(f"跳空低开{cs['gap_down_count']}次")
+                if not gap_parts:
+                    gap_parts.append("无跳空")
+                cs_parts.extend(gap_parts)
+                lines.append("  连续性: " + " | ".join(cs_parts))
+
+            # 相邻K线关系摘要
+            adj = td.get("kline_adjacency", [])
+            if adj:
+                adj_parts = []
+                for a in adj:
+                    pair_label = "[-3→-2]" if "倒数第3" in a.get("pair", "") else "[-2→-1]"
+                    adj_parts.append(f"{pair_label} {a.get('relationship', '')}")
+                lines.append("  相邻关系: " + " | ".join(adj_parts))
+
+            # K线形态（含位置信息）
             pats = td.get("kline_patterns", [])
             if pats:
                 for p in pats:
                     icon = "↑" if p.get("direction") == "bullish" else ("↓" if p.get("direction") == "bearish" else "→")
-                    lines.append(f"  {icon}【{p['name']}】置信度{p.get('confidence', 50)}% | {p.get('desc', '')}")
+                    pos = p.get("position_pct")
+                    pos_str = ""
+                    if pos is not None:
+                        if pos < 30:
+                            pos_str = f" (底部{pos:.0f}%位)"
+                        elif pos > 70:
+                            pos_str = f" (顶部{pos:.0f}%位)"
+                        else:
+                            pos_str = f" (中部{pos:.0f}%位)"
+                    lines.append(f"  {icon}【{p['name']}】置信度{p.get('confidence', 50)}%{pos_str} | {p.get('desc', '')}")
+
             ma = td.get("ma_system", {})
             ma_parts = []
             for period in (5, 20, 60):

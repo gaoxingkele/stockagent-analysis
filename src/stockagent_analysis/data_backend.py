@@ -908,8 +908,12 @@ class DataBackend:
             stoch_rsi_val = self._calc_stoch_rsi(close, 14) if n >= 29 else None
             # 3-5根K线组合（三连阳/三连阴等，旧简版，向后兼容）
             k_combo = self._detect_kline_combo(open_, high, low, close, 5) if n >= 5 else None
-            # 高级多形态识别（15+种典型形态，带置信度）
+            # 高级多形态识别（25+种典型形态，带置信度及位置权重）
             kline_patterns = self._detect_advanced_kline_patterns(open_, high, low, close, n) if n >= 2 else []
+            # 连续性统计
+            continuity_stats = self._compute_continuity_stats(open_, high, low, close, n) if n >= 2 else {}
+            # 相邻K线关系摘要
+            kline_adjacency = self._compute_kline_adjacency(open_, high, low, close, n) if n >= 3 else []
             # 长期趋势线（20周期线性回归斜率%/根）
             trend_slope = self._calc_trend_slope(close, 20) if n >= 20 else None
 
@@ -970,6 +974,8 @@ class DataBackend:
                 "stoch_rsi": _r(stoch_rsi_val, 2),
                 "kline_combo_5": k_combo,
                 "kline_patterns": kline_patterns,
+                "continuity_stats": continuity_stats,
+                "kline_adjacency": kline_adjacency,
                 "trend_slope_pct": _r(trend_slope),
                 "ma_system": ma_system,
                 "close": round(curr_price, 4),
@@ -1068,9 +1074,10 @@ class DataBackend:
 
     @staticmethod
     def _detect_advanced_kline_patterns(open_, high, low, close, n: int) -> list[dict]:
-        """检测最新3-5根K线的15+种典型形态组合，带置信度与方向标注。
+        """检测最新5根K线的25+种典型形态组合，带置信度、方向标注及位置权重。
 
-        返回格式：[{"name": str, "direction": "bullish"|"bearish"|"neutral", "confidence": int, "desc": str}]
+        返回格式：[{"name": str, "direction": "bullish"|"bearish"|"neutral",
+                   "confidence": int, "desc": str, "position_pct": float}]
         形态越强、置信度越高。多形态同时存在时全部返回。
         """
         import numpy as np
@@ -1162,6 +1169,32 @@ class DataBackend:
                     and c[-1] < (o[-2] + c[-2]) / 2):
                 patterns.append({"name": "乌云盖顶", "direction": "bearish", "confidence": 73,
                                  "desc": "高开后深度回落跌穿阳线中线，卖盘涌现，看跌反转"})
+            # 平头顶部：两根K线高点极近，上涨趋势中
+            if uptrend and abs(h[-1] - h[-2]) / max(h[-2], 1e-8) < 0.003:
+                patterns.append({"name": "平头顶部", "direction": "bearish", "confidence": 65,
+                                 "desc": "连续两根K线高点持平，上方阻力明确，看跌反转警示"})
+            # 平头底部：两根K线低点极近，下跌趋势中
+            if downtrend and abs(lv[-1] - lv[-2]) / max(lv[-2], 1e-8) < 0.003:
+                patterns.append({"name": "平头底部", "direction": "bullish", "confidence": 65,
+                                 "desc": "连续两根K线低点持平，下方支撑坚实，看涨反转信号"})
+            # 反击线(看涨)：阴线后跳空低开，阳线收盘接近前阴收盘
+            if (b1 < 0 and b2 > 0 and o[-1] < lv[-2]
+                    and abs(c[-1] - c[-2]) / max(abs(c[-2]), 1e-8) < 0.003):
+                patterns.append({"name": "反击线(看涨)", "direction": "bullish", "confidence": 68,
+                                 "desc": "跳空低开后强力反攻，收盘回到前阴收盘位，多头反击信号"})
+            # 反击线(看跌)：阳线后跳空高开，阴线收盘接近前阳收盘
+            if (b1 > 0 and b2 < 0 and o[-1] > h[-2]
+                    and abs(c[-1] - c[-2]) / max(abs(c[-2]), 1e-8) < 0.003):
+                patterns.append({"name": "反击线(看跌)", "direction": "bearish", "confidence": 68,
+                                 "desc": "跳空高开后沉重回落，收盘跌至前阳收盘位，空头反击信号"})
+            # 跳空高开阳线：open[-1] > high[-2] 且 body[-1]>0，上涨延续
+            if o[-1] > h[-2] and b2 > 0:
+                patterns.append({"name": "跳空高开阳线", "direction": "bullish", "confidence": 72,
+                                 "desc": "跳空高开且收阳，强势上涨延续，多头气势充沛"})
+            # 跳空低开阴线：open[-1] < low[-2] 且 body[-1]<0，下跌延续
+            if o[-1] < lv[-2] and b2 < 0:
+                patterns.append({"name": "跳空低开阴线", "direction": "bearish", "confidence": 72,
+                                 "desc": "跳空低开且收阴，弱势下跌延续，空头压力沉重"})
 
         # ── 三根K线形态（最后三根）──────────────────────────────────────────
         if lookback >= 3:
@@ -1199,6 +1232,28 @@ class DataBackend:
             if b0 < 0 and b1_v > 0 and b2_v < 0 and c[-1] < c[-3]:
                 patterns.append({"name": "两阴夹一阳", "direction": "bearish", "confidence": 64,
                                  "desc": "反弹后空头继续主导，下跌趋势延续信号"})
+            # 三内上 Three Inside Up：看涨孕线(1-2根) + 第3根阳线收盘超过第1根开盘
+            if (b0 < -r0 * 0.35 and b1_v > 0 and o[-2] > c[-3] and c[-2] < o[-3]
+                    and ab1_v < ab0 * 0.55
+                    and b2_v > 0 and c[-1] > o[-3]):
+                patterns.append({"name": "三内上", "direction": "bullish", "confidence": 76,
+                                 "desc": "看涨孕线后阳线突破确认，空头动能耗尽，可靠看涨反转"})
+            # 三内下 Three Inside Down：看跌孕线(1-2根) + 第3根阴线收盘低于第1根开盘
+            if (b0 > r0 * 0.35 and b1_v < 0 and o[-2] < c[-3] and c[-2] > o[-3]
+                    and ab1_v < ab0 * 0.55
+                    and b2_v < 0 and c[-1] < o[-3]):
+                patterns.append({"name": "三内下", "direction": "bearish", "confidence": 76,
+                                 "desc": "看跌孕线后阴线跌破确认，多头动能耗尽，可靠看跌反转"})
+            # 三外上 Three Outside Up：看涨吞噬(1-2根) + 第3根阳线继续新高
+            if (b0 < -r0 * 0.25 and b1_v > 0 and o[-2] <= c[-3] and c[-2] >= o[-3]
+                    and b2_v > 0 and c[-1] > c[-2]):
+                patterns.append({"name": "三外上", "direction": "bullish", "confidence": 78,
+                                 "desc": "看涨吞噬后继续上攻创新高，多头强势确认，看涨延续"})
+            # 三外下 Three Outside Down：看跌吞噬(1-2根) + 第3根阴线继续新低
+            if (b0 > r0 * 0.25 and b1_v < 0 and o[-2] >= c[-3] and c[-2] <= o[-3]
+                    and b2_v < 0 and c[-1] < c[-2]):
+                patterns.append({"name": "三外下", "direction": "bearish", "confidence": 78,
+                                 "desc": "看跌吞噬后继续下挫创新低，空头强势确认，看跌延续"})
 
         # ── 五根K线形态（最后五根）──────────────────────────────────────────
         if lookback >= 5:
@@ -1242,12 +1297,215 @@ class DataBackend:
                     and c[-1] < neck_l):
                 patterns.append({"name": "头肩顶", "direction": "bearish", "confidence": 81,
                                  "desc": "头肩顶跌破颈线，顶部反转确认，强烈看跌信号"})
+            # 上升三法 Rising Three Methods：大阳 + 3小阴(在第1根范围内) + 大阳突破第1根高点
+            if (body[0] > rng[0] * 0.5
+                    and all(body[i] < 0 and abs_body[i] < abs_body[0] * 0.4
+                            and lv[i] >= lv[0] and h[i] <= h[0] for i in range(1, 4))
+                    and body[4] > rng[4] * 0.5 and c[4] > h[0]):
+                patterns.append({"name": "上升三法", "direction": "bullish", "confidence": 80,
+                                 "desc": "大阳后三小阴回调未破底，末根大阳突破前高，强势上涨延续"})
+            # 下降三法 Falling Three Methods：大阴 + 3小阳(在第1根范围内) + 大阴跌破第1根低点
+            if (body[0] < -rng[0] * 0.5
+                    and all(body[i] > 0 and abs_body[i] < abs_body[0] * 0.4
+                            and h[i] <= h[0] and lv[i] >= lv[0] for i in range(1, 4))
+                    and body[4] < -rng[4] * 0.5 and c[4] < lv[0]):
+                patterns.append({"name": "下降三法", "direction": "bearish", "confidence": 80,
+                                 "desc": "大阴后三小阳反弹未破顶，末根大阴跌破前低，强势下跌延续"})
+
+        # ── 位置权重调整 ──────────────────────────────────────────────────
+        # 计算当前收盘在近20根K线中的相对位置 (0=极底部, 100=极顶部)
+        pos_lookback = min(20, n)
+        pos_close = close.tail(pos_lookback)
+        pos_high_val = float(pos_close.max()) if hasattr(pos_close, 'max') else float(np.max(pos_close.values))
+        pos_low_val = float(pos_close.min()) if hasattr(pos_close, 'min') else float(np.min(pos_close.values))
+        pos_range = pos_high_val - pos_low_val
+        current_close = float(close.iloc[-1])
+        position_pct = ((current_close - pos_low_val) / pos_range * 100) if pos_range > 0 else 50.0
+
+        for p in patterns:
+            d = p.get("direction")
+            conf = p["confidence"]
+            if d == "bullish":
+                if position_pct < 30:
+                    conf += 8
+                elif position_pct > 70:
+                    conf -= 10
+            elif d == "bearish":
+                if position_pct > 70:
+                    conf += 8
+                elif position_pct < 30:
+                    conf -= 10
+            p["confidence"] = max(30, min(95, conf))
+            p["position_pct"] = round(position_pct, 1)
 
         # 无典型形态时返回占位
         if not patterns:
             patterns.append({"name": "无明显形态", "direction": "neutral", "confidence": 50,
-                             "desc": "最近3-5根K线未见典型形态组合，维持观望"})
+                             "desc": "最近3-5根K线未见典型形态组合，维持观望",
+                             "position_pct": round(position_pct, 1)})
         return patterns
+
+    @staticmethod
+    def _compute_continuity_stats(open_, high, low, close, n: int) -> dict[str, Any]:
+        """分析最新K线的连续性统计特征。"""
+        import numpy as np
+
+        if n < 2:
+            return {"consecutive_bull": 0, "consecutive_bear": 0, "body_trend": "stable",
+                    "higher_highs": 0, "lower_lows": 0, "gap_up_count": 0, "gap_down_count": 0}
+
+        o = open_.tail(min(20, n)).values.astype(float)
+        h = high.tail(min(20, n)).values.astype(float)
+        lv = low.tail(min(20, n)).values.astype(float)
+        c = close.tail(min(20, n)).values.astype(float)
+        body = c - o
+
+        # 连阳/连阴天数（从最新一根往回数）
+        consecutive_bull = 0
+        consecutive_bear = 0
+        for i in range(len(body) - 1, -1, -1):
+            if body[i] > 0:
+                consecutive_bull += 1
+            else:
+                break
+        if consecutive_bull == 0:
+            for i in range(len(body) - 1, -1, -1):
+                if body[i] < 0:
+                    consecutive_bear += 1
+                else:
+                    break
+
+        # body_trend：最近3根实体绝对值是递增/递减/稳定
+        body_trend = "stable"
+        if len(body) >= 3:
+            abs3 = np.abs(body[-3:])
+            if abs3[2] > abs3[1] > abs3[0]:
+                body_trend = "escalating"
+            elif abs3[2] < abs3[1] < abs3[0]:
+                body_trend = "de-escalating"
+
+        # higher_highs：连续高点抬升天数
+        higher_highs = 0
+        for i in range(len(h) - 1, 0, -1):
+            if h[i] > h[i - 1]:
+                higher_highs += 1
+            else:
+                break
+
+        # lower_lows：连续低点下移天数
+        lower_lows = 0
+        for i in range(len(lv) - 1, 0, -1):
+            if lv[i] < lv[i - 1]:
+                lower_lows += 1
+            else:
+                break
+
+        # 最近5根中跳空次数
+        last5_o = open_.tail(min(5, n)).values.astype(float)
+        last5_h = high.tail(min(5, n)).values.astype(float)
+        last5_lv = low.tail(min(5, n)).values.astype(float)
+        last5_c = close.tail(min(5, n)).values.astype(float)
+        gap_up_count = 0
+        gap_down_count = 0
+        # Use the full series for previous bar's high/low
+        full_h = high.tail(min(6, n)).values.astype(float)
+        full_lv = low.tail(min(6, n)).values.astype(float)
+        if len(full_h) >= 2:
+            for i in range(1, len(full_h)):
+                if full_lv[i] > full_h[i - 1]:  # gap up: current low > previous high
+                    gap_up_count += 1
+                if full_h[i] < full_lv[i - 1]:  # gap down: current high < previous low
+                    gap_down_count += 1
+
+        return {
+            "consecutive_bull": consecutive_bull,
+            "consecutive_bear": consecutive_bear,
+            "body_trend": body_trend,
+            "higher_highs": higher_highs,
+            "lower_lows": lower_lows,
+            "gap_up_count": gap_up_count,
+            "gap_down_count": gap_down_count,
+        }
+
+    @staticmethod
+    def _compute_kline_adjacency(open_, high, low, close, n: int) -> list[dict]:
+        """分析最近3根K线的相邻关系，返回2个元素描述 bar[-3]→bar[-2] 和 bar[-2]→bar[-1]。"""
+        import numpy as np
+
+        if n < 3:
+            return []
+
+        o = open_.tail(3).values.astype(float)
+        h = high.tail(3).values.astype(float)
+        lv = low.tail(3).values.astype(float)
+        c = close.tail(3).values.astype(float)
+        body = c - o
+
+        result = []
+        labels = ["倒数第3→倒数第2", "倒数第2→最新"]
+        for idx in range(2):
+            i, j = idx, idx + 1
+            # gap_pct
+            gap_pct = (o[j] - c[i]) / max(abs(c[i]), 1e-8) * 100
+
+            # high/low change
+            def _change(cur, prev):
+                if abs(cur - prev) / max(abs(prev), 1e-8) < 0.001:
+                    return "equal"
+                return "higher" if cur > prev else "lower"
+
+            high_change = _change(h[j], h[i])
+            low_change = _change(lv[j], lv[i])
+
+            # body overlap percentage
+            top_i = max(o[i], c[i])
+            bot_i = min(o[i], c[i])
+            top_j = max(o[j], c[j])
+            bot_j = min(o[j], c[j])
+            overlap_top = min(top_i, top_j)
+            overlap_bot = max(bot_i, bot_j)
+            overlap = max(0, overlap_top - overlap_bot)
+            union = max(top_i, top_j) - min(bot_i, bot_j)
+            body_overlap_pct = round(overlap / max(union, 1e-8) * 100, 1)
+
+            # engulf degree: +1 = j fully engulfs i, -1 = j fully inside i
+            body_i = abs(body[i])
+            body_j = abs(body[j])
+            if body_i < 1e-8 and body_j < 1e-8:
+                engulf_degree = 0.0
+            elif body_i < 1e-8:
+                engulf_degree = 1.0
+            elif body_j < 1e-8:
+                engulf_degree = -1.0
+            else:
+                engulf_degree = round((body_j - body_i) / max(body_i, body_j), 2)
+
+            # human-readable relationship
+            dir_i = "阳" if body[i] > 0 else ("阴" if body[i] < 0 else "十字")
+            dir_j = "阳" if body[j] > 0 else ("阴" if body[j] < 0 else "十字")
+            parts = [f"{dir_i}→{dir_j}"]
+            if abs(gap_pct) > 0.1:
+                parts.append(f"跳空{gap_pct:+.1f}%{'高' if gap_pct > 0 else '低'}开")
+            if high_change == "higher":
+                parts.append("高点抬升")
+            elif high_change == "lower":
+                parts.append("高点回落")
+            if engulf_degree > 0.3:
+                parts.append(f"吞噬度{engulf_degree:.1f}")
+            elif engulf_degree < -0.3:
+                parts.append("被包含")
+            relationship = ", ".join(parts)
+
+            result.append({
+                "pair": labels[idx],
+                "gap_pct": round(gap_pct, 2),
+                "high_change": high_change,
+                "low_change": low_change,
+                "body_overlap_pct": body_overlap_pct,
+                "engulf_degree": engulf_degree,
+                "relationship": relationship,
+            })
+        return result
 
     @staticmethod
     def _compute_fibonacci_key_levels(day_df, current_close: float) -> dict[str, Any]:
