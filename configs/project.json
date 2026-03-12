@@ -70,6 +70,12 @@
     "local_weight": 0.6,
     "llm_weight": 0.4
   },
+  "bias_filter": {
+    "enabled": true,
+    "bias_threshold_pct": 5.0,
+    "hard_cap_pct": 8.0,
+    "hard_cap_max_score": 35
+  },
   "breakout_detection": {
     "version": "v2",
     "comment": "v1=旧版(仅形态检测), v2=新版(含突破确认+量能验证)",

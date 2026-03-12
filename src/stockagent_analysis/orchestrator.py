@@ -552,11 +552,30 @@ def run_analysis(
         decision_level = "weak_sell"
     else:
         decision_level = "strong_sell"
+    # ── 乖离率后置过滤 ──
+    bias_warning = ""
+    _bias_cfg = project_cfg.get("bias_filter", {})
+    if _bias_cfg.get("enabled", False):
+        _bias_pct = float(
+            analysis_context.get("features", {}).get("kline_indicators", {})
+            .get("day", {}).get("ma_system", {}).get("ma5", {}).get("pct_above", 0)
+        )
+        _bias_th = float(_bias_cfg.get("bias_threshold_pct", 5.0))
+        if _bias_pct > _bias_th:
+            if decision_level in ("strong_buy", "weak_buy"):
+                decision_level = "hold"
+                final_decision = "hold"
+                bias_warning = f"⚠️ 乖离率警告: MA5乖离{_bias_pct:.1f}%>{_bias_th}%，建议等待回踩后介入"
+            elif decision_level == "hold":
+                bias_warning = f"⚠️ 乖离率偏高({_bias_pct:.1f}%)，谨慎追高"
+
     done += 1
     print(
         f"[评分] 最终={final_decision} score={final_score:.2f} (阈值: buy>={buy_th} sell<{sell_th}) 市场={_regime}",
         flush=True,
     )
+    if bias_warning:
+        print(f"[乖离率] {bias_warning}", flush=True)
 
     # 短线/中长线建议：基于周线、月线趋势
     kli = analysis_context.get("features", {}).get("kline_indicators", {})
@@ -623,6 +642,7 @@ def run_analysis(
         "debate_bull_bear": debate_bull_bear if debate_rounds else {},
         "scenario_analysis": scenario_analysis,
         "position_strategy": position_strategy,
+        "warnings": [w for w in [bias_warning] if w],
     }
     # ── 阶段5: 输出报告 ──
     pipeline.advance("输出报告")

@@ -316,9 +316,20 @@ class AnalystAgent:
             elif pb_f > 8:
                 pb_bias = -3.0     # 偏高
 
+        # ── 乖离率惩罚（MA5乖离率过大时降低TREND评分） ──
+        ma_sys = f.get("kline_indicators", {}).get("day", {}).get("ma_system", {})
+        bias_ma5 = float(ma_sys.get("ma5", {}).get("pct_above", 0))
+        bias_penalty = 0
+        if abs(bias_ma5) > 8:
+            bias_penalty = -25
+        elif abs(bias_ma5) > 5:
+            bias_penalty = -15
+        elif abs(bias_ma5) > 3:
+            bias_penalty = -5
+
         # ── 15维度评分公式（放大系数，覆盖 [15,85] 区间） ──
         base_dim = {
-            "TREND":         50 + 1.0 * mom + 0.8 * trend + 0.3 * pct + 0.12 * dd,
+            "TREND":         50 + 1.0 * mom + 0.8 * trend + 0.3 * pct + 0.12 * dd + bias_penalty,
             "TECH":          50 + 0.7 * mom + 0.6 * trend + (vr - 1.0) * 12 - 0.4 * vol,
             "LIQ":           50 + (vr - 1.0) * 18 - 0.3 * abs(pct) - 0.2 * vol + (3.0 if turn is not None else -2.0),
             "CAPITAL_FLOW":  50 + 0.5 * pct + (vr - 1.0) * 16 + news_c * 0.5 + 0.35 * mom,
@@ -657,6 +668,11 @@ class AnalystAgent:
                 elif slope < 0 and week_slope > 0:
                     tl_score -= 8
         base_dim["TRENDLINE"] = max(10.0, min(90.0, tl_score))
+
+        # ── 乖离率硬封顶：MA5乖离>8%时TREND不超过35 ──
+        if bias_ma5 > 8:
+            base_dim["TREND"] = min(base_dim["TREND"], 35)
+
         score_0_100 = float(base_dim.get(self.dim_code, 50.0))
         score_0_100 = max(0.0, min(100.0, score_0_100))
 
