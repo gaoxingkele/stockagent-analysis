@@ -41,6 +41,35 @@ def _cmd_convert_doc(args: argparse.Namespace) -> None:
     print(f"converted_doc: {output_path}")
 
 
+def _cmd_backtest(args: argparse.Namespace) -> None:
+    from .backtest import backfill_returns, compute_summary, evaluate_accuracy
+    if args.backfill:
+        print("正在回填历史涨跌数据...", flush=True)
+        backfill_returns()
+    summary = compute_summary()
+    if "error" in summary:
+        print(f"[回测] {summary['error']}")
+        return
+    print("\n=== 回测评估报告 ===")
+    for k, v in summary.items():
+        label = {
+            "total_signals": "信号总数",
+            "evaluated": "已评估",
+            "win_rate": "胜率(%)",
+            "direction_accuracy": "方向准确率(%)",
+            "stop_loss_hit_rate": "止损命中率(%)",
+            "take_profit_hit_rate": "止盈命中率(%)",
+            "avg_simulated_return": "模拟平均收益(%)",
+            "buy_count": "买入信号数",
+            "buy_win_rate": "买入胜率(%)",
+            "sell_count": "卖出信号数",
+            "sell_win_rate": "卖出胜率(%)",
+        }.get(k, k)
+        print(f"  {label}: {v}")
+    print()
+    evaluate_accuracy()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="中国股市多智能体分析系统")
     sub = parser.add_subparsers(dest="command")
@@ -71,6 +100,11 @@ def main() -> None:
     p_convert = sub.add_parser("convert-doc", help="将其他品类智能体文档转换为中国股市定义文档")
     p_convert.add_argument("--input", required=True, help="输入 Markdown 文档路径")
     p_convert.set_defaults(func=_cmd_convert_doc)
+
+    p_bt = sub.add_parser("backtest", help="回测评估历史信号")
+    p_bt.add_argument("--backfill", action="store_true", help="先回填实际涨跌数据")
+    p_bt.add_argument("--days", type=int, default=10, help="评估周期（默认10日）")
+    p_bt.set_defaults(func=_cmd_backtest)
 
     args = parser.parse_args()
     if not args.command:

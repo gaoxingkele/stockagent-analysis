@@ -160,6 +160,94 @@ def evaluate_accuracy() -> None:
     print(f"信号总数: {len(df)}")
 
 
+def infer_direction(decision: str, score: float) -> str:
+    """从决策推断预期方向。"""
+    if decision in ("buy", "strong_buy") or score >= 65:
+        return "up"
+    elif decision in ("sell", "strong_sell") or score < 40:
+        return "down"
+    return "neutral"
+
+
+def evaluate_single(row: dict) -> dict:
+    """评估单条信号的准确性。"""
+    direction = row.get("direction_expected") or infer_direction(
+        str(row.get("decision", "")), float(row.get("final_score", 50) or 50)
+    )
+    ret_10d = float(row.get("ret_10d", 0) or 0)
+    stop_loss = float(row.get("stop_loss", 0) or 0)
+    take_profit = float(row.get("take_profit_1", 0) or 0)
+    close = float(row.get("close_price", 0) or 0)
+
+    direction_correct = (
+        (direction == "up" and ret_10d > 0)
+        or (direction == "down" and ret_10d < 0)
+        or (direction == "neutral" and abs(ret_10d) < 2)
+    )
+
+    stop_hit = stop_loss > 0 and close > 0 and close * (1 + ret_10d / 100) <= stop_loss
+    tp_hit = take_profit > 0 and close > 0 and close * (1 + ret_10d / 100) >= take_profit
+
+    if direction == "up":
+        sim_return = ret_10d
+    elif direction == "down":
+        sim_return = -ret_10d
+    else:
+        sim_return = 0.0
+
+    return {
+        "direction_correct": direction_correct,
+        "stop_hit": stop_hit,
+        "tp_hit": tp_hit,
+        "simulated_return_pct": round(sim_return, 2),
+        "outcome": "win" if sim_return > 0 else "loss" if sim_return < 0 else "flat",
+    }
+
+
+def compute_summary() -> dict:
+    """计算整体回测统计。"""
+    import pandas as pd
+
+    if not SIGNAL_DB.exists():
+        return {"error": "signal_history.csv 不存在"}
+
+    df = pd.read_csv(SIGNAL_DB)
+    total = len(df)
+    if total == 0:
+        return {"error": "无信号记录"}
+
+    df["ret_10d"] = pd.to_numeric(df.get("ret_10d", pd.Series(dtype=float)), errors="coerce")
+    evaluated = df.dropna(subset=["ret_10d"])
+    n = len(evaluated)
+    if n == 0:
+        return {"total_signals": total, "evaluated": 0, "note": "尚无回填数据"}
+
+    results = [evaluate_single(row.to_dict()) for _, row in evaluated.iterrows()]
+
+    win_count = sum(1 for r in results if r["outcome"] == "win")
+    direction_correct = sum(1 for r in results if r["direction_correct"])
+    stop_hits = sum(1 for r in results if r["stop_hit"])
+    tp_hits = sum(1 for r in results if r["tp_hit"])
+    avg_return = sum(r["simulated_return_pct"] for r in results) / n
+
+    buy_mask = evaluated["decision"].isin(["buy", "strong_buy"]) if "decision" in evaluated.columns else pd.Series(dtype=bool)
+    sell_mask = evaluated["decision"].isin(["sell", "strong_sell"]) if "decision" in evaluated.columns else pd.Series(dtype=bool)
+
+    return {
+        "total_signals": total,
+        "evaluated": n,
+        "win_rate": round(win_count / n * 100, 1),
+        "direction_accuracy": round(direction_correct / n * 100, 1),
+        "stop_loss_hit_rate": round(stop_hits / n * 100, 1),
+        "take_profit_hit_rate": round(tp_hits / n * 100, 1),
+        "avg_simulated_return": round(avg_return, 2),
+        "buy_count": int(buy_mask.sum()),
+        "buy_win_rate": round(float((evaluated.loc[buy_mask, "ret_10d"] > 0).mean() * 100), 1) if buy_mask.any() else 0,
+        "sell_count": int(sell_mask.sum()),
+        "sell_win_rate": round(float((evaluated.loc[sell_mask, "ret_10d"] < 0).mean() * 100), 1) if sell_mask.any() else 0,
+    }
+
+
 def _fetch_daily_after(symbol: str, date_str: str, days: int = 25):
     """获取指定日期之后的日线数据。"""
     try:
