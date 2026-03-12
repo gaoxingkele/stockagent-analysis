@@ -284,35 +284,80 @@ def generate_scenario_and_position(
     final_score: float,
     decision_level_cn: str,
     key_levels_summary: str = "",
-) -> tuple[str, str]:
-    """生成情景分析与分批建仓/止损建议，各2-3句。"""
+    current_price: float | None = None,
+) -> tuple[dict, dict, str, dict]:
+    """生成结构化情景分析、狙击点位、建仓策略、持仓建议。
+
+    返回: (scenarios, sniper_points, position_strategy, position_advice)
+    """
+    price_info = f"当前价: {current_price:.2f}\n" if current_price else ""
+    kl_info = f"关键价位：{key_levels_summary}\n" if key_levels_summary else ""
     prompt = (
-        f"你是中国股市策略分析师。标的：{symbol} {name}。"
-        f"综合评分={final_score:.1f}，决策等级：{decision_level_cn}。"
-    )
-    if key_levels_summary:
-        prompt += f"\n关键价位：{key_levels_summary}"
-    prompt += (
-        "\n请用2-3句话给出：1）乐观/中性/悲观情景及简要触发条件；"
-        "2）分批建仓或止损建议（价位或条件）。不要编造具体数字，可给出原则性建议。"
-        "直接输出两段，第一段以「情景：」开头，第二段以「策略：」开头。"
+        f"你是中国股市策略分析师。标的：{symbol} {name}。\n"
+        f"综合评分={final_score:.1f}，决策等级：{decision_level_cn}。\n"
+        f"{price_info}{kl_info}\n"
+        f"请仅输出一个JSON对象，包含以下字段：\n"
+        f'{{"scenarios": {{"optimistic": {{"probability": 35, "target": 价格数字, "reason": "一句话触发条件"}},'
+        f' "neutral": {{"probability": 45, "target": 价格数字, "reason": "一句话"}},'
+        f' "pessimistic": {{"probability": 20, "target": 价格数字, "reason": "一句话"}}}},'
+        f' "sniper_points": {{"ideal_buy": 首选买入价, "secondary_buy": 次选买入价,'
+        f' "stop_loss": 止损价, "take_profit_1": 第一目标价, "take_profit_2": 第二目标价}},'
+        f' "position_strategy": "分批建仓策略文字描述（2-3句）",'
+        f' "position_advice": {{"no_position": "空仓者操作建议（1-2句）",'
+        f' "has_position": "持仓者操作建议（1-2句）",'
+        f' "position_ratio": "建议仓位比例如50%"}}}}\n'
+        f"注意：价格必须为数字，不要加单位。"
     )
     try:
         text = router._chat(prompt, multi_turn=True)
         if not text:
-            return "", ""
+            return {}, {}, "", {}
         text = text.strip()
-        scenario, position = "", ""
-        if "情景：" in text:
-            parts = text.split("策略：", 1)
-            scenario = parts[0].replace("情景：", "").strip()[:300]
-            position = parts[1].strip()[:300] if len(parts) > 1 else ""
-        elif "策略：" in text:
-            parts = text.split("策略：", 1)
-            scenario = parts[0].strip()[:300]
-            position = parts[1].strip()[:300] if len(parts) > 1 else ""
-        else:
-            scenario = text[:300]
-        return scenario, position
+        # 尝试JSON解析
+        json_text = text
+        m = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text)
+        if m:
+            json_text = m.group(1)
+        elif "{" in text:
+            start = text.find("{")
+            depth, end = 0, -1
+            for i, c in enumerate(text[start:], start):
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = i
+                        break
+            if end >= 0:
+                json_text = text[start:end + 1]
+        try:
+            obj = json.loads(json_text)
+            if isinstance(obj, dict):
+                scenarios = obj.get("scenarios", {})
+                sniper_points = obj.get("sniper_points", {})
+                position_strategy = str(obj.get("position_strategy", ""))
+                position_advice = obj.get("position_advice", {})
+                return scenarios, sniper_points, position_strategy, position_advice
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+        # 回退: 自由文本解析
+        return _parse_freetext_scenario(text)
     except Exception:
-        return "", ""
+        return {}, {}, "", {}
+
+
+def _parse_freetext_scenario(text: str) -> tuple[dict, dict, str, dict]:
+    """从自由文本中解析情景和策略（回退逻辑）。"""
+    scenario, position = "", ""
+    if "情景：" in text:
+        parts = text.split("策略：", 1)
+        scenario = parts[0].replace("情景：", "").strip()[:300]
+        position = parts[1].strip()[:300] if len(parts) > 1 else ""
+    elif "策略：" in text:
+        parts = text.split("策略：", 1)
+        scenario = parts[0].strip()[:300]
+        position = parts[1].strip()[:300] if len(parts) > 1 else ""
+    else:
+        scenario = text[:300]
+    return {}, {}, position or scenario, {}

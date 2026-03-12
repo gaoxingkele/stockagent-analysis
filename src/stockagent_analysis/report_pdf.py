@@ -895,6 +895,91 @@ def _add_scenario_table(
     flow.append(Spacer(1, 6))
 
 
+def _add_sniper_points_table(
+    flow: list,
+    result: dict[str, Any],
+    st_h: Any,
+    st_body: Any,
+    body_font: str,
+    bold_font: str,
+) -> None:
+    """狙击点位表格：首选/次选买入、止损、目标价。"""
+    sp = result.get("sniper_points") or {}
+    if not sp:
+        return
+    feats = result.get("analysis_features") or {}
+    cp = feats.get("close")
+    if not cp:
+        return
+    cp = float(cp)
+
+    flow.append(Paragraph("狙击点位（AI生成）", st_h))
+    fields = [
+        ("ideal_buy", "首选买入", "支撑位附近低吸"),
+        ("secondary_buy", "次选买入", "二次确认位"),
+        ("stop_loss", "止损价", "跌破即离场"),
+        ("take_profit_1", "目标价1", "第一止盈目标"),
+        ("take_profit_2", "目标价2", "第二止盈目标"),
+    ]
+    rows = [_cells(["点位类型", "价格", "距当前价", "说明"], bold_font, 9, True)]
+    for key, label, desc in fields:
+        price = sp.get(key)
+        if price is not None:
+            try:
+                price = float(price)
+                diff_pct = (price - cp) / cp * 100
+                rows.append(_cells([label, f"{price:.2f}", f"{diff_pct:+.1f}%", desc], body_font, 9))
+            except (ValueError, TypeError):
+                pass
+    if len(rows) <= 1:
+        return
+    tbl = Table(rows, colWidths=[28 * mm, 28 * mm, 28 * mm, 72 * mm])
+    tbl.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), body_font),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF2FF")),
+        ("FONTNAME", (0, 0), (-1, 0), bold_font),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D0D7DE")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    flow.append(tbl)
+    flow.append(Spacer(1, 6))
+
+
+def _add_position_advice_table(
+    flow: list,
+    result: dict[str, Any],
+    st_h: Any,
+    st_body: Any,
+    body_font: str,
+    bold_font: str,
+) -> None:
+    """空仓/持仓分别建议表格。"""
+    pa = result.get("position_advice") or {}
+    if not pa:
+        return
+    flow.append(Paragraph("空仓/持仓操作建议（AI生成）", st_h))
+    rows = [_cells(["场景", "操作建议"], bold_font, 9, True)]
+    rows.append(_cells(["空仓（未持有）", pa.get("no_position", "暂无建议")], body_font, 9))
+    rows.append(_cells(["持仓（已持有）", pa.get("has_position", "暂无建议")], body_font, 9))
+    ratio = pa.get("position_ratio", "")
+    if ratio:
+        rows.append(_cells(["建议仓位", str(ratio)], body_font, 9))
+    tbl = Table(rows, colWidths=[38 * mm, 120 * mm])
+    tbl.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), body_font),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF2FF")),
+        ("FONTNAME", (0, 0), (-1, 0), bold_font),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D0D7DE")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    flow.append(tbl)
+    flow.append(Spacer(1, 6))
+
+
 # ─────────────────────────────────────────────────────────────────
 #  主构建函数
 # ─────────────────────────────────────────────────────────────────
@@ -1148,6 +1233,12 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
     # ── 情景分析与策略 ──
     _add_scenario_table(flow, result, st_h, st_body, body_font, bold_font,
                         final_score, decision_level_cn)
+
+    # ── 狙击点位 ──
+    _add_sniper_points_table(flow, result, st_h, st_body, body_font, bold_font)
+
+    # ── 空仓/持仓建议 ──
+    _add_position_advice_table(flow, result, st_h, st_body, body_font, bold_font)
 
     # ── 结果摘要 ──
     flow.append(Paragraph("结果摘要", st_h))

@@ -21,6 +21,8 @@ COLUMNS = [
     "TREND", "TECH", "CAPITAL_FLOW", "FUNDAMENTAL", "KLINE_PATTERN",
     "DIVERGENCE", "SUPPORT_RESISTANCE", "CHANLUN", "DERIV_MARGIN",
     "VOLUME_PRICE", "TIMEFRAME_RESONANCE", "RELATIVE_STRENGTH",
+    # 狙击点位（P2）
+    "ideal_buy", "stop_loss", "take_profit_1", "direction_expected",
     # 后续涨跌（回验时填入）
     "ret_5d", "ret_10d", "ret_20d",
 ]
@@ -49,6 +51,19 @@ def record_signal(
         dim = d.get("dim_code", "")
         if dim in COLUMNS:
             row[dim] = d.get("score_0_100")
+    # 狙击点位
+    sp = final_decision.get("sniper_points", {})
+    row["ideal_buy"] = sp.get("ideal_buy", "")
+    row["stop_loss"] = sp.get("stop_loss", "")
+    row["take_profit_1"] = sp.get("take_profit_1", "")
+    decision = final_decision.get("decision", "")
+    score = float(final_decision.get("score", 50))
+    if decision in ("buy",) or score >= 65:
+        row["direction_expected"] = "up"
+    elif decision in ("sell",) or score < 40:
+        row["direction_expected"] = "down"
+    else:
+        row["direction_expected"] = "neutral"
     # 后验字段留空
     row["ret_5d"] = ""
     row["ret_10d"] = ""

@@ -597,17 +597,31 @@ def run_analysis(
         "weak_sell": "弱卖出", "strong_sell": "强烈卖出",
     }.get(decision_level, decision_level)
     scenario_analysis, position_strategy = "", ""
+    scenarios_data: dict = {}
+    sniper_points: dict = {}
+    position_advice: dict = {}
     if llm_routers:
         key_levels = analysis_context.get("features", {}).get("key_levels", {}) or {}
         kl_summary = ""
         if isinstance(key_levels, dict) and key_levels.get("ok"):
             kl_summary = f"高点{key_levels.get('band_high')} 低点{key_levels.get('band_low')} 当前{key_levels.get('current')} 38.2%回撤{key_levels.get('retrace_382')}"
+        _snap_close = analysis_context.get("features", {}).get("close")
+        _current_price = float(_snap_close) if _snap_close else None
         first_router = next(iter(llm_routers.values()), None)
         if first_router:
             print("[情景] 生成情景分析与建仓/止损建议", flush=True)
-            scenario_analysis, position_strategy = generate_scenario_and_position(
-                first_router, symbol, name, final_score, decision_level_cn, kl_summary
+            scenarios_data, sniper_points, position_strategy, position_advice = generate_scenario_and_position(
+                first_router, symbol, name, final_score, decision_level_cn, kl_summary,
+                current_price=_current_price,
             )
+            # 兼容旧格式scenario_analysis
+            if scenarios_data:
+                parts = []
+                for k in ("optimistic", "neutral", "pessimistic"):
+                    s = scenarios_data.get(k, {})
+                    if isinstance(s, dict) and s.get("reason"):
+                        parts.append(f"{k}: {s['reason']} (概率{s.get('probability', '?')}%)")
+                scenario_analysis = "；".join(parts) if parts else ""
 
     output = {
         "symbol": symbol,
@@ -641,7 +655,10 @@ def run_analysis(
         "medium_long_term_hold": medium_long_term_hold,
         "debate_bull_bear": debate_bull_bear if debate_rounds else {},
         "scenario_analysis": scenario_analysis,
+        "scenarios": scenarios_data,
+        "sniper_points": sniper_points,
         "position_strategy": position_strategy,
+        "position_advice": position_advice,
         "warnings": [w for w in [bias_warning] if w],
     }
     # ── 阶段5: 输出报告 ──
@@ -665,7 +682,7 @@ def run_analysis(
             "name": name,
             "close": _features.get("close"),
         }
-        _fd = {"score": final_score, "decision": final_decision}
+        _fd = {"score": final_score, "decision": final_decision, "sniper_points": sniper_points}
         record_signal(_fd, detail, _snap, _features)
     except Exception:
         pass
