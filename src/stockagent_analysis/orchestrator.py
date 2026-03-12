@@ -464,10 +464,28 @@ def run_analysis(
     model_totals: dict[str, float] = {}
     # TOP_STRUCTURE 评分语义: 高分=顶部信号强(卖出)，在加权时需反转(100-score)使其拉低总分
     _INVERT_DIMS = {"TOP_STRUCTURE"}
-    # 评分融合配置：本地评分与LLM评分加权融合
-    _fusion_cfg = project_cfg.get("score_fusion", {})
-    _local_w = float(_fusion_cfg.get("local_weight", 0.6))
-    _llm_w = float(_fusion_cfg.get("llm_weight", 0.4))
+
+    # ── 逐Agent动态LLM权重计算 ──
+    # 每个Agent有 llm_base_weight (config, 0.20/0.35/0.45)
+    # 根据跨Provider一致性(σ)动态调整: consensus_factor = clamp(1 - (σ-3)/15, 0.5, 1.2)
+    # 最终 llm_w = clamp(base * factor, 0.15, 0.50)
+    def _calc_agent_llm_weight(agent_id: str, base_w: float, m_scores: dict) -> float:
+        """计算单个Agent的动态LLM权重。"""
+        scores_for_agent = []
+        for p, sc in m_scores.items():
+            s = sc.get(agent_id)
+            if s is not None and 0 <= s <= 100:
+                scores_for_agent.append(float(s))
+        if len(scores_for_agent) < 2:
+            return base_w  # 不足2个Provider，无法算一致性，用base
+        mean = sum(scores_for_agent) / len(scores_for_agent)
+        variance = sum((x - mean) ** 2 for x in scores_for_agent) / len(scores_for_agent)
+        sigma = variance ** 0.5
+        factor = max(0.5, min(1.2, 1.0 - (sigma - 3.0) / 15.0))
+        return max(0.15, min(0.50, base_w * factor))
+
+    # 构建 agent_id → llm_base_weight 映射
+    _agent_llm_base = {a.agent_id: float(a.cfg.get("llm_base_weight", 0.35)) for a in analysts}
 
     if use_multi_model_weights and model_weights:
         # 构建 agent_id → 本地评分 映射
@@ -477,6 +495,9 @@ def run_analysis(
             total = 0.0
             for a, res in zip(analysts, submissions):
                 w = w_map.get(a.agent_id, 1.0 / len(analysts))
+                # 逐Agent动态融合权重
+                _llm_w = _calc_agent_llm_weight(a.agent_id, _agent_llm_base[a.agent_id], model_scores)
+                _local_w = 1.0 - _llm_w
                 # 融合本地评分与LLM评分
                 local_s = local_scores.get(a.agent_id, res.score_0_100)
                 llm_s = model_scores.get(p, {}).get(a.agent_id)
@@ -584,6 +605,10 @@ def run_analysis(
         "model_weights": model_weights if use_multi_model_weights else {},
         "model_scores": model_scores if use_multi_model_weights else {},
         "model_totals": model_totals if use_multi_model_weights else {},
+        "llm_fusion_weights": {
+            a.agent_id: round(_calc_agent_llm_weight(a.agent_id, _agent_llm_base[a.agent_id], model_scores), 4)
+            for a in analysts
+        } if use_multi_model_weights else {},
         "analysis_data_files": analysis_context.get("data_files", {}),
         "analysis_features": analysis_context.get("features", {}),
         "score_mapping": {
@@ -622,6 +647,13 @@ def run_analysis(
         }
         _fd = {"score": final_score, "decision": final_decision}
         record_signal(_fd, detail, _snap, _features)
+    except Exception:
+        pass
+
+    # ── 保存评分快照到历史目录（支持逐日对比） ──
+    try:
+        from .score_history import save_score_snapshot
+        save_score_snapshot(run_dir, output)
     except Exception:
         pass
 

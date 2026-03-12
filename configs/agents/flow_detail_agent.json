@@ -8,8 +8,17 @@
   "weight": 0.03,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare"],
-    "fallback": ["tushare"],
-    "required_data_points": ["分时资金流", "主力大单轨迹", "异常成交"]
-  }
+    "primary": [
+      "akshare"
+    ],
+    "fallback": [
+      "tushare"
+    ],
+    "required_data_points": [
+      "分时资金流",
+      "主力大单轨迹",
+      "异常成交"
+    ]
+  },
+  "llm_base_weight": 0.35
 }

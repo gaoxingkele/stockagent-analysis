@@ -8,8 +8,17 @@
   "weight": 0.03,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare"],
-    "fallback": ["tushare"],
-    "required_data_points": ["盘口异动", "拉升回落模式", "主力控盘迹象"]
-  }
+    "primary": [
+      "akshare"
+    ],
+    "fallback": [
+      "tushare"
+    ],
+    "required_data_points": [
+      "盘口异动",
+      "拉升回落模式",
+      "主力控盘迹象"
+    ]
+  },
+  "llm_base_weight": 0.35
 }

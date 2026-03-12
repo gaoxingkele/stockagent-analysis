@@ -8,8 +8,18 @@
   "weight": 0.18,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare", "tushare"],
-    "fallback": ["akshare", "tushare"],
-    "required_data_points": ["日/周/月K线", "HH/HL/LH/LL结构点"]
-  }
+    "primary": [
+      "akshare",
+      "tushare"
+    ],
+    "fallback": [
+      "akshare",
+      "tushare"
+    ],
+    "required_data_points": [
+      "日/周/月K线",
+      "HH/HL/LH/LL结构点"
+    ]
+  },
+  "llm_base_weight": 0.35
 }

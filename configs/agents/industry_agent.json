@@ -5,11 +5,20 @@
   "role": "产业链分析师",
   "enabled": true,
   "mandatory": false,
-  "weight": 0.03,
+  "weight": 0.02,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare"],
-    "fallback": ["tushare"],
-    "required_data_points": ["行业景气度", "上下游价格", "供需结构"]
-  }
+    "primary": [
+      "akshare"
+    ],
+    "fallback": [
+      "tushare"
+    ],
+    "required_data_points": [
+      "行业景气度",
+      "上下游价格",
+      "供需结构"
+    ]
+  },
+  "llm_base_weight": 0.45
 }

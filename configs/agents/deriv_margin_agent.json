@@ -9,8 +9,21 @@
   "weight": 0.12,
   "data_sources": {
     "mode": "combined",
-    "primary": ["tushare", "akshare"],
-    "fallback": ["akshare"],
-    "required_data_points": ["融资余额", "融券余额", "融资净买入", "杠杆率", "融资分位数", "融券做空力量"]
-  }
+    "primary": [
+      "tushare",
+      "akshare"
+    ],
+    "fallback": [
+      "akshare"
+    ],
+    "required_data_points": [
+      "融资余额",
+      "融券余额",
+      "融资净买入",
+      "杠杆率",
+      "融资分位数",
+      "融券做空力量"
+    ]
+  },
+  "llm_base_weight": 0.35
 }

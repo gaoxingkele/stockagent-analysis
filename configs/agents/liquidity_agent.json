@@ -5,11 +5,21 @@
   "role": "流动性与盘口分析师",
   "enabled": true,
   "mandatory": true,
-  "weight": 0.10,
+  "weight": 0.1,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare"],
-    "fallback": ["tushare"],
-    "required_data_points": ["成交额", "换手率", "盘口深度", "委比量比"]
-  }
+    "primary": [
+      "akshare"
+    ],
+    "fallback": [
+      "tushare"
+    ],
+    "required_data_points": [
+      "成交额",
+      "换手率",
+      "盘口深度",
+      "委比量比"
+    ]
+  },
+  "llm_base_weight": 0.2
 }

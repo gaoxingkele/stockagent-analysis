@@ -5,11 +5,21 @@
   "role": "宏观分析师",
   "enabled": true,
   "mandatory": false,
-  "weight": 0.03,
+  "weight": 0.01,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare"],
-    "fallback": ["tushare"],
-    "required_data_points": ["利率", "汇率", "大宗商品", "宏观事件"]
-  }
+    "primary": [
+      "akshare"
+    ],
+    "fallback": [
+      "tushare"
+    ],
+    "required_data_points": [
+      "利率",
+      "汇率",
+      "大宗商品",
+      "宏观事件"
+    ]
+  },
+  "llm_base_weight": 0.45
 }

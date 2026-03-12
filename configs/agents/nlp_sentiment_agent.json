@@ -8,8 +8,17 @@
   "weight": 0.03,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare"],
-    "fallback": ["tushare"],
-    "required_data_points": ["新闻文本", "社媒文本", "主题情绪网络"]
-  }
+    "primary": [
+      "akshare"
+    ],
+    "fallback": [
+      "tushare"
+    ],
+    "required_data_points": [
+      "新闻文本",
+      "社媒文本",
+      "主题情绪网络"
+    ]
+  },
+  "llm_base_weight": 0.45
 }

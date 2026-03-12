@@ -5,11 +5,21 @@
   "role": "Beta联动分析师",
   "enabled": true,
   "mandatory": true,
-  "weight": 0.10,
+  "weight": 0.05,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare", "tushare"],
-    "fallback": ["akshare"],
-    "required_data_points": ["沪深300相关性", "行业Beta", "指数回归系数"]
-  }
+    "primary": [
+      "akshare",
+      "tushare"
+    ],
+    "fallback": [
+      "akshare"
+    ],
+    "required_data_points": [
+      "沪深300相关性",
+      "行业Beta",
+      "指数回归系数"
+    ]
+  },
+  "llm_base_weight": 0.2
 }

@@ -8,8 +8,18 @@
   "weight": 0.04,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare", "tushare"],
-    "fallback": ["akshare"],
-    "required_data_points": ["因子暴露", "回测片段", "短中期信号"]
-  }
+    "primary": [
+      "akshare",
+      "tushare"
+    ],
+    "fallback": [
+      "akshare"
+    ],
+    "required_data_points": [
+      "因子暴露",
+      "回测片段",
+      "短中期信号"
+    ]
+  },
+  "llm_base_weight": 0.2
 }

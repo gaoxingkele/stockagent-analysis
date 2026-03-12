@@ -454,6 +454,11 @@ class DataBackend:
             if df is None or df.empty:
                 raise RuntimeError(f"tdx_{timeframe}_no_data")
 
+            # ── TDX数据不是最新时，用AKShare补足缺失交易日 ──
+            df = self._patch_tdx_with_akshare(df, symbol)
+            # ── 盘中分析：用1h K线合成当天虚拟日线 ──
+            df = self._patch_intraday_as_daily(df, symbol)
+
             if timeframe == "week":
                 df = df.resample("W-FRI").agg(
                     {"open": "first", "high": "max", "low": "min", "close": "last", "amount": "sum", "volume": "sum"}
@@ -497,6 +502,131 @@ class DataBackend:
             raise RuntimeError(f"tdx_{timeframe}_rows_not_enough (got {len(result)})")
 
         return result.tail(limit).reset_index(drop=True)
+
+    def _patch_tdx_with_akshare(self, df, symbol: str):
+        """TDX日线数据不含今日时，用AKShare补足缺失的交易日。
+
+        df: TDX读取的日线DataFrame，index=DatetimeIndex(name='date')。
+        返回补足后的DataFrame（同格式）。
+        """
+        import pandas as pd
+
+        today = pd.Timestamp(datetime.now().date())
+        tdx_last = df.index[-1]
+        if tdx_last >= today:
+            return df  # 已是最新，无需补足
+
+        # 用AKShare获取TDX最后日期之后的数据
+        try:
+            import akshare as ak
+
+            start = (tdx_last + timedelta(days=1)).strftime("%Y%m%d")
+            end = today.strftime("%Y%m%d")
+            patch = ak.stock_zh_a_hist(
+                symbol=symbol, period="daily",
+                start_date=start, end_date=end, adjust="",
+            )
+            if patch is None or patch.empty:
+                return df
+
+            # 标准化列名以匹配TDX格式
+            col_map = {"日期": "date", "开盘": "open", "最高": "high",
+                        "最低": "low", "收盘": "close", "成交量": "volume", "成交额": "amount"}
+            patch = patch.rename(columns=col_map)
+            for c in ["open", "high", "low", "close", "volume", "amount"]:
+                if c in patch.columns:
+                    patch[c] = pd.to_numeric(patch[c], errors="coerce").fillna(0.0)
+            patch["date"] = pd.to_datetime(patch["date"])
+            patch = patch.set_index("date")
+            # 只保留TDX已有的列
+            common_cols = [c for c in df.columns if c in patch.columns]
+            patch = patch[common_cols]
+
+            merged = pd.concat([df, patch])
+            merged = merged[~merged.index.duplicated(keep="last")]
+            merged = merged.sort_index()
+            n_patched = len(merged) - len(df)
+            if n_patched > 0:
+                print(f"[数据] TDX补足 {symbol}: +{n_patched}根日线 (AKShare {start}~{end})", flush=True)
+            return merged
+        except Exception:
+            return df  # 补足失败，静默回退
+
+    def _patch_intraday_as_daily(self, df, symbol: str):
+        """盘中分析：用当天1小时K线合成虚拟日线，追加到日线数据末尾。
+
+        适用场景：盘中（如午盘后）运行分析，当天日线尚未收盘。
+        从AKShare获取当天已走完的1小时K线，合成OHLCV作为当天的"虚拟日线"。
+        如果当天日线已存在（收盘后运行），则不做任何操作。
+        """
+        import pandas as pd
+
+        today = pd.Timestamp(datetime.now().date())
+        if df.index[-1] >= today:
+            return df  # 今天的日线已存在，无需合成
+
+        # 判断当前是否在交易时间段（9:15~15:05）
+        now = datetime.now()
+        if now.weekday() >= 5:
+            return df  # 周末不合成
+        from datetime import time as dt_time
+        if now.time() < dt_time(9, 30):
+            return df  # 开盘前不合成
+
+        try:
+            import akshare as ak
+
+            start_dt = today.strftime("%Y-%m-%d 09:30:00")
+            end_dt = now.strftime("%Y-%m-%d %H:%M:%S")
+            raw = ak.stock_zh_a_hist_min_em(
+                symbol=symbol, period="60",
+                start_date=start_dt, end_date=end_dt, adjust="",
+            )
+            if raw is None or raw.empty:
+                return df
+
+            # 标准化列名
+            col_map = {"时间": "ts", "开盘": "open", "最高": "high",
+                       "最低": "low", "收盘": "close", "成交量": "volume", "成交额": "amount"}
+            raw = raw.rename(columns=col_map)
+            for c in ["open", "high", "low", "close", "volume", "amount"]:
+                if c in raw.columns:
+                    raw[c] = pd.to_numeric(raw[c], errors="coerce").fillna(0.0)
+
+            # 只取今天的1h K线
+            if "ts" in raw.columns:
+                raw["ts"] = pd.to_datetime(raw["ts"])
+                raw = raw[raw["ts"].dt.date == today.date()]
+
+            if raw.empty:
+                return df
+
+            # 合成虚拟日线：open取第一根，high取最高，low取最低，close取最后一根
+            virtual_daily = pd.DataFrame([{
+                "open": float(raw.iloc[0]["open"]),
+                "high": float(raw["high"].max()),
+                "low": float(raw["low"].min()),
+                "close": float(raw.iloc[-1]["close"]),
+                "volume": float(raw["volume"].sum()),
+                "amount": float(raw["amount"].sum()),
+            }], index=pd.DatetimeIndex([today], name="date"))
+
+            # 只保留df已有的列
+            common_cols = [c for c in df.columns if c in virtual_daily.columns]
+            virtual_daily = virtual_daily[common_cols]
+
+            merged = pd.concat([df, virtual_daily])
+            merged = merged[~merged.index.duplicated(keep="last")]
+            merged = merged.sort_index()
+
+            n_bars = len(raw)
+            print(f"[数据] 盘中合成日线 {symbol}: {n_bars}根1h线 → 虚拟日线 "
+                  f"O={virtual_daily.iloc[0]['open']:.2f} H={virtual_daily.iloc[0]['high']:.2f} "
+                  f"L={virtual_daily.iloc[0]['low']:.2f} C={virtual_daily.iloc[0]['close']:.2f}",
+                  flush=True)
+            return merged
+        except Exception:
+            return df  # 合成失败，静默回退
 
     def _fetch_snapshot_tdx(self, symbol: str, name: str) -> MarketSnapshot:
         """从通达信本地日线文件读取最新行情快照（取最后一根K线）。"""
@@ -1344,13 +1474,15 @@ class DataBackend:
             divergence = self._detect_divergence(close, high, low, n)
             # 缠论信号
             chanlun = self._detect_chanlun_signals(close, high, low, n)
-            # 大级别图形形态
-            chart_patterns = self._detect_chart_patterns(close, high, low, n)
             # 量价关系信号
             vol_series = df["volume"].astype(float) if "volume" in df.columns else df.get("amount", close * 0 + 1).astype(float)
+            # 大级别图形形态（v2: 传入volume用于突破量能验证）
+            chart_patterns = self._detect_chart_patterns(close, high, low, n, volume=vol_series)
             volume_price = self._detect_volume_price_signals(close, vol_series, n)
-            # 支撑阻力位
+            # 支撑阻力位（v2: 内含突破事件检测）
             support_resistance = self._detect_support_resistance(close, high, low, vol_series, n)
+            # 趋势线构造（v2: 真实画线+穿越检测）
+            trendlines = self._construct_trendlines(close, high, low, vol_series, n) if n >= 20 else {}
 
             # 数值字段：数据不足时用 0 兜底，避免下游 float(None) / f"{None:.2f}" 崩溃
             def _r(val, ndigits=4, default=0):
@@ -1393,6 +1525,7 @@ class DataBackend:
                 "support_resistance": support_resistance,
                 "chanlun": chanlun,
                 "chart_patterns": chart_patterns,
+                "trendlines": trendlines,
             }
         return out
 
@@ -1979,6 +2112,279 @@ class DataBackend:
         mean_price = float(y.mean())
         return (slope / mean_price * 100) if mean_price else None
 
+    # ── 突破检测公共模块 (v2) ──
+
+    @staticmethod
+    def _confirm_breakout(close, high, low, volume, level: float,
+                          direction: str = "up", confirm_bars: int = 2,
+                          vr_threshold: float = 1.3) -> dict[str, Any]:
+        """判断价格是否有效突破某个关键价位。
+
+        Args:
+            close/high/low/volume: K线数据数组
+            level: 关键价位（颈线/趋势线/支撑阻力）
+            direction: "up"=向上突破阻力, "down"=向下跌破支撑
+            confirm_bars: 需要连续站稳的K线根数
+            vr_threshold: 量能确认阈值（突破根量/前20均量）
+        Returns:
+            dict with confirmed, strength, bars_above, volume_ratio, type
+        """
+        import numpy as np
+
+        n = len(close)
+        result = {
+            "confirmed": False, "strength": 0, "bars_above": 0,
+            "volume_ratio": 0.0, "type": "none",
+            "level": round(float(level), 2),
+        }
+        if n < 5:
+            return result
+
+        c = close[-20:] if len(close) > 20 else close
+        h = high[-20:] if len(high) > 20 else high
+        l = low[-20:] if len(low) > 20 else low
+        v = volume[-20:] if len(volume) > 20 else volume
+
+        curr = float(c[-1])
+        avg_vol = float(np.mean(v[:-1])) if len(v) > 1 else 1.0
+
+        if direction == "up":
+            # 计算连续站稳根数
+            bars_above = 0
+            for i in range(len(c) - 1, -1, -1):
+                if float(c[i]) > level:
+                    bars_above += 1
+                else:
+                    break
+
+            # 突破根的量比
+            break_idx = len(c) - bars_above  # 突破那根K线
+            if break_idx < len(v) and avg_vol > 0:
+                result["volume_ratio"] = round(float(v[break_idx]) / avg_vol, 2)
+
+            result["bars_above"] = bars_above
+
+            if bars_above == 0:
+                # 检查是否影线试探
+                if float(h[-1]) > level > curr:
+                    result["type"] = "wick_only"
+                    result["strength"] = 10
+                return result
+
+            # 实体确认：突破K线的实体（非影线）是否穿过价位
+            body_cross = False
+            if break_idx < len(c):
+                open_price = float(c[break_idx - 1]) if break_idx > 0 else float(c[break_idx])
+                body_low = min(open_price, float(c[break_idx]))
+                if body_low < level < float(c[break_idx]):
+                    body_cross = True
+
+            # 回踩验证
+            has_retest = False
+            if bars_above >= 3:
+                for i in range(len(c) - bars_above, len(c)):
+                    if float(l[i]) <= level * 1.01 and float(c[i]) > level:
+                        has_retest = True
+                        break
+
+            # 综合评分
+            strength = 0
+            strength += min(30, bars_above * 10)  # 站稳根数 max 30
+            strength += 20 if body_cross else 0    # 实体穿越 20
+            strength += 20 if result["volume_ratio"] >= vr_threshold else 0  # 量能 20
+            strength += 15 if has_retest else 0    # 回踩确认 15
+            strength += 15 if curr > level * 1.02 else 0  # 距离2%以上 15
+
+            result["strength"] = int(min(100, strength))
+            result["confirmed"] = bool(bars_above >= confirm_bars)
+            if has_retest:
+                result["type"] = "with_retest"
+            elif result["confirmed"]:
+                result["type"] = "clean"
+            else:
+                result["type"] = "fresh"
+
+        elif direction == "down":
+            # 向下跌破，对称逻辑
+            bars_below = 0
+            for i in range(len(c) - 1, -1, -1):
+                if float(c[i]) < level:
+                    bars_below += 1
+                else:
+                    break
+
+            break_idx = len(c) - bars_below
+            if break_idx < len(v) and avg_vol > 0:
+                result["volume_ratio"] = round(float(v[break_idx]) / avg_vol, 2)
+
+            result["bars_above"] = bars_below  # 复用字段名，含义为bars_below
+
+            if bars_below == 0:
+                if float(l[-1]) < level < curr:
+                    result["type"] = "wick_only"
+                    result["strength"] = 10
+                return result
+
+            body_cross = False
+            if break_idx < len(c):
+                open_price = float(c[break_idx - 1]) if break_idx > 0 else float(c[break_idx])
+                body_high = max(open_price, float(c[break_idx]))
+                if float(c[break_idx]) < level < body_high:
+                    body_cross = True
+
+            has_retest = False
+            if bars_below >= 3:
+                for i in range(len(c) - bars_below, len(c)):
+                    if float(h[i]) >= level * 0.99 and float(c[i]) < level:
+                        has_retest = True
+                        break
+
+            strength = 0
+            strength += min(30, bars_below * 10)
+            strength += 20 if body_cross else 0
+            strength += 20 if result["volume_ratio"] >= vr_threshold else 0
+            strength += 15 if has_retest else 0
+            strength += 15 if curr < level * 0.98 else 0
+
+            result["strength"] = int(min(100, strength))
+            result["confirmed"] = bool(bars_below >= confirm_bars)
+            if has_retest:
+                result["type"] = "with_retest"
+            elif result["confirmed"]:
+                result["type"] = "clean"
+            else:
+                result["type"] = "fresh"
+
+        return result
+
+    @staticmethod
+    def _construct_trendlines(close, high, low, volume, n: int) -> dict[str, Any]:
+        """构造真实趋势线：用局部极值点连线，检测价格穿越。
+
+        上升趋势线：连接波谷（局部低点），价格跌破=利空
+        下降趋势线：连接波峰（局部高点），价格突破=利多
+        """
+        import numpy as np
+
+        result: dict[str, Any] = {
+            "up_trendline": None,
+            "down_trendline": None,
+        }
+        lookback = min(60, n)
+        if lookback < 20:
+            return result
+
+        c = close.values[-lookback:].astype(float)
+        h = high.values[-lookback:].astype(float)
+        l = low.values[-lookback:].astype(float)
+        v = volume.values[-lookback:].astype(float)
+
+        # 找局部极值点（窗口=5）
+        win = 5
+        peaks, troughs = [], []
+        for i in range(win, lookback - win):
+            if h[i] == max(h[i-win:i+win+1]):
+                peaks.append(i)
+            if l[i] == min(l[i-win:i+win+1]):
+                troughs.append(i)
+
+        # --- 上升趋势线（连接波谷）---
+        if len(troughs) >= 2:
+            best_line = None
+            best_touches = 0
+            # 尝试不同的两点组合，找触碰最多的线
+            for i in range(len(troughs)):
+                for j in range(i + 1, len(troughs)):
+                    x1, y1 = troughs[i], l[troughs[i]]
+                    x2, y2 = troughs[j], l[troughs[j]]
+                    if y2 <= y1:
+                        continue  # 上升趋势线斜率必须>0
+                    slope = (y2 - y1) / (x2 - x1)
+                    intercept = y1 - slope * x1
+                    # 计算触碰点（低点在线附近1%以内）
+                    touches = 0
+                    all_above = True
+                    for t in troughs:
+                        line_val = slope * t + intercept
+                        diff_pct = (l[t] - line_val) / line_val * 100 if line_val else 0
+                        if -1.0 <= diff_pct <= 1.5:
+                            touches += 1
+                        if l[t] < line_val * 0.97:
+                            all_above = False
+                    if touches >= 2 and all_above and touches > best_touches:
+                        best_touches = touches
+                        best_line = (slope, intercept, touches)
+
+            if best_line:
+                slope, intercept, touches = best_line
+                line_now = slope * (lookback - 1) + intercept
+                curr_price = c[-1]
+                pct_vs_line = (curr_price - line_now) / line_now * 100 if line_now else 0
+                broken = bool(curr_price < line_now * 0.99)  # 跌破1%以上算破位
+
+                # 如果跌破，用_confirm_breakout验证
+                breakout_info = None
+                if broken:
+                    breakout_info = DataBackend._confirm_breakout(
+                        c, h, l, v, line_now, direction="down")
+
+                result["up_trendline"] = {
+                    "slope_per_bar": round(slope, 4),
+                    "current_line_price": round(line_now, 2),
+                    "touch_points": touches,
+                    "price_vs_line_pct": round(pct_vs_line, 2),
+                    "broken": broken,
+                    "breakout": breakout_info,
+                }
+
+        # --- 下降趋势线（连接波峰）---
+        if len(peaks) >= 2:
+            best_line = None
+            best_touches = 0
+            for i in range(len(peaks)):
+                for j in range(i + 1, len(peaks)):
+                    x1, y1 = peaks[i], h[peaks[i]]
+                    x2, y2 = peaks[j], h[peaks[j]]
+                    if y2 >= y1:
+                        continue  # 下降趋势线斜率必须<0
+                    slope = (y2 - y1) / (x2 - x1)
+                    intercept = y1 - slope * x1
+                    touches = 0
+                    all_below = True
+                    for p in peaks:
+                        line_val = slope * p + intercept
+                        diff_pct = (h[p] - line_val) / line_val * 100 if line_val else 0
+                        if -1.5 <= diff_pct <= 1.0:
+                            touches += 1
+                        if h[p] > line_val * 1.03:
+                            all_below = False
+                    if touches >= 2 and all_below and touches > best_touches:
+                        best_touches = touches
+                        best_line = (slope, intercept, touches)
+
+            if best_line:
+                slope, intercept, touches = best_line
+                line_now = slope * (lookback - 1) + intercept
+                curr_price = c[-1]
+                pct_vs_line = (curr_price - line_now) / line_now * 100 if line_now else 0
+                broken = bool(curr_price > line_now * 1.01)
+
+                breakout_info = None
+                if broken:
+                    breakout_info = DataBackend._confirm_breakout(
+                        c, h, l, v, line_now, direction="up")
+
+                result["down_trendline"] = {
+                    "slope_per_bar": round(slope, 4),
+                    "current_line_price": round(line_now, 2),
+                    "touch_points": touches,
+                    "price_vs_line_pct": round(pct_vs_line, 2),
+                    "broken": broken,
+                    "breakout": breakout_info,
+                }
+
+        return result
+
     @staticmethod
     def _detect_divergence(close, high, low, n: int) -> dict[str, Any]:
         """检测 MACD 和 RSI 的顶底背离信号。
@@ -2333,14 +2739,49 @@ class DataBackend:
             sr_score -= 10
             descs.append("下方无明显支撑位")
 
-        result["sr_score"] = sr_score
+        # --- 6. 突破事件检测 (v2) ---
+        breakout_events = []
+        # 检查最近3根K线是否突破了任何阻力位
+        for sr_item in unique_resistances[:3]:
+            lvl = sr_item["price"]
+            if curr > lvl:
+                bo = DataBackend._confirm_breakout(c, h, l, v, lvl, "up")
+                if bo["strength"] > 0:
+                    breakout_events.append({
+                        "level": lvl, "level_type": sr_item["label"],
+                        "direction": "bullish", **bo,
+                    })
+                    if bo["confirmed"]:
+                        sr_score += 12
+                        descs.append(f"向上突破{sr_item['label']}{lvl:.2f}(强度{bo['strength']})")
+                    elif bo["type"] == "fresh":
+                        sr_score += 5
+        # 检查是否跌破支撑位
+        for sr_item in unique_supports[:3]:
+            lvl = sr_item["price"]
+            if curr < lvl:
+                bo = DataBackend._confirm_breakout(c, h, l, v, lvl, "down")
+                if bo["strength"] > 0:
+                    breakout_events.append({
+                        "level": lvl, "level_type": sr_item["label"],
+                        "direction": "bearish", **bo,
+                    })
+                    if bo["confirmed"]:
+                        sr_score -= 12
+                        descs.append(f"向下跌破{sr_item['label']}{lvl:.2f}(强度{bo['strength']})")
+                    elif bo["type"] == "fresh":
+                        sr_score -= 5
+
+        result["breakout_events"] = breakout_events
+        result["sr_score"] = max(-30, min(30, sr_score))
         result["desc"] = "; ".join(descs) if descs else f"当前价{curr:.2f}处于支撑阻力区间中部"
         return result
 
     @staticmethod
-    def _detect_chart_patterns(close, high, low, n: int) -> dict[str, Any]:
+    def _detect_chart_patterns(close, high, low, n: int, volume=None) -> dict[str, Any]:
         """检测大级别图形形态（20-60根K线），包括三角形、旗形、楔形、箱体、杯柄、圆弧底/顶。
 
+        v2增强：三角形/W底/M顶/头肩的突破确认 + 量能验证。
         返回 dict 包含检测到的形态列表及综合评分。
         """
         import numpy as np
@@ -2356,6 +2797,7 @@ class DataBackend:
         h = high.values.astype(float)
         l = low.values.astype(float)
         c = close.values.astype(float)
+        v = volume.values.astype(float) if volume is not None else np.ones(len(c))
         patterns = []
         score = 0
 
@@ -2364,43 +2806,70 @@ class DataBackend:
         h60 = h[-lookback:]
         l60 = l[-lookback:]
         c60 = c[-lookback:]
+        v60 = v[-lookback:]
         x = np.arange(lookback)
 
-        # --- 1. 三角形（收敛形态）---
+        # --- 1. 三角形（收敛形态）+ 突破确认 ---
         if lookback >= 30:
             # 高点趋势线（线性回归）
             high_slope = np.polyfit(x, h60, 1)[0]
             low_slope = np.polyfit(x, l60, 1)[0]
-            # 收敛条件：高点下降+低点上升
-            h_range_first = h60[:lookback//3].max() - h60[:lookback//3].min()
-            h_range_last = h60[-lookback//3:].max() - h60[-lookback//3:].min()
+            high_line_now = np.polyval(np.polyfit(x, h60, 1), lookback - 1)
+            low_line_now = np.polyval(np.polyfit(x, l60, 1), lookback - 1)
 
+            tri_type = None
             if high_slope < 0 and low_slope > 0:
-                # 对称三角形
-                patterns.append({
-                    "name": "对称三角形",
-                    "direction": "neutral",
-                    "confidence": 65,
-                    "desc": "高点下行低点上行,价格区间收窄,即将选择方向突破",
-                })
+                tri_type = "symmetric"
             elif high_slope < -0.001 and abs(low_slope) < abs(high_slope) * 0.3:
-                # 下降三角形（高点下降，低点平坦）
-                patterns.append({
-                    "name": "下降三角形",
-                    "direction": "bearish",
-                    "confidence": 68,
-                    "desc": "高点持续下降而低点水平支撑,向下突破概率较大",
-                })
-                score -= 12
+                tri_type = "descending"
             elif low_slope > 0.001 and abs(high_slope) < abs(low_slope) * 0.3:
-                # 上升三角形（低点上升，高点平坦）
-                patterns.append({
-                    "name": "上升三角形",
-                    "direction": "bullish",
-                    "confidence": 70,
-                    "desc": "低点持续抬升逼近水平压力位,向上突破概率较大",
-                })
-                score += 15
+                tri_type = "ascending"
+
+            if tri_type:
+                # 判断是否已突破三角形边界
+                breakout = None
+                if c60[-1] > high_line_now:
+                    breakout = DataBackend._confirm_breakout(c60, h60, l60, v60, high_line_now, "up")
+                elif c60[-1] < low_line_now:
+                    breakout = DataBackend._confirm_breakout(c60, h60, l60, v60, low_line_now, "down")
+
+                # 收敛度（两线距离/均价）
+                convergence = (high_line_now - low_line_now) / c60.mean() * 100 if c60.mean() else 0
+
+                if tri_type == "symmetric":
+                    p = {"name": "对称三角形", "direction": "neutral", "confidence": 65,
+                         "desc": f"价格区间收窄至{convergence:.1f}%,即将选择方向突破"}
+                    if breakout and breakout["confirmed"]:
+                        p["direction"] = "bullish" if c60[-1] > high_line_now else "bearish"
+                        p["confidence"] = 80
+                        score += 18 if p["direction"] == "bullish" else -18
+                        p["desc"] += f",已{p['direction']}突破(强度{breakout['strength']})"
+                elif tri_type == "descending":
+                    p = {"name": "下降三角形", "direction": "bearish", "confidence": 68,
+                         "desc": "高点持续下降而低点水平支撑"}
+                    score -= 12
+                    if breakout and breakout["confirmed"] and c60[-1] < low_line_now:
+                        score -= 10  # 向下确认突破额外减分
+                        p["confidence"] = 82
+                        p["desc"] += f",已向下突破(强度{breakout['strength']})"
+                    elif breakout and breakout["confirmed"] and c60[-1] > high_line_now:
+                        p["direction"] = "bullish"  # 反向突破
+                        score += 20
+                        p["confidence"] = 78
+                        p["desc"] += f",反向向上突破(强度{breakout['strength']})"
+                else:  # ascending
+                    p = {"name": "上升三角形", "direction": "bullish", "confidence": 70,
+                         "desc": "低点持续抬升逼近水平压力位"}
+                    score += 15
+                    if breakout and breakout["confirmed"] and c60[-1] > high_line_now:
+                        score += 10  # 向上确认突破额外加分
+                        p["confidence"] = 85
+                        p["desc"] += f",已向上突破(强度{breakout['strength']})"
+
+                if breakout:
+                    p["breakout"] = breakout
+                p["convergence_pct"] = round(convergence, 1)
+                patterns.append(p)
 
         # --- 2. 箱体震荡 ---
         if lookback >= 30:
@@ -2495,6 +2964,85 @@ class DataBackend:
                     "desc": "价格走势呈倒U型圆弧顶形态,中长期看跌信号",
                 })
                 score -= 15
+
+        # --- 6. W底/M顶（大级别颈线突破）---
+        if lookback >= 25:
+            # W底：找两个相近低点，间隔>=10根
+            win = 5
+            local_lows = []
+            for i in range(win, lookback - win):
+                if l60[i] == min(l60[max(0,i-win):i+win+1]):
+                    local_lows.append((i, l60[i]))
+            # 找最相近的两个低点
+            for i in range(len(local_lows)):
+                for j in range(i + 1, len(local_lows)):
+                    idx1, val1 = local_lows[i]
+                    idx2, val2 = local_lows[j]
+                    if idx2 - idx1 < 10:
+                        continue
+                    if abs(val1 - val2) / min(val1, val2) > 0.03:
+                        continue  # 两底高度差>3%不算W底
+                    # 颈线 = 两底之间的最高点
+                    neckline = max(h60[idx1:idx2+1])
+                    if c60[-1] > min(val1, val2) and neckline > min(val1, val2):
+                        bo = DataBackend._confirm_breakout(c60, h60, l60, v60, neckline, "up")
+                        target = neckline + (neckline - min(val1, val2))
+                        p = {
+                            "name": "W底", "direction": "bullish",
+                            "confidence": 75 + (10 if bo["confirmed"] else 0),
+                            "neckline": round(float(neckline), 2),
+                            "target_price": round(float(target), 2),
+                            "breakout": bo,
+                            "desc": f"双底{min(val1,val2):.2f},颈线{neckline:.2f}",
+                        }
+                        if bo["confirmed"]:
+                            score += 20
+                            p["desc"] += f",已突破颈线(强度{bo['strength']},目标{target:.2f})"
+                        elif c60[-1] > neckline * 0.97:
+                            score += 8
+                            p["desc"] += ",接近颈线"
+                        patterns.append(p)
+                        break
+                else:
+                    continue
+                break
+
+            # M顶：找两个相近高点
+            local_highs = []
+            for i in range(win, lookback - win):
+                if h60[i] == max(h60[max(0,i-win):i+win+1]):
+                    local_highs.append((i, h60[i]))
+            for i in range(len(local_highs)):
+                for j in range(i + 1, len(local_highs)):
+                    idx1, val1 = local_highs[i]
+                    idx2, val2 = local_highs[j]
+                    if idx2 - idx1 < 10:
+                        continue
+                    if abs(val1 - val2) / max(val1, val2) > 0.03:
+                        continue
+                    neckline = min(l60[idx1:idx2+1])
+                    if c60[-1] < max(val1, val2) and neckline < max(val1, val2):
+                        bo = DataBackend._confirm_breakout(c60, h60, l60, v60, neckline, "down")
+                        target = neckline - (max(val1, val2) - neckline)
+                        p = {
+                            "name": "M顶", "direction": "bearish",
+                            "confidence": 75 + (10 if bo["confirmed"] else 0),
+                            "neckline": round(float(neckline), 2),
+                            "target_price": round(float(target), 2),
+                            "breakout": bo,
+                            "desc": f"双顶{max(val1,val2):.2f},颈线{neckline:.2f}",
+                        }
+                        if bo["confirmed"]:
+                            score -= 20
+                            p["desc"] += f",已跌破颈线(强度{bo['strength']},目标{target:.2f})"
+                        elif c60[-1] < neckline * 1.03:
+                            score -= 8
+                            p["desc"] += ",接近颈线"
+                        patterns.append(p)
+                        break
+                else:
+                    continue
+                break
 
         result["patterns"] = patterns
         result["chart_pattern_score"] = max(-40, min(40, score))

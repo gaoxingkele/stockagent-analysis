@@ -21,7 +21,7 @@ A 股个股多智能体分析决策系统。29 个专业智能体并行研判，
 
 ### 核心设计理念
 
-- **LLM 管权重，本地公式管评分**：LLM 为每个智能体分配权重（擅长度），本地数据驱动公式产出 0-100 评分，避免 LLM 评分膨胀
+- **本地公式 + LLM 动态融合评分**：每个智能体根据"可公式化程度"分配不同的 LLM 权重（0.15-0.50），再由跨 Provider 一致性动态调整，量化信号以公式为主、语义判断给 LLM 更多话语权
 - **多模型交叉验证**：默认 3 个 Provider 并行运行，各自独立分配权重，取加权平均作为最终分数
 - **候选备选池**：默认 Provider 失败时自动切换到候选 Provider 重试
 
@@ -105,7 +105,7 @@ A 股个股多智能体分析决策系统。29 个专业智能体并行研判，
 本地计算，无需 LLM：
 
 - **K 线形态**：锤子/吞噬/早晨之星/红三兵/W 底/头肩等 15+ 种（单根→两根→三根→五根 5 类层次）
-- **背离检测**：MACD/RSI 顶底背离，多周期加权（月 0.40 + 周 0.35 + 日 0.25）
+- **背离检测**：MACD/RSI 顶底背离，多周期加权（日 0.50 + 周 0.40 + 月 0.10）
 - **缠论**：K 线包含处理 → 顶底分型 → 笔构造(间隔≥4) → 中枢(≥3 笔重叠) → 三类买卖点
 - **图表形态**：三角形(上升/下降/对称)/箱体/旗形/杯柄/圆弧顶底，20-60 根 K 线级别
 - **量价关系**：放量突破/缩量回踩/底部放量/天量滞涨/OBV 趋势
@@ -138,6 +138,7 @@ A 股个股多智能体分析决策系统。29 个专业智能体并行研判，
 ```
 
 - 本地公式覆盖 [15, 85] 评分区间，充分区分度
+- **逐 Agent 动态 LLM 权重**：按可公式化程度分三档（A=0.20 量化 / B=0.35 结构 / C=0.45 语义），再根据跨 Provider 评分标准差动态调整（σ 小→加权，σ 大→降权），最终 clamp 到 [0.15, 0.50]
 - 新闻情绪截断 ±10，防止单因子主导
 - PE/PB 多级偏差（亏损/深度价值/合理/偏高/高估/极度高估）
 - TOP_STRUCTURE 在加权中自动反转（100 - score），使顶部信号拉低总分
@@ -213,6 +214,7 @@ stockagent-analysis/
 │   ├── llm_client.py               # LLM 路由 + Vision 支持
 │   ├── report_pdf.py               # PDF 报告生成
 │   ├── chart_generator.py          # K 线图表生成
+│   ├── score_history.py             # 评分历史记录与逐日对比
 │   ├── progress_display.py         # 终端进度表格渲染
 │   ├── agent_data_mapping.py       # 智能体-数据映射表
 │   ├── main.py                     # CLI 参数解析
@@ -252,9 +254,11 @@ AnalystAgent (基类)
 | `debate_rounds` | 2 | 辩论轮次 |
 | `multi_model_weight_mode` | true | 多模型权重模式 |
 | `llm.default_providers` | ["deepseek","grok","glm"] | 默认并行 Provider |
-| `llm.candidate_providers` | ["kimi","gemini","doubao","minmax"] | 候选备选池 |
-| `llm.agent_call_timeout_sec` | 300 | 单 Agent 超时(秒) |
-| `llm.provider_timeout_sec` | 1800 | Provider 总超时(秒) |
+| `llm.candidate_providers` | ["gemini","kimi","minmax","doubao","glm"] | 候选备选池 |
+| `llm.agent_call_timeout_sec` | 120 | 单 Agent 超时(秒) |
+| `llm.provider_timeout_sec` | 600 | Provider 总超时(秒) |
+| `llm.max_agent_concurrency` | 6 | Provider 内 Agent 并发数 |
+| `breakout_detection.version` | "v2" | 突破检测版本（v1=旧版, v2=含确认+量能验证） |
 
 ### 支持的 LLM Provider
 
@@ -276,14 +280,14 @@ AnalystAgent (基类)
 
 ```
 单 Agent 调用流程:
-主 Provider (300s) → 失败 → 重试 1 次 (300s) → 失败 → 随机候选 ×4 (各 300s)
+主 Provider (120s) → 失败 → 重试 1 次 (120s) → 失败 → 随机候选 ×4 (各 120s)
                                                          ↓
                                                   全部失败 → 使用同线程已成功 Agent 均值
 ```
 
 - 默认 Provider 失败后自动从候选池 (kimi/gemini/doubao/minmax) 随机选择重试
 - 最多 5 次失败后放弃，用该 Provider 已完成 Agent 的平均分替代
-- Provider 级总超时 1800s，超时后直接结束该 Provider 线程
+- Provider 级总超时 600s，超时后直接结束该 Provider 线程
 
 ## 运行可观测性
 
@@ -306,6 +310,56 @@ mplfinance>=0.12.9     # K 线图可视化
 pandas-ta>=0.3.14b     # 技术指标计算
 matplotlib>=3.7.0      # 绑定图表库
 ```
+
+### 评分历史与逐日对比
+
+每次分析完成后自动保存评分快照到 `output/history/{symbol}/{data_date}.json`，支持：
+
+- **逐日评分对比**：总分趋势、各 Agent 评分变化、关键指标变化
+- **趋势识别**：连续上升/下降/V 型反弹/倒 V 回落/震荡
+- **可解释性分析**：找出变化最大的 Agent 维度，给出分数变化原因
+
+### 突破检测 v2
+
+在 TRENDLINE / SUPPORT_RESISTANCE / CHART_PATTERN 三个智能体中启用增强突破检测：
+
+- **真实趋势线构造**：连接局部极值点（峰/谷），验证多点触碰（≥3 点）
+- **颈线突破**：W 底/M 顶（20-60 根 K 线级别）颈线检测 + 目标价计算
+- **三角形突破**：上升/下降/对称三角形收敛边界突破检测
+- **统一突破确认**：bars_above/below + volume_ratio + body_cross + retest 四维验证
+- **v1/v2 兼容**：`breakout_detection.version` 控制，v2 数据不可用时自动回退 v1
+
+### 盘中分析
+
+支持盘中（9:30 后）分析，自动从 AKShare 获取当日 1h K 线数据，合成虚拟日线（O=首根开盘, H=最高, L=最低, C=最新收盘），参与完整研判流程。
+
+### Gemini 多级模型降级
+
+当 Gemini 遇到 429 限速时，自动按模型链降级：
+
+```
+GEMINI_MODEL → GEMINI_FALLBACK_MODEL → GEMINI_FALLBACK_MODEL2
+```
+
+## 更新日志
+
+### 2026-03-13
+
+- **feat: 逐 Agent 动态 LLM 融合权重** — 按可公式化程度分三档（A=0.20/B=0.35/C=0.45），根据跨 Provider 评分标准差动态调整，量化 Agent 公式主导、语义 Agent LLM 主导
+- **feat: 评分历史记录** — 每次分析自动存储快照，支持逐日对比和趋势追踪
+- **feat: 突破检测 v2** — 真实趋势线构造 + W 底/M 顶颈线突破 + 三角形边界突破 + 统一确认机制
+- **feat: 盘中虚拟日线** — 1h K 线合成当日虚拟日线，支持盘中研判
+- **feat: Gemini 三级模型降级** — 429 限速时自动降级到备用模型
+- **perf: 短线权重优化** — 多周期加权调整为日 0.50/周 0.40/月 0.10，降低宏观/基本面 Agent 权重
+- **fix: 候选 Provider 排序** — GLM 移到候选末位，minmax 提前
+
+### 2026-03-09
+
+- **feat: 相对强弱多层对标增强**（vs 行业/龙头 TOP3/行业 ETF）
+- **feat: K 线形态识别增强**，新增 12 种形态 + 位置权重 + 连续性统计
+- **feat: 国产视觉回退链**，无视觉能力 Provider 自动借用国产视觉 API
+- **perf: 网络可靠性优化**，运行耗时从 300s 降至 107s
+- **perf: 研判+评分合并为 1 次 LLM 调用**，Provider 内 Agent 并发执行
 
 ## License
 

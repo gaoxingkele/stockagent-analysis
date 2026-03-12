@@ -471,10 +471,10 @@ class AnalystAgent:
         base_dim["KLINE_WEEK"] = (tech_score + float(base_dim.get("TREND", 50.0))) / 2.0
         base_dim["KLINE_MONTH"] = (tech_score + float(base_dim.get("TREND", 50.0)) + float(base_dim.get("FUNDAMENTAL", 50.0))) / 3.0
         base_dim["KLINE_1H"] = 50 + (vr - 1.0) * 14 + 0.4 * pct - 0.2 * vol
-        # KLINE_PATTERN：多周期K线形态组合评分（月线0.40 + 周线0.35 + 日线0.25）
+        # KLINE_PATTERN：多周期K线形态组合评分（日线0.50 + 周线0.40 + 月线0.10）
         kp_score = 50.0
         kp_total_w = 0.0
-        for _tf, _w in (("month", 0.40), ("week", 0.35), ("day", 0.25)):
+        for _tf, _w in (("day", 0.50), ("week", 0.40), ("month", 0.10)):
             _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
             _pats = _td.get("kline_patterns", []) if isinstance(_td, dict) else []
             if not _pats:
@@ -501,10 +501,10 @@ class AnalystAgent:
             kp_score -= 2
         base_dim["KLINE_PATTERN"] = max(10.0, min(90.0, kp_score))
 
-        # DIVERGENCE：MACD/RSI背离信号（多周期加权: 月0.40 + 周0.35 + 日0.25）
+        # DIVERGENCE：MACD/RSI背离信号（多周期加权: 日0.50 + 周0.40 + 月0.10）
         div_score = 50.0
         div_total_w = 0.0
-        for _tf, _w in (("month", 0.40), ("week", 0.35), ("day", 0.25)):
+        for _tf, _w in (("day", 0.50), ("week", 0.40), ("month", 0.10)):
             _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
             _dv = _td.get("divergence", {}) if isinstance(_td, dict) else {}
             _ds = float(_dv.get("divergence_score") or 0)
@@ -515,10 +515,10 @@ class AnalystAgent:
             div_score = 50.0 + (div_score - 50.0) / div_total_w
         base_dim["DIVERGENCE"] = max(10.0, min(90.0, div_score))
 
-        # VOLUME_PRICE：量价关系信号（多周期加权: 日0.50 + 周0.30 + 月0.20）
+        # VOLUME_PRICE：量价关系信号（多周期加权: 日0.50 + 周0.40 + 月0.10）
         vp_score = 50.0
         vp_total_w = 0.0
-        for _tf, _w in (("day", 0.50), ("week", 0.30), ("month", 0.20)):
+        for _tf, _w in (("day", 0.50), ("week", 0.40), ("month", 0.10)):
             _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
             _vp = _td.get("volume_price", {}) if isinstance(_td, dict) else {}
             _vs = float(_vp.get("volume_price_score") or 0)
@@ -530,14 +530,15 @@ class AnalystAgent:
         base_dim["VOLUME_PRICE"] = max(10.0, min(90.0, vp_score))
 
         # SUPPORT_RESISTANCE：支撑阻力位信号（仅日线,最直接）
+        # v2: sr_score已包含突破事件加减分（_detect_support_resistance内部计算）
         sr_data = (kli.get("day", {}) or {}).get("support_resistance", {})
         sr_raw = float(sr_data.get("sr_score") or 0) if isinstance(sr_data, dict) else 0
         base_dim["SUPPORT_RESISTANCE"] = max(10.0, min(90.0, 50.0 + sr_raw))
 
-        # CHANLUN：缠论买卖点信号（多周期加权: 日0.45 + 周0.35 + 月0.20）
+        # CHANLUN：缠论买卖点信号（多周期加权: 日0.50 + 周0.40 + 月0.10）
         cl_score = 50.0
         cl_total_w = 0.0
-        for _tf, _w in (("day", 0.45), ("week", 0.35), ("month", 0.20)):
+        for _tf, _w in (("day", 0.50), ("week", 0.40), ("month", 0.10)):
             _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
             _cl = _td.get("chanlun", {}) if isinstance(_td, dict) else {}
             _cs = float(_cl.get("chanlun_score") or 0)
@@ -548,10 +549,10 @@ class AnalystAgent:
             cl_score = 50.0 + (cl_score - 50.0) / cl_total_w
         base_dim["CHANLUN"] = max(10.0, min(90.0, cl_score))
 
-        # CHART_PATTERN：大级别图形形态（日0.50 + 周0.30 + 月0.20）
+        # CHART_PATTERN：大级别图形形态（日0.50 + 周0.40 + 月0.10）
         cp_score = 50.0
         cp_total_w = 0.0
-        for _tf, _w in (("day", 0.50), ("week", 0.30), ("month", 0.20)):
+        for _tf, _w in (("day", 0.50), ("week", 0.40), ("month", 0.10)):
             _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
             _cp = _td.get("chart_patterns", {}) if isinstance(_td, dict) else {}
             _cps = float(_cp.get("chart_pattern_score") or 0)
@@ -595,30 +596,66 @@ class AnalystAgent:
         base_dim["TIMEFRAME_RESONANCE"] = max(10.0, min(90.0, res_score))
 
         # TRENDLINE：趋势线突破检测
-        # 基于日线最近价格与20日趋势线的关系
+        # v2: 真实趋势线构造+穿越判断; v1: 仅斜率+动量
         tl_score = 50.0
         day_data = kli.get("day", {}) if isinstance(kli, dict) else {}
         if isinstance(day_data, dict) and day_data.get("ok"):
             slope = float(day_data.get("trend_slope_pct") or 0)
             day_mom = float(day_data.get("momentum_10") or 0)
-            day_vr = vr  # volume ratio
-            # 趋势线转向+量能配合 = 突破信号
-            if slope > 0.1 and day_mom > 3:
-                tl_score += 18
-                if day_vr > 1.3:
-                    tl_score += 10  # 放量突破趋势线
-            elif slope < -0.1 and day_mom < -3:
-                tl_score -= 18
-                if day_vr > 1.3:
-                    tl_score -= 10  # 放量跌破趋势线
-            # 斜率反转信号
+            day_vr = vr
+
+            # v2: 真实趋势线突破信号
+            _tl = day_data.get("trendlines", {}) if isinstance(day_data, dict) else {}
+            _has_v2 = False
+            if isinstance(_tl, dict):
+                # 下降趋势线被向上突破 → 强利多
+                _dtl = _tl.get("down_trendline")
+                if isinstance(_dtl, dict) and _dtl.get("broken"):
+                    _bo = _dtl.get("breakout", {})
+                    _tp = _dtl.get("touch_points", 0)
+                    if isinstance(_bo, dict) and _bo.get("confirmed") and _tp >= 3:
+                        tl_score += 25  # 有效下降趋势线突破
+                        _has_v2 = True
+                    elif isinstance(_bo, dict) and _bo.get("confirmed"):
+                        tl_score += 16
+                        _has_v2 = True
+                    elif _dtl.get("broken"):
+                        tl_score += 8
+                        _has_v2 = True
+                # 上升趋势线被向下跌破 → 强利空
+                _utl = _tl.get("up_trendline")
+                if isinstance(_utl, dict) and _utl.get("broken"):
+                    _bo = _utl.get("breakout", {})
+                    _tp = _utl.get("touch_points", 0)
+                    if isinstance(_bo, dict) and _bo.get("confirmed") and _tp >= 3:
+                        tl_score -= 25
+                        _has_v2 = True
+                    elif isinstance(_bo, dict) and _bo.get("confirmed"):
+                        tl_score -= 16
+                        _has_v2 = True
+                    elif _utl.get("broken"):
+                        tl_score -= 8
+                        _has_v2 = True
+
+            # v1 fallback: 仅斜率+动量（v2无数据时使用）
+            if not _has_v2:
+                if slope > 0.1 and day_mom > 3:
+                    tl_score += 18
+                    if day_vr > 1.3:
+                        tl_score += 10
+                elif slope < -0.1 and day_mom < -3:
+                    tl_score -= 18
+                    if day_vr > 1.3:
+                        tl_score -= 10
+
+            # 斜率反转信号（v1/v2通用）
             week_data = kli.get("week", {}) if isinstance(kli, dict) else {}
             if isinstance(week_data, dict) and week_data.get("ok"):
                 week_slope = float(week_data.get("trend_slope_pct") or 0)
                 if slope > 0 and week_slope < 0:
-                    tl_score += 8  # 日线拐头向上但周线仍下，可能是反转初期
+                    tl_score += 8
                 elif slope < 0 and week_slope > 0:
-                    tl_score -= 8  # 日线拐头向下但周线仍上，可能是调整
+                    tl_score -= 8
         base_dim["TRENDLINE"] = max(10.0, min(90.0, tl_score))
         score_0_100 = float(base_dim.get(self.dim_code, 50.0))
         score_0_100 = max(0.0, min(100.0, score_0_100))

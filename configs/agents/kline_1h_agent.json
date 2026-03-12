@@ -10,8 +10,21 @@
   "weight": 0.06,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare", "tushare"],
-    "fallback": ["akshare"],
-    "required_data_points": ["1h/日/周/月K线图像", "MACD", "RSI", "KDJ", "布林带", "MA5-250"]
-  }
+    "primary": [
+      "akshare",
+      "tushare"
+    ],
+    "fallback": [
+      "akshare"
+    ],
+    "required_data_points": [
+      "1h/日/周/月K线图像",
+      "MACD",
+      "RSI",
+      "KDJ",
+      "布林带",
+      "MA5-250"
+    ]
+  },
+  "llm_base_weight": 0.45
 }

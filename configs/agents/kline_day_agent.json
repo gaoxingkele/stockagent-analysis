@@ -7,11 +7,25 @@
   "role": "日线K线技术分析师",
   "enabled": true,
   "mandatory": false,
-  "weight": 0.10,
+  "weight": 0.1,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare", "tushare"],
-    "fallback": ["akshare"],
-    "required_data_points": ["日线K线图像", "MACD", "RSI", "KDJ", "布林带", "MA5-250", "长期趋势线"]
-  }
+    "primary": [
+      "akshare",
+      "tushare"
+    ],
+    "fallback": [
+      "akshare"
+    ],
+    "required_data_points": [
+      "日线K线图像",
+      "MACD",
+      "RSI",
+      "KDJ",
+      "布林带",
+      "MA5-250",
+      "长期趋势线"
+    ]
+  },
+  "llm_base_weight": 0.45
 }

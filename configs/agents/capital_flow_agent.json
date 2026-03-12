@@ -8,8 +8,18 @@
   "weight": 0.15,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare"],
-    "fallback": ["tushare"],
-    "required_data_points": ["主力净流入", "超大单/大单", "筹码峰", "北向资金"]
-  }
+    "primary": [
+      "akshare"
+    ],
+    "fallback": [
+      "tushare"
+    ],
+    "required_data_points": [
+      "主力净流入",
+      "超大单/大单",
+      "筹码峰",
+      "北向资金"
+    ]
+  },
+  "llm_base_weight": 0.35
 }

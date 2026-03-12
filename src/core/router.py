@@ -350,24 +350,42 @@ class LLMRouter:
             return content
         return None
 
+    def _gemini_model_chain(self) -> list[str]:
+        """返回 Gemini 模型降级链：主模型 → fallback → fallback2。"""
+        chain = [os.getenv("GEMINI_MODEL", "gemini-2.5-pro")]
+        fb1 = os.getenv("GEMINI_FALLBACK_MODEL", "")
+        fb2 = os.getenv("GEMINI_FALLBACK_MODEL2", "")
+        if fb1:
+            chain.append(fb1)
+        if fb2:
+            chain.append(fb2)
+        # 去重保序
+        seen: set[str] = set()
+        return [m for m in chain if not (m in seen or seen.add(m))]  # type: ignore[func-returns-value]
+
     def _chat_gemini(self, prompt: str, multi_turn: bool = True) -> Optional[str]:
         api_key = os.getenv("GEMINI_API_KEY", "")
-        model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
         if not api_key:
             return None
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-        resp = self._safe_post(
-            url,
-            json={"contents": [{"parts": [{"text": prompt}]}]},
-            timeout=self._timeout(),
-            proxies=_get_llm_proxies("gemini"),
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        cands = data.get("candidates", [])
-        if not cands:
-            return None
-        return cands[0]["content"]["parts"][0].get("text", "")
+        models = self._gemini_model_chain()
+        for i, m in enumerate(models):
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
+            resp = self._safe_post(
+                url,
+                json={"contents": [{"parts": [{"text": prompt}]}]},
+                timeout=self._timeout(),
+                proxies=_get_llm_proxies("gemini"),
+            )
+            if resp.status_code == 429 and i < len(models) - 1:
+                print(f"[Gemini] {m} 限流(429)，降级到 {models[i+1]}", flush=True)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            cands = data.get("candidates", [])
+            if not cands:
+                return None
+            return cands[0]["content"]["parts"][0].get("text", "")
+        return None
 
     def _chat_claude(self, prompt: str, multi_turn: bool = True) -> Optional[str]:
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
@@ -403,10 +421,11 @@ class LLMRouter:
 
     def _chat_gemini_vision(self, prompt: str, image_b64: str, mime_type: str) -> Optional[str]:
         api_key = os.getenv("GEMINI_API_KEY", "")
-        model = os.getenv("GEMINI_VISION_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
         if not api_key:
             return None
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        # 视觉模型链：VISION_MODEL → 通用降级链
+        vision_model = os.getenv("GEMINI_VISION_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
+        models = [vision_model] + [m for m in self._gemini_model_chain() if m != vision_model]
         body = {
             "contents": [{
                 "parts": [
@@ -415,14 +434,20 @@ class LLMRouter:
                 ]
             }]
         }
-        resp = self._safe_post(url, json=body, timeout=self._timeout(is_vision=True),
-                              proxies=_get_llm_proxies("gemini"))
-        resp.raise_for_status()
-        data = resp.json()
-        cands = data.get("candidates", [])
-        if not cands:
-            return None
-        return cands[0]["content"]["parts"][0].get("text", "")
+        for i, m in enumerate(models):
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
+            resp = self._safe_post(url, json=body, timeout=self._timeout(is_vision=True),
+                                  proxies=_get_llm_proxies("gemini"))
+            if resp.status_code == 429 and i < len(models) - 1:
+                print(f"[Gemini Vision] {m} 限流(429)，降级到 {models[i+1]}", flush=True)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            cands = data.get("candidates", [])
+            if not cands:
+                return None
+            return cands[0]["content"]["parts"][0].get("text", "")
+        return None
 
     def _chat_claude_vision(self, prompt: str, image_b64: str, mime_type: str) -> Optional[str]:
         api_key = os.getenv("ANTHROPIC_API_KEY", "")

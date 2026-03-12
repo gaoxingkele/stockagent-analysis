@@ -5,11 +5,22 @@
   "role": "板块政策分析师",
   "enabled": true,
   "mandatory": true,
-  "weight": 0.10,
+  "weight": 0.06,
   "data_sources": {
     "mode": "combined",
-    "primary": ["akshare", "tushare"],
-    "fallback": ["akshare"],
-    "required_data_points": ["行业指数", "政策公告", "监管新闻", "板块轮动"]
-  }
+    "primary": [
+      "akshare",
+      "tushare"
+    ],
+    "fallback": [
+      "akshare"
+    ],
+    "required_data_points": [
+      "行业指数",
+      "政策公告",
+      "监管新闻",
+      "板块轮动"
+    ]
+  },
+  "llm_base_weight": 0.45
 }
