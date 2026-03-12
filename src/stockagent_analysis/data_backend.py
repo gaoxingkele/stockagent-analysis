@@ -263,6 +263,9 @@ class DataBackend:
         features["hsgt_data"] = self._fetch_hsgt_data(symbol)
         # 市场状态识别
         features["market_regime"] = self._detect_market_regime()
+        # 市场策略框架（三阶段映射）
+        from .market_strategy import determine_strategy, strategy_to_dict
+        features["market_strategy"] = strategy_to_dict(determine_strategy(features["market_regime"]))
         # 相对强弱分析（个股 vs 沪深300）
         features["relative_strength"] = self._fetch_and_compute_rs(kline_bundle)
         # 相对强弱分析（个股 vs 行业板块指数）

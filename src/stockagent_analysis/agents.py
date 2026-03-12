@@ -198,6 +198,14 @@ class AnalystAgent:
             fund_parts.append(f"毛利率={gm:.1f}%")
         if fund_parts:
             parts.append("基本面: " + " | ".join(fund_parts))
+        # 市场策略上下文
+        strategy = f.get("market_strategy", {})
+        if strategy:
+            parts.append(
+                f"市场策略: {strategy.get('phase_cn', '未知')}阶段 | "
+                f"建议最大仓位{strategy.get('position_cap', 0.6) * 100:.0f}% | "
+                f"{strategy.get('sector_bias', '')}"
+            )
         news = ctx.get("news", [])[:5]
         if news:
             titles = [str(n.get("title", ""))[:40] for n in news if n.get("title")]
