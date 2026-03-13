@@ -41,6 +41,16 @@ def _cmd_convert_doc(args: argparse.Namespace) -> None:
     print(f"converted_doc: {output_path}")
 
 
+def _cmd_intraday_check(args: argparse.Namespace) -> None:
+    from .intraday_check import run_intraday_check, print_anomaly_table
+    from .config_loader import load_project_config
+    root = Path(__file__).resolve().parents[2]
+    config = load_project_config(root)
+    symbols = [s.strip() for s in args.symbols.split(",") if s.strip()] if args.symbols else None
+    results = run_intraday_check(symbols=symbols, date_filter=args.date, config=config)
+    print_anomaly_table(results)
+
+
 def _cmd_backtest(args: argparse.Namespace) -> None:
     from .backtest import backfill_returns, compute_summary, evaluate_accuracy
     if args.backfill:
@@ -100,6 +110,13 @@ def main() -> None:
     p_convert = sub.add_parser("convert-doc", help="将其他品类智能体文档转换为中国股市定义文档")
     p_convert.add_argument("--input", required=True, help="输入 Markdown 文档路径")
     p_convert.set_defaults(func=_cmd_convert_doc)
+
+    p_ic = sub.add_parser("intraday-check", help="盘中异常预警：对比前日评分与实时走势")
+    p_ic.add_argument("--symbols", type=str, default=None,
+                       help="股票代码(逗号分隔)，如 002571,600519。默认读取最近信号的所有股票")
+    p_ic.add_argument("--date", type=str, default=None,
+                       help="指定信号日期(YYYY-MM-DD)，默认使用最近日期")
+    p_ic.set_defaults(func=_cmd_intraday_check)
 
     p_bt = sub.add_parser("backtest", help="回测评估历史信号")
     p_bt.add_argument("--backfill", action="store_true", help="先回填实际涨跌数据")

@@ -70,6 +70,16 @@
     "local_weight": 0.6,
     "llm_weight": 0.4
   },
+  "intraday_check": {
+    "thresholds": {
+      "buy_warn_drop_pct": 3.0,
+      "buy_severe_drop_pct": 5.0,
+      "sell_warn_rise_pct": 5.0,
+      "sell_severe_rise_pct": 8.0,
+      "buy_score_min": 70,
+      "sell_score_max": 40
+    }
+  },
   "enable_chip_distribution": true,
   "bias_filter": {
     "enabled": true,
