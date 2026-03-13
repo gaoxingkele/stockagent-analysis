@@ -70,6 +70,7 @@
     "local_weight": 0.6,
     "llm_weight": 0.4
   },
+  "enable_chip_distribution": true,
   "bias_filter": {
     "enabled": true,
     "bias_threshold_pct": 5.0,

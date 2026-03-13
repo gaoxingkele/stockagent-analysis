@@ -266,6 +266,11 @@ class DataBackend:
         # 市场策略框架（三阶段映射）
         from .market_strategy import determine_strategy, strategy_to_dict
         features["market_strategy"] = strategy_to_dict(determine_strategy(features["market_regime"]))
+        # 筹码结构分析（基于日线量价模拟）
+        if day_df is not None and not day_df.empty and snapshot.close:
+            features["chip_distribution"] = self._fetch_chip_distribution(day_df, float(snapshot.close))
+        else:
+            features["chip_distribution"] = {}
         # 相对强弱分析（个股 vs 沪深300）
         features["relative_strength"] = self._fetch_and_compute_rs(kline_bundle)
         # 相对强弱分析（个股 vs 行业板块指数）
@@ -1199,6 +1204,68 @@ class DataBackend:
             return result
         except Exception:
             return {"ok": False}
+
+    @staticmethod
+    def _fetch_chip_distribution(hist_df, current_price: float) -> dict[str, Any]:
+        """基于日线量价数据估算筹码分布。
+
+        原理：以成交量为权重，按价格区间统计筹码堆积。近期成交量权重更高（衰减因子）。
+        """
+        import numpy as np
+
+        if hist_df is None or len(hist_df) < 60:
+            return {}
+        try:
+            current_price = float(current_price)
+            if current_price <= 0:
+                return {}
+        except (ValueError, TypeError):
+            return {}
+
+        df = hist_df.tail(120).copy()
+        price_min = current_price * 0.7
+        price_max = current_price * 1.3
+        bins = np.linspace(price_min, price_max, 21)
+
+        chip_dist = np.zeros(20)
+        close_col = "close" if "close" in df.columns else "收盘"
+        high_col = "high" if "high" in df.columns else "最高"
+        low_col = "low" if "low" in df.columns else "最低"
+        vol_col = "volume" if "volume" in df.columns else "成交量"
+
+        for i, (_, row) in enumerate(df.iterrows()):
+            decay = 0.95 ** (len(df) - 1 - i)
+            try:
+                avg_price = (float(row[high_col]) + float(row[low_col]) + float(row[close_col])) / 3
+                vol = float(row[vol_col]) * decay
+            except (ValueError, TypeError, KeyError):
+                continue
+            bin_idx = int(np.searchsorted(bins, avg_price)) - 1
+            if 0 <= bin_idx < 20:
+                chip_dist[bin_idx] += vol
+
+        total_chips = chip_dist.sum()
+        if total_chips == 0:
+            return {}
+
+        chip_pct = chip_dist / total_chips * 100
+        current_bin = int(np.searchsorted(bins, current_price)) - 1
+        profit_ratio = float(chip_pct[:max(0, current_bin + 1)].sum())
+        top3_bins = np.argsort(chip_pct)[-3:]
+        concentration = float(chip_pct[top3_bins].sum())
+        bin_centers = (bins[:-1] + bins[1:]) / 2
+        avg_cost = float(np.average(bin_centers, weights=chip_dist))
+        trapped_ratio = 100.0 - profit_ratio
+        health = min(100.0, profit_ratio * 0.4 + concentration * 0.3 + (100.0 - trapped_ratio) * 0.3)
+
+        return {
+            "profit_ratio": round(profit_ratio, 1),
+            "trapped_ratio": round(trapped_ratio, 1),
+            "concentration": round(concentration, 1),
+            "avg_cost": round(avg_cost, 2),
+            "health_score": round(health, 1),
+            "current_vs_cost": round((current_price / avg_cost - 1) * 100, 1) if avg_cost > 0 else 0,
+        }
 
     @staticmethod
     def _detect_market_regime() -> dict[str, Any]:

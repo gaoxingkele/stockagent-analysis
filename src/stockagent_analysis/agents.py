@@ -198,6 +198,16 @@ class AnalystAgent:
             fund_parts.append(f"毛利率={gm:.1f}%")
         if fund_parts:
             parts.append("基本面: " + " | ".join(fund_parts))
+        # 筹码分布上下文
+        chip = f.get("chip_distribution", {})
+        if chip:
+            parts.append(
+                f"筹码分布: 获利{chip.get('profit_ratio', 'N/A')}% | "
+                f"套牢{chip.get('trapped_ratio', 'N/A')}% | "
+                f"集中度{chip.get('concentration', 'N/A')}% | "
+                f"平均成本{chip.get('avg_cost', 'N/A')} | "
+                f"健康度{chip.get('health_score', 'N/A')}"
+            )
         # 市场策略上下文
         strategy = f.get("market_strategy", {})
         if strategy:
@@ -353,6 +363,24 @@ class AnalystAgent:
             "NLP_SENTIMENT": 50 + news_c * 1.2 + 0.2 * mom,
             "DERIV_MARGIN":  50 + self._calc_margin_hsgt_bias(f) + 0.3 * pct - 0.15 * vol,
         }
+        # ── 筹码结构叠加到FUNDAMENTAL ──
+        chip = f.get("chip_distribution", {})
+        if chip:
+            chip_bias = 0.0
+            profit_r = float(chip.get("profit_ratio", 50))
+            trapped_r = float(chip.get("trapped_ratio", 50))
+            health = float(chip.get("health_score", 50))
+            if profit_r > 80:
+                chip_bias += 6
+            elif profit_r > 60:
+                chip_bias += 3
+            elif profit_r < 30:
+                chip_bias -= 6
+            if trapped_r > 60:
+                chip_bias -= 5
+            chip_bias += (health - 50) * 0.08
+            base_dim["FUNDAMENTAL"] = base_dim.get("FUNDAMENTAL", 50) + chip_bias
+
         # ── RELATIVE_STRENGTH：相对强弱（个股 vs 大盘） ──
         rs = f.get("relative_strength", {})
         if isinstance(rs, dict) and rs.get("ok"):
