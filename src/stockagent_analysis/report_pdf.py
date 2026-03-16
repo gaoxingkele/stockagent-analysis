@@ -21,6 +21,11 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 _CELL_STYLES: dict[str, ParagraphStyle] = {}
 
 
+def _esc(text) -> str:
+    """Escape XML special chars for reportlab Paragraph."""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _cell(text: str, font: str = "", size: float = 9, bold: bool = False,
           color: str = "#222222", align: int = 0) -> Paragraph:
     """将文本包裹为 Paragraph 以支持表格单元格内自动换行。
@@ -38,7 +43,7 @@ def _cell(text: str, font: str = "", size: float = 9, bold: bool = False,
             wordWrap="CJK",
             alignment=align,
         )
-    safe = str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    safe = _esc(text)
     if bold:
         safe = f"<b>{safe}</b>"
     return Paragraph(safe, _CELL_STYLES[key])
@@ -889,9 +894,9 @@ def _add_scenario_table(
 
     # LLM 生成的情景分析文本（若有）
     if scenario_text:
-        flow.append(Paragraph(f"<b>情景分析（AI生成）：</b>{scenario_text}", st_body))
+        flow.append(Paragraph(f"<b>情景分析（AI生成）：</b>{_esc(scenario_text)}", st_body))
     if position_text:
-        flow.append(Paragraph(f"<b>止损与仓位建议（AI生成）：</b>{position_text}", st_body))
+        flow.append(Paragraph(f"<b>止损与仓位建议（AI生成）：</b>{_esc(position_text)}", st_body))
     flow.append(Spacer(1, 6))
 
 
@@ -978,6 +983,387 @@ def _add_position_advice_table(
     ]))
     flow.append(tbl)
     flow.append(Spacer(1, 6))
+
+
+# ─────────────────────────────────────────────────────────────────
+#  报告总结卡片
+# ─────────────────────────────────────────────────────────────────
+
+_SUMMARY_HEADER_BG = "#1A3C6D"
+_SUMMARY_HEADER_FG = "#FFFFFF"
+_SUMMARY_SECTION_BG = "#EDF2FA"
+_SUMMARY_BUY_BG = "#E8F5E9"
+_SUMMARY_SELL_BG = "#FFEBEE"
+_SUMMARY_TP_BG = "#FFF8E1"
+_SUMMARY_MA_BG = "#F3F6FB"
+_SUMMARY_GRID = "#C5CDD8"
+
+
+def _summary_cell(text: str, font: str, size: float = 10, bold: bool = False,
+                  color: str = "#222222", align: int = 0) -> Paragraph:
+    """Summary card cell helper."""
+    key = f"{font}_{size}_{color}_{align}"
+    if key not in _CELL_STYLES:
+        _CELL_STYLES[key] = ParagraphStyle(
+            f"sc_{key}", fontName=font, fontSize=size, leading=size + 3,
+            textColor=colors.HexColor(color), wordWrap="CJK", alignment=align,
+        )
+    safe = _esc(text)
+    if bold:
+        safe = f"<b>{safe}</b>"
+    return Paragraph(safe, _CELL_STYLES[key])
+
+
+def _pct_diff(current: float, target: float) -> str:
+    """Calculate percentage difference string."""
+    if current <= 0:
+        return "—"
+    pct = (target - current) / current * 100
+    return f"{pct:+.1f}%"
+
+
+def _add_summary_card(
+    flow: list,
+    result: dict[str, Any],
+    st_h: Any,
+    st_body: Any,
+    body_font: str,
+    bold_font: str,
+) -> None:
+    """在PDF末尾添加报告总结卡片：评分 + 点位 + 策略 + 解读。"""
+
+    feats = result.get("analysis_features") or {}
+    if not isinstance(feats, dict):
+        feats = {}
+    ki_day = feats.get("kline_indicators", {}).get("day", {})
+    ki_week = feats.get("kline_indicators", {}).get("week", {})
+    ma_day = ki_day.get("ma_system", {})
+    ma_week = ki_week.get("ma_system", {})
+    sp = result.get("sniper_points") or {}
+    pa = result.get("position_advice") or {}
+
+    # --- 推算现价 ---
+    ma5_data = ma_day.get("ma5", {})
+    ma5_val = float(ma5_data.get("value", 0) or 0)
+    ma5_pct = float(ma5_data.get("pct_above", 0) or 0)
+    current_price = ma5_val * (1 + ma5_pct / 100) if ma5_val > 0 else 0
+
+    # ================================================================
+    #  Section Title
+    # ================================================================
+    flow.append(Spacer(1, 12))
+    st_card_title = ParagraphStyle(
+        "card_title", fontName=bold_font, fontSize=16, leading=20,
+        textColor=colors.HexColor("#1A3C6D"), spaceAfter=8,
+    )
+    flow.append(Paragraph("报告总结", st_card_title))
+
+    # ================================================================
+    #  1. 综合评分
+    # ================================================================
+    flow.append(Paragraph(
+        f"<font name='{bold_font}' color='#1A3C6D'>一、综合评分</font>", st_body))
+    flow.append(Spacer(1, 4))
+
+    model_totals = result.get("model_totals") or {}
+    final_score = float(result.get("final_score", 0))
+    decision_level_cn = _score_to_decision_level_cn(final_score)
+    level_colors = {
+        "强烈买入": "#C41E3A", "弱买入": "#E74C3C",
+        "观望": "#0066CC", "弱卖出": "#27AE60", "强烈卖出": "#228B22",
+    }
+    dec_color = level_colors.get(decision_level_cn, "#222222")
+
+    # Build score rows: header + providers + summary
+    score_rows = []
+    score_rows.append([
+        _summary_cell("项目", bold_font, 10, True, _SUMMARY_HEADER_FG),
+        _summary_cell("数值", bold_font, 10, True, _SUMMARY_HEADER_FG),
+        _summary_cell("说明", bold_font, 10, True, _SUMMARY_HEADER_FG),
+    ])
+    for p_name, p_score in model_totals.items():
+        score_rows.append([
+            _summary_cell(p_name.upper(), body_font, 10),
+            _summary_cell(f"{float(p_score):.1f}", body_font, 10, False, "#333333", 1),
+            _summary_cell("Provider加权评分", body_font, 9, False, "#888888"),
+        ])
+    # Average row
+    score_rows.append([
+        _summary_cell("均分", bold_font, 11, True, "#1A3C6D"),
+        _summary_cell(f"{final_score:.1f}", bold_font, 12, True, dec_color, 1),
+        _summary_cell(f"决策: {decision_level_cn}", bold_font, 10, True, dec_color),
+    ])
+    # MA5 bias row
+    bias_text = f"{ma5_pct:+.1f}%"
+    if abs(ma5_pct) > 8:
+        bias_color, bias_note = "#C41E3A", "严重超买，不宜追高" if ma5_pct > 0 else "严重超卖，关注反弹"
+    elif abs(ma5_pct) > 5:
+        bias_color, bias_note = "#E67E22", "偏离较大，注意风险" if ma5_pct > 0 else "偏离较大，关注企稳"
+    else:
+        bias_color, bias_note = "#27AE60", "正常范围"
+    score_rows.append([
+        _summary_cell("MA5乖离率", body_font, 10),
+        _summary_cell(bias_text, bold_font, 11, True, bias_color, 1),
+        _summary_cell(bias_note, body_font, 9, False, bias_color),
+    ])
+
+    avg_row_idx = len(model_totals) + 1  # header=0, providers, then avg
+    bias_row_idx = avg_row_idx + 1
+    score_tbl = Table(score_rows, colWidths=[40 * mm, 32 * mm, 90 * mm])
+    score_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(_SUMMARY_HEADER_BG)),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor(_SUMMARY_HEADER_FG)),
+        ("BACKGROUND", (0, avg_row_idx), (-1, avg_row_idx), colors.HexColor("#EDF2FA")),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor(_SUMMARY_GRID)),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+    ]
+    # Alternate row backgrounds for providers
+    for i in range(1, avg_row_idx):
+        bg = "#F8FBFF" if i % 2 == 1 else "#FFFFFF"
+        score_style.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor(bg)))
+    score_tbl.setStyle(TableStyle(score_style))
+    flow.append(score_tbl)
+    flow.append(Spacer(1, 10))
+
+    # ================================================================
+    #  2. 关键点位与均线体系
+    # ================================================================
+    flow.append(Paragraph(
+        f"<font name='{bold_font}' color='#1A3C6D'>二、关键点位与均线体系</font>", st_body))
+    flow.append(Spacer(1, 4))
+
+    price_rows = []
+    row_colors = []  # (row_idx, bg_color)
+
+    price_rows.append([
+        _summary_cell("类型", bold_font, 10, True, _SUMMARY_HEADER_FG),
+        _summary_cell("价格", bold_font, 10, True, _SUMMARY_HEADER_FG),
+        _summary_cell("距当前价", bold_font, 10, True, _SUMMARY_HEADER_FG),
+        _summary_cell("来源/性质", bold_font, 10, True, _SUMMARY_HEADER_FG),
+    ])
+
+    def _add_price_row(label, price_val, bg, source, text_color="#333333"):
+        if price_val is None or price_val == 0:
+            return
+        try:
+            pv = float(price_val)
+        except (ValueError, TypeError):
+            return
+        idx = len(price_rows)
+        diff = _pct_diff(current_price, pv)
+        price_rows.append([
+            _summary_cell(label, bold_font if bg != _SUMMARY_MA_BG else body_font, 10,
+                          bg != _SUMMARY_MA_BG, text_color),
+            _summary_cell(f"{pv:.2f}", body_font, 10, False, "#333333", 1),
+            _summary_cell(diff, body_font, 10, False, "#666666", 1),
+            _summary_cell(source, body_font, 9, False, "#888888"),
+        ])
+        row_colors.append((idx, bg))
+
+    # Current price
+    if current_price > 0:
+        idx = len(price_rows)
+        price_rows.append([
+            _summary_cell("当前价", bold_font, 11, True, "#1A3C6D"),
+            _summary_cell(f"{current_price:.2f}", bold_font, 11, True, "#1A3C6D", 1),
+            _summary_cell("—", body_font, 10, False, "#999999", 1),
+            _summary_cell("最新收盘", body_font, 9, False, "#888888"),
+        ])
+        row_colors.append((idx, "#E8EDF5"))
+
+    # Take profit 2 (highest)
+    _add_price_row("止盈目标②", sp.get("take_profit_2"), _SUMMARY_TP_BG,
+                   "AI情景分析", "#B8860B")
+    # Take profit 1
+    _add_price_row("止盈目标①", sp.get("take_profit_1"), _SUMMARY_TP_BG,
+                   "AI情景分析", "#B8860B")
+    # Ideal buy
+    _add_price_row("首选买入价", sp.get("ideal_buy"), _SUMMARY_BUY_BG,
+                   "AI狙击点位", "#2E7D32")
+    # Secondary buy
+    _add_price_row("次选买入价", sp.get("secondary_buy"), _SUMMARY_BUY_BG,
+                   "AI狙击点位", "#2E7D32")
+    # Stop loss
+    _add_price_row("止损价", sp.get("stop_loss"), _SUMMARY_SELL_BG,
+                   "AI风控线", "#C62828")
+
+    # MA levels - daily
+    for ma_key, ma_label in [("ma5", "日MA5"), ("ma10", "日MA10"),
+                              ("ma20", "日MA20"), ("ma60", "日MA60")]:
+        ma_info = ma_day.get(ma_key, {})
+        val = ma_info.get("value")
+        if val:
+            _add_price_row(ma_label, val, _SUMMARY_MA_BG, "均线系统")
+
+    # MA levels - weekly
+    for ma_key, ma_label in [("ma5", "周MA5"), ("ma20", "周MA20")]:
+        ma_info = ma_week.get(ma_key, {})
+        val = ma_info.get("value")
+        if val:
+            _add_price_row(ma_label, val, _SUMMARY_MA_BG, "均线系统")
+
+    if len(price_rows) > 1:
+        price_tbl = Table(price_rows, colWidths=[35 * mm, 28 * mm, 28 * mm, 71 * mm])
+        price_style = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(_SUMMARY_HEADER_BG)),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor(_SUMMARY_HEADER_FG)),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor(_SUMMARY_GRID)),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ]
+        for r_idx, r_bg in row_colors:
+            price_style.append(("BACKGROUND", (0, r_idx), (-1, r_idx),
+                                colors.HexColor(r_bg)))
+        price_tbl.setStyle(TableStyle(price_style))
+        flow.append(price_tbl)
+    flow.append(Spacer(1, 10))
+
+    # ================================================================
+    #  3. 操作策略
+    # ================================================================
+    if pa or sp:
+        flow.append(Paragraph(
+            f"<font name='{bold_font}' color='#1A3C6D'>三、操作策略</font>", st_body))
+        flow.append(Spacer(1, 4))
+
+        strat_rows = []
+        strat_rows.append([
+            _summary_cell("场景", bold_font, 10, True, _SUMMARY_HEADER_FG),
+            _summary_cell("策略建议", bold_font, 10, True, _SUMMARY_HEADER_FG),
+            _summary_cell("关键价位", bold_font, 10, True, _SUMMARY_HEADER_FG),
+        ])
+        strat_bgs = []
+
+        # No position
+        no_pos = pa.get("no_position", "")
+        if no_pos:
+            idx = len(strat_rows)
+            strat_rows.append([
+                _summary_cell("空仓操作", bold_font, 10, True, "#2E7D32"),
+                _summary_cell(no_pos, body_font, 9),
+                _summary_cell(
+                    f"买入: {sp.get('ideal_buy', '—')} / {sp.get('secondary_buy', '—')}"
+                    if sp else "—", body_font, 9, False, "#2E7D32"),
+            ])
+            strat_bgs.append((idx, _SUMMARY_BUY_BG))
+
+        # Has position
+        has_pos = pa.get("has_position", "")
+        if has_pos:
+            idx = len(strat_rows)
+            strat_rows.append([
+                _summary_cell("持仓操作", bold_font, 10, True, "#1565C0"),
+                _summary_cell(has_pos, body_font, 9),
+                _summary_cell(f"仓位: {pa.get('position_ratio', '—')}", body_font, 9,
+                              False, "#1565C0"),
+            ])
+            strat_bgs.append((idx, "#E3F2FD"))
+
+        # Stop loss
+        sl = sp.get("stop_loss")
+        if sl:
+            idx = len(strat_rows)
+            sl_diff = _pct_diff(current_price, float(sl)) if current_price > 0 else "—"
+            strat_rows.append([
+                _summary_cell("止损设置", bold_font, 10, True, "#C62828"),
+                _summary_cell(f"跌破 {sl} 果断离场", body_font, 9, False, "#C62828"),
+                _summary_cell(f"止损位: {sl} ({sl_diff})", body_font, 9, True, "#C62828"),
+            ])
+            strat_bgs.append((idx, _SUMMARY_SELL_BG))
+
+        # Take profit
+        tp1, tp2 = sp.get("take_profit_1"), sp.get("take_profit_2")
+        if tp1 or tp2:
+            idx = len(strat_rows)
+            parts = []
+            if tp1:
+                parts.append(f"目标① {tp1}")
+            if tp2:
+                parts.append(f"目标② {tp2}")
+            strat_rows.append([
+                _summary_cell("止盈参考", bold_font, 10, True, "#B8860B"),
+                _summary_cell("分批止盈，到达目标位逐步减仓", body_font, 9),
+                _summary_cell(" / ".join(parts), body_font, 9, True, "#B8860B"),
+            ])
+            strat_bgs.append((idx, _SUMMARY_TP_BG))
+
+        if len(strat_rows) > 1:
+            strat_tbl = Table(strat_rows, colWidths=[30 * mm, 88 * mm, 44 * mm])
+            strat_style = [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(_SUMMARY_HEADER_BG)),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor(_SUMMARY_HEADER_FG)),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor(_SUMMARY_GRID)),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ]
+            for r_idx, r_bg in strat_bgs:
+                strat_style.append(("BACKGROUND", (0, r_idx), (-1, r_idx),
+                                    colors.HexColor(r_bg)))
+            strat_tbl.setStyle(TableStyle(strat_style))
+            flow.append(strat_tbl)
+        flow.append(Spacer(1, 10))
+
+    # ================================================================
+    #  4. 乖离率状态 + 关键解读
+    # ================================================================
+    flow.append(Paragraph(
+        f"<font name='{bold_font}' color='#1A3C6D'>四、关键解读</font>", st_body))
+    flow.append(Spacer(1, 4))
+
+    # Bias status paragraph
+    if abs(ma5_pct) > 8:
+        bias_icon = "[严重]"
+        if ma5_pct > 0:
+            bias_body = (f"MA5乖离率 {ma5_pct:+.1f}%，现价{current_price:.2f}远离"
+                         f"MA5({ma5_val:.2f})，短期严重超买。"
+                         "均线虽呈多头排列但发散过大，追高风险极高。"
+                         "建议耐心等待回踩MA5后再择机介入。")
+        else:
+            bias_body = (f"MA5乖离率 {ma5_pct:+.1f}%，现价{current_price:.2f}远离"
+                         f"MA5({ma5_val:.2f})，短期严重超卖。"
+                         "可关注反弹机会，但需确认企稳信号后再入场。")
+    elif abs(ma5_pct) > 5:
+        bias_icon = "[偏高]"
+        bias_body = (f"MA5乖离率 {ma5_pct:+.1f}%，价格偏离均线较大，"
+                     "存在回调修正的可能。建议控制仓位，不宜重仓追高。")
+    else:
+        bias_icon = "[正常]"
+        bias_body = (f"MA5乖离率 {ma5_pct:+.1f}%，价格在均线附近运行，"
+                     "短期走势相对健康。可根据评分建议正常操作。")
+
+    flow.append(Paragraph(
+        f"<font name='{bold_font}' color='{bias_color}'>{_esc(bias_icon)}</font> "
+        f"{_esc(bias_body)}", st_body))
+    flow.append(Spacer(1, 6))
+
+    # Scenario + strategy text
+    scenario_text = result.get("scenario_analysis", "")
+    position_text = result.get("position_strategy", "")
+    if scenario_text or position_text:
+        combined = ""
+        if scenario_text:
+            combined += scenario_text.strip()
+        if position_text:
+            if combined:
+                combined += " "
+            combined += position_text.strip()
+        # Trim to reasonable length
+        if len(combined) > 500:
+            combined = combined[:500] + "..."
+        flow.append(Paragraph(
+            f"<font name='{bold_font}' color='#1A3C6D'>[AI研判] </font>"
+            f"{_esc(combined)}", st_body))
+    flow.append(Spacer(1, 10))
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -1116,7 +1502,7 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
     short_hold = result.get("short_term_hold", "")
     medium_hold = result.get("medium_long_term_hold", "")
     if short_hold or medium_hold:
-        flow.append(Paragraph(f"<b>短线建议：</b>{short_hold}；<b>中长线建议：</b>{medium_hold}。", st_body))
+        flow.append(Paragraph(f"<b>短线建议：</b>{_esc(short_hold)}；<b>中长线建议：</b>{_esc(medium_hold)}。", st_body))
     flow.append(Spacer(1, 8))
 
     # ── 全智能体评分总表（首页核心） ──
@@ -1157,8 +1543,8 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
         lc = level_color_map.get(level_cn, "#222222")
         flow.append(
             Paragraph(
-                f"• <font name='{bold_font}'>{role}</font>：评分 <b>{score:.1f}</b>，"
-                f"建议 <b><font color='{lc}'>{level_cn}</font></b>。{one_line} {level_tag}",
+                f"• <font name='{bold_font}'>{_esc(role)}</font>：评分 <b>{score:.1f}</b>，"
+                f"建议 <b><font color='{lc}'>{level_cn}</font></b>。{_esc(one_line)} {level_tag}",
                 st_body,
             )
         )
@@ -1176,8 +1562,8 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
         lc = level_color_map.get(level_cn, "#222222")
         flow.append(
             Paragraph(
-                f"• <font name='{bold_font}'>{role}</font>：建议 <b><font color='{lc}'>{level_cn}</font></b>，"
-                f"评分 <b>{score:.1f}</b>，置信度 {conf:.2f}。{reason_display}",
+                f"• <font name='{bold_font}'>{_esc(role)}</font>：建议 <b><font color='{lc}'>{level_cn}</font></b>，"
+                f"评分 <b>{score:.1f}</b>，置信度 {conf:.2f}。{_esc(reason_display)}",
                 st_body,
             )
         )
@@ -1192,16 +1578,16 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
         bull_r = str(debate.get("bull_reason", ""))
         bear_r = str(debate.get("bear_reason", ""))
         flow.append(Paragraph(
-            f"<b>看多（Bull）</b> — {bull_role} 评分 {debate.get('bull_score', 0)}："
-            f"{bull_r[:220]}{'…' if len(bull_r) > 220 else ''}",
+            f"<b>看多（Bull）</b> — {_esc(bull_role)} 评分 {debate.get('bull_score', 0)}："
+            f"{_esc(bull_r[:220])}{'…' if len(bull_r) > 220 else ''}",
             st_body,
         ))
         flow.append(Paragraph(
-            f"<b>看空（Bear）</b> — {bear_role} 评分 {debate.get('bear_score', 0)}："
-            f"{bear_r[:220]}{'…' if len(bear_r) > 220 else ''}",
+            f"<b>看空（Bear）</b> — {_esc(bear_role)} 评分 {debate.get('bear_score', 0)}："
+            f"{_esc(bear_r[:220])}{'…' if len(bear_r) > 220 else ''}",
             st_body,
         ))
-        flow.append(Paragraph(f"<b>Judge 仲裁：</b>{debate.get('judge_msg', '')}", st_body))
+        flow.append(Paragraph(f"<b>Judge 仲裁：</b>{_esc(debate.get('judge_msg', ''))}", st_body))
         flow.append(Spacer(1, 6))
 
     # ── 行业竞争格局 ──
@@ -1272,6 +1658,10 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
     )
     flow.append(summary_table)
     flow.append(Spacer(1, 10))
+
+    # ── 报告总结卡片 ──
+    _add_summary_card(flow, result, st_h, st_body, body_font, bold_font)
+
     flow.append(Paragraph(
         "风险提示：市场有风险，投资需谨慎。本报告仅供研究与参考，不构成投资建议。",
         st_body,
@@ -1279,3 +1669,412 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
 
     doc.build(flow)
     return pdf_path
+
+
+# ─────────────────────────────────────────────────────────────────
+#  批量汇总 PDF
+# ─────────────────────────────────────────────────────────────────
+
+def _decision_label(score: float) -> tuple[str, str]:
+    """返回 (决策中文, 颜色hex)。"""
+    if score >= 70:
+        return ("买入", "#C41E3A")
+    if score >= 60:
+        return ("弱买入", "#E74C3C")
+    if score >= 50:
+        return ("观望", "#0066CC")
+    if score >= 40:
+        return ("弱卖出", "#27AE60")
+    return ("卖出", "#228B22")
+
+
+def _bias_icon_text(pct: float) -> tuple[str, str]:
+    """返回 (icon+pct_text, 颜色hex)。"""
+    txt = f"{pct:+.1f}%"
+    if abs(pct) > 8:
+        return (f"[严重] {txt}", "#C41E3A")
+    if abs(pct) > 5:
+        return (f"[偏高] {txt}", "#E67E22")
+    return (f"{txt}", "#27AE60")
+
+
+def _extract_stock_data(result: dict) -> dict:
+    """从 final_decision.json 提取批量汇总所需的全部字段。"""
+    feats = result.get("analysis_features") or {}
+    if not isinstance(feats, dict):
+        feats = {}
+    ki_day = feats.get("kline_indicators", {}).get("day", {})
+    ki_week = feats.get("kline_indicators", {}).get("week", {})
+    ma_day = ki_day.get("ma_system", {})
+    ma_week = ki_week.get("ma_system", {})
+    sp = result.get("sniper_points") or {}
+    pa = result.get("position_advice") or {}
+
+    ma5_data = ma_day.get("ma5", {})
+    ma5_val = float(ma5_data.get("value", 0) or 0)
+    ma5_pct = float(ma5_data.get("pct_above", 0) or 0)
+    current_price = ma5_val * (1 + ma5_pct / 100) if ma5_val > 0 else 0
+
+    model_totals = result.get("model_totals") or {}
+    final_score = float(result.get("final_score", 0))
+
+    return {
+        "symbol": result.get("symbol", ""),
+        "name": result.get("name", ""),
+        "final_score": final_score,
+        "model_totals": model_totals,
+        "current_price": current_price,
+        "ma5_pct": ma5_pct,
+        "ma_day": ma_day,
+        "ma_week": ma_week,
+        "sniper_points": sp,
+        "position_advice": pa,
+        "scenarios": result.get("scenarios") or {},
+    }
+
+
+def build_batch_summary_pdf(
+    results: list[dict[str, Any]],
+    output_path: str | Path | None = None,
+    title: str = "多智能体批量分析汇总报告",
+) -> Path:
+    """
+    从多个 final_decision.json 结果生成批量汇总 PDF（5 张表格）。
+
+    Parameters
+    ----------
+    results : list[dict]
+        每个元素是一个 final_decision.json 的完整字典。
+    output_path : str | Path | None
+        输出文件路径。None 时自动生成到 output/ 目录。
+    title : str
+        报告标题。
+
+    Returns
+    -------
+    Path  PDF 文件路径
+    """
+    body_font, bold_font = _register_fonts()
+
+    # --- 提取数据 ---
+    stocks = [_extract_stock_data(r) for r in results]
+    stocks.sort(key=lambda s: s["final_score"], reverse=True)
+
+    # --- 收集所有 provider 名称 ---
+    all_providers: list[str] = []
+    seen_p: set[str] = set()
+    for s in stocks:
+        for p in s["model_totals"]:
+            if p not in seen_p:
+                all_providers.append(p)
+                seen_p.add(p)
+
+    # --- 输出路径 ---
+    if output_path is None:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_dir = Path("output")
+        out_dir.mkdir(exist_ok=True)
+        output_path = out_dir / f"batch_summary_{ts}.pdf"
+    output_path = Path(output_path)
+
+    doc = SimpleDocTemplate(
+        str(output_path), pagesize=A4,
+        leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=15 * mm, bottomMargin=15 * mm,
+    )
+    flow: list = []
+
+    # --- 样式 ---
+    st_title = ParagraphStyle(
+        "batch_title", fontName=bold_font, fontSize=18, leading=24,
+        textColor=colors.HexColor("#1A3C6D"), spaceAfter=6, alignment=1,
+    )
+    st_subtitle = ParagraphStyle(
+        "batch_sub", fontName=body_font, fontSize=10, leading=14,
+        textColor=colors.HexColor("#666666"), spaceAfter=10, alignment=1,
+    )
+    st_section = ParagraphStyle(
+        "batch_sec", fontName=bold_font, fontSize=13, leading=17,
+        textColor=colors.HexColor("#1A3C6D"), spaceBefore=12, spaceAfter=6,
+    )
+    st_body = ParagraphStyle(
+        "batch_body", fontName=body_font, fontSize=9, leading=13,
+        textColor=colors.HexColor("#333333"), wordWrap="CJK",
+    )
+
+    HDR_BG = _SUMMARY_HEADER_BG
+    HDR_FG = _SUMMARY_HEADER_FG
+    GRID_C = _SUMMARY_GRID
+
+    def _hdr(text):
+        return _summary_cell(text, bold_font, 9, True, HDR_FG)
+
+    def _bc(text, sz=8, color="#333333", align=0, bold=False):
+        return _summary_cell(text, bold_font if bold else body_font, sz, bold, color, align)
+
+    def _std_style(n_rows):
+        """标准表格样式 + 斑马条纹。"""
+        s = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(HDR_BG)),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor(HDR_FG)),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor(GRID_C)),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ]
+        for i in range(1, n_rows):
+            bg = "#F8FBFF" if i % 2 == 1 else "#FFFFFF"
+            s.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor(bg)))
+        return s
+
+    # ================================================================
+    #  标题
+    # ================================================================
+    flow.append(Paragraph(title, st_title))
+    flow.append(Paragraph(
+        f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}  |  "
+        f"共 {len(stocks)} 只标的  |  "
+        f"模型: {', '.join(p.upper() for p in all_providers)}",
+        st_subtitle))
+
+    # ================================================================
+    #  表1: 综合评分排名
+    # ================================================================
+    flow.append(Paragraph("表1  综合评分排名", st_section))
+
+    hdr1 = [_hdr("#"), _hdr("代码"), _hdr("名称")]
+    for p in all_providers:
+        hdr1.append(_hdr(p.upper()))
+    hdr1 += [_hdr("均分"), _hdr("MA5乖离"), _hdr("建议")]
+    rows1 = [hdr1]
+
+    stats = {"买入": 0, "弱买入": 0, "观望": 0, "弱卖出": 0, "卖出": 0}
+    score_min, score_max = 999, -999
+    bias_warnings = []
+
+    for idx, s in enumerate(stocks, 1):
+        row = [_bc(str(idx), 8, align=1), _bc(s["symbol"], 8), _bc(s["name"], 8)]
+        for p in all_providers:
+            mt = s["model_totals"]
+            if p in mt:
+                v = mt[p]
+                pv = float(v) if not isinstance(v, dict) else float(v.get("final_score", 0))
+                row.append(_bc(f"{pv:.1f}", 8, align=1))
+            else:
+                row.append(_bc("—", 8, "#999999", 1))
+        # Avg
+        dec_label, dec_color = _decision_label(s["final_score"])
+        row.append(_bc(f"{s['final_score']:.1f}", 9, dec_color, 1, True))
+        # MA5 bias
+        bias_txt, bias_c = _bias_icon_text(s["ma5_pct"])
+        row.append(_bc(bias_txt, 8, bias_c, 1))
+        # Decision
+        row.append(_bc(dec_label, 9, dec_color, 1, True))
+        rows1.append(row)
+
+        stats[dec_label] = stats.get(dec_label, 0) + 1
+        score_min = min(score_min, s["final_score"])
+        score_max = max(score_max, s["final_score"])
+        if abs(s["ma5_pct"]) > 5:
+            bias_warnings.append(f"{s['symbol']} {s['name']} MA5乖离{s['ma5_pct']:+.1f}%")
+
+    n_provider_cols = len(all_providers)
+    cw1 = [8*mm, 18*mm, 22*mm] + [18*mm]*n_provider_cols + [18*mm, 22*mm, 18*mm]
+    tbl1 = Table(rows1, colWidths=cw1)
+    style1 = _std_style(len(rows1))
+    tbl1.setStyle(TableStyle(style1))
+    flow.append(tbl1)
+
+    # Footer
+    stat_parts = []
+    for label in ["买入", "弱买入", "观望", "弱卖出", "卖出"]:
+        cnt = stats.get(label, 0)
+        if cnt > 0:
+            stat_parts.append(f"{label}: {cnt}只")
+    footer1 = f"{' | '.join(stat_parts)}    评分区间: {score_min:.1f} ~ {score_max:.1f}"
+    flow.append(Paragraph(_esc(footer1), st_body))
+    if bias_warnings:
+        flow.append(Paragraph(
+            f"<font color='#E67E22'>乖离预警: {_esc(' / '.join(bias_warnings))}</font>",
+            st_body))
+    flow.append(Spacer(1, 6))
+
+    # ================================================================
+    #  表2: 狙击点位
+    # ================================================================
+    flow.append(Paragraph("表2  狙击点位", st_section))
+    hdr2 = [_hdr("#"), _hdr("代码"), _hdr("名称"), _hdr("现价"),
+            _hdr("首选买入"), _hdr("次选买入"), _hdr("止损"),
+            _hdr("止盈①"), _hdr("止盈②"), _hdr("仓位")]
+    rows2 = [hdr2]
+    for idx, s in enumerate(stocks, 1):
+        sp = s["sniper_points"]
+        cp = s["current_price"]
+
+        def _pv(key, positive=True):
+            v = sp.get(key)
+            if v is None:
+                return "—", "—"
+            try:
+                fv = float(v)
+            except (ValueError, TypeError):
+                return str(v), "—"
+            diff = _pct_diff(cp, fv) if cp > 0 else "—"
+            return f"{fv:.2f}", diff
+
+        ib_p, ib_d = _pv("ideal_buy")
+        sb_p, sb_d = _pv("secondary_buy")
+        sl_p, sl_d = _pv("stop_loss")
+        tp1_p, tp1_d = _pv("take_profit_1")
+        tp2_p, tp2_d = _pv("take_profit_2")
+        ratio = s["position_advice"].get("position_ratio", "—")
+
+        rows2.append([
+            _bc(str(idx), 8, align=1),
+            _bc(s["symbol"], 8),
+            _bc(s["name"], 8),
+            _bc(f"{cp:.2f}" if cp > 0 else "—", 8, "#1A3C6D", 1, True),
+            _bc(f"{ib_p} ({ib_d})", 7, "#2E7D32"),
+            _bc(f"{sb_p} ({sb_d})", 7, "#2E7D32"),
+            _bc(f"{sl_p} ({sl_d})", 7, "#C62828"),
+            _bc(f"{tp1_p} ({tp1_d})", 7, "#B8860B"),
+            _bc(f"{tp2_p} ({tp2_d})", 7, "#B8860B"),
+            _bc(str(ratio), 8, align=1),
+        ])
+
+    cw2 = [8*mm, 16*mm, 20*mm, 16*mm, 22*mm, 22*mm, 22*mm, 22*mm, 22*mm, 14*mm]
+    tbl2 = Table(rows2, colWidths=cw2)
+    style2 = _std_style(len(rows2))
+    # Color buy rows green, stop-loss red, TP yellow for header cells
+    style2.append(("BACKGROUND", (4, 0), (5, 0), colors.HexColor("#2E7D32")))
+    style2.append(("BACKGROUND", (6, 0), (6, 0), colors.HexColor("#C62828")))
+    style2.append(("BACKGROUND", (7, 0), (8, 0), colors.HexColor("#B8860B")))
+    tbl2.setStyle(TableStyle(style2))
+    flow.append(tbl2)
+    flow.append(Spacer(1, 6))
+
+    # ================================================================
+    #  表3: 多周期均线支撑压力
+    # ================================================================
+    flow.append(Paragraph("表3  多周期均线支撑/压力", st_section))
+    hdr3 = [_hdr("#"), _hdr("代码"), _hdr("名称"), _hdr("现价"),
+            _hdr("MA5"), _hdr("MA10"), _hdr("MA20"), _hdr("MA60"),
+            _hdr("周MA5"), _hdr("周MA20"), _hdr("短期评估")]
+    rows3 = [hdr3]
+    for idx, s in enumerate(stocks, 1):
+        cp = s["current_price"]
+        ma_d = s["ma_day"]
+        ma_w = s["ma_week"]
+
+        def _mav(src, key):
+            v = src.get(key, {}).get("value")
+            return f"{float(v):.2f}" if v else "—"
+
+        # Assessment: compare current price vs MA20
+        ma20_v = ma_d.get("ma20", {}).get("value")
+        ma5_pct_val = s["ma5_pct"]
+        if abs(ma5_pct_val) > 8:
+            assess, assess_c = "超买" if ma5_pct_val > 0 else "超卖", "#C41E3A"
+        elif abs(ma5_pct_val) > 5:
+            assess, assess_c = "偏高" if ma5_pct_val > 0 else "偏低", "#E67E22"
+        else:
+            assess, assess_c = "正常", "#27AE60"
+
+        rows3.append([
+            _bc(str(idx), 8, align=1),
+            _bc(s["symbol"], 8),
+            _bc(s["name"], 8),
+            _bc(f"{cp:.2f}" if cp > 0 else "—", 8, "#1A3C6D", 1, True),
+            _bc(_mav(ma_d, "ma5"), 8, align=1),
+            _bc(_mav(ma_d, "ma10"), 8, align=1),
+            _bc(_mav(ma_d, "ma20"), 8, align=1),
+            _bc(_mav(ma_d, "ma60"), 8, align=1),
+            _bc(_mav(ma_w, "ma5"), 8, align=1),
+            _bc(_mav(ma_w, "ma20"), 8, align=1),
+            _bc(assess, 8, assess_c, 1, True),
+        ])
+
+    cw3 = [8*mm, 16*mm, 20*mm, 16*mm] + [16*mm]*6 + [16*mm]
+    tbl3 = Table(rows3, colWidths=cw3)
+    tbl3.setStyle(TableStyle(_std_style(len(rows3))))
+    flow.append(tbl3)
+    flow.append(Spacer(1, 6))
+
+    # ================================================================
+    #  表4: 仓位策略
+    # ================================================================
+    flow.append(Paragraph("表4  仓位策略 (空仓 vs 持仓)", st_section))
+    hdr4 = [_hdr("#"), _hdr("代码"), _hdr("名称"),
+            _hdr("空仓建议"), _hdr("持仓建议")]
+    rows4 = [hdr4]
+    for idx, s in enumerate(stocks, 1):
+        pa = s["position_advice"]
+        no_p = pa.get("no_position", "—")
+        has_p = pa.get("has_position", "—")
+        rows4.append([
+            _bc(str(idx), 8, align=1),
+            _bc(s["symbol"], 8),
+            _bc(s["name"], 8),
+            _bc(str(no_p), 7, "#2E7D32"),
+            _bc(str(has_p), 7, "#1565C0"),
+        ])
+
+    cw4 = [8*mm, 16*mm, 20*mm, 68*mm, 68*mm]
+    tbl4 = Table(rows4, colWidths=cw4)
+    style4 = _std_style(len(rows4))
+    style4.append(("BACKGROUND", (3, 0), (3, 0), colors.HexColor("#2E7D32")))
+    style4.append(("BACKGROUND", (4, 0), (4, 0), colors.HexColor("#1565C0")))
+    tbl4.setStyle(TableStyle(style4))
+    flow.append(tbl4)
+    flow.append(Spacer(1, 6))
+
+    # ================================================================
+    #  表5: 乖离预警区
+    # ================================================================
+    alert_stocks = [s for s in stocks if abs(s["ma5_pct"]) > 5]
+    if alert_stocks:
+        flow.append(Paragraph("表5  乖离率预警区", st_section))
+        hdr5 = [_hdr("预警"), _hdr("代码"), _hdr("名称"),
+                _hdr("MA5乖离"), _hdr("现价 vs MA5"), _hdr("风险提示")]
+        rows5 = [hdr5]
+        for s in alert_stocks:
+            ma5_v = s["ma_day"].get("ma5", {}).get("value", 0)
+            pct = s["ma5_pct"]
+            if abs(pct) > 8:
+                level_txt, level_c = "严重", "#C41E3A"
+                risk = "严重超买，不宜追高" if pct > 0 else "严重超卖，关注反弹"
+            else:
+                level_txt, level_c = "注意", "#E67E22"
+                risk = "偏离较大，注意风险" if pct > 0 else "偏离较大，关注企稳"
+            rows5.append([
+                _bc(level_txt, 9, level_c, 1, True),
+                _bc(s["symbol"], 8),
+                _bc(s["name"], 8),
+                _bc(f"{pct:+.1f}%", 9, level_c, 1, True),
+                _bc(f"{s['current_price']:.2f} vs {float(ma5_v):.2f}" if ma5_v else "—",
+                    8, align=1),
+                _bc(risk, 8, level_c),
+            ])
+
+        cw5 = [14*mm, 18*mm, 22*mm, 20*mm, 36*mm, 70*mm]
+        tbl5 = Table(rows5, colWidths=cw5)
+        style5 = _std_style(len(rows5))
+        # Highlight alert rows
+        for i in range(1, len(rows5)):
+            bg = "#FFEBEE" if abs(alert_stocks[i-1]["ma5_pct"]) > 8 else "#FFF3E0"
+            style5.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor(bg)))
+        tbl5.setStyle(TableStyle(style5))
+        flow.append(tbl5)
+    else:
+        flow.append(Paragraph("表5  乖离率预警区", st_section))
+        flow.append(Paragraph("所有标的MA5乖离率均在正常范围内，无需预警。", st_body))
+
+    flow.append(Spacer(1, 16))
+    flow.append(Paragraph(
+        "风险提示：市场有风险，投资需谨慎。本报告仅供研究与参考，不构成投资建议。",
+        st_body))
+
+    doc.build(flow)
+    return output_path
