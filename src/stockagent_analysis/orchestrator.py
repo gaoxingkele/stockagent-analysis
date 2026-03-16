@@ -303,6 +303,35 @@ def run_analysis(
         }
     if not is_complete and only_optional_missing:
         print(f"[警告] 缺失 {', '.join(failed_items)} 数据，月线相关Agent将降级为文本分析模式", flush=True)
+
+    # ── v2: 新闻/舆情增强 (改进计划#5) ──
+    _news_enhance = bool(project_cfg.get("news_enhance", True))
+    if _news_enhance and llm_routers:
+        from .news_search import enrich_news_data
+        _news_router = next(iter(llm_routers.values()), None)
+        if _news_router:
+            print("[新闻增强] 启动LLM新闻分析...", flush=True)
+            _existing_news = analysis_context.get("news", [])
+            try:
+                _news_result = enrich_news_data(
+                    _news_router, symbol, name, _existing_news,
+                    use_perplexity=bool(os.getenv("PERPLEXITY_API_KEY", "").strip()),
+                )
+                # 写入 analysis_context 供 SENTIMENT_FLOW Agent 消费
+                analysis_context["news_analysis"] = _news_result.get("sentiment", {})
+                if _news_result.get("perplexity_used"):
+                    analysis_context["news"] = _news_result.get("news_items", _existing_news)
+                # 更新 features.news_sentiment 为LLM分析的情绪分
+                _llm_sent = _news_result.get("sentiment", {}).get("sentiment_score", 0)
+                if _llm_sent != 0 and "features" in analysis_context:
+                    analysis_context["features"]["news_sentiment"] = float(_llm_sent)
+                    analysis_context["features"]["news_sentiment_source"] = "llm"
+                dump_json(run_dir / "data" / "news_analysis.json", _news_result)
+                print(f"[新闻增强] 完成: 情绪={_llm_sent} 事件={len(_news_result.get('sentiment', {}).get('key_events', []))}个", flush=True)
+            except Exception as e:
+                manager_logger.warning("news_enhance failed: %s", e)
+                print(f"[新闻增强] 失败: {e}, 使用原始新闻数据", flush=True)
+
     analysts = [create_agent(cfg, run_dir, backend, llm_routers=llm_routers) for cfg in analyst_cfg]
 
     # 调用大模型前检查各 Agent 所需数据，列出本地/云端对照

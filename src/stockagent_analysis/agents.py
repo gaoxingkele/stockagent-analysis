@@ -1220,11 +1220,28 @@ class SentimentFlowAgent(AnalystAgent):
         strategy = f.get("market_strategy", {})
         if strategy:
             parts.append(f"市场阶段: {strategy.get('phase_cn', '未知')}")
-        news = ctx.get("news", [])[:5]
-        if news:
-            titles = [str(n.get("title", ""))[:50] for n in news if n.get("title")]
-            if titles:
-                parts.append("近期新闻: " + " | ".join(titles))
+        # v2: 优先使用LLM新闻分析结果
+        na = ctx.get("news_analysis", {})
+        if na:
+            if na.get("summary"):
+                parts.append(f"新闻情绪总结: {na['summary']}")
+            if na.get("sentiment_score") is not None:
+                parts.append(f"LLM情绪分: {na['sentiment_score']} (-100~100)")
+            events = na.get("key_events", [])
+            if events:
+                parts.append("关键事件: " + " | ".join(str(e)[:50] for e in events[:3]))
+            risks = na.get("risk_alerts", [])
+            if risks:
+                parts.append("风险预警: " + " | ".join(str(r)[:50] for r in risks))
+            catalysts = na.get("positive_catalysts", [])
+            if catalysts:
+                parts.append("利好催化: " + " | ".join(str(c)[:50] for c in catalysts))
+        else:
+            news = ctx.get("news", [])[:5]
+            if news:
+                titles = [str(n.get("title", ""))[:50] for n in news if n.get("title")]
+                if titles:
+                    parts.append("近期新闻: " + " | ".join(titles))
         parts.append(
             "\n分析要求：\n1.市场情绪偏多还是偏空\n2.是否有重大利好/利空消息\n"
             "3.主力资金态度（融资+北向）\n4.操作建议\n\n"

@@ -8,6 +8,7 @@
   ],
   "debate_rounds": 2,
   "structured_debate": true,
+  "news_enhance": true,
   "decision_threshold_buy": 70,
   "decision_threshold_sell": 50,
   "multi_model_weight_mode": true,
