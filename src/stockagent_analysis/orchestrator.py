@@ -413,36 +413,80 @@ def run_analysis(
             done += 1
             print(f"[分析] {done}/{total_steps} 完成 {cn} vote={submissions[-1].vote} score={submissions[-1].score_0_100:.1f}", flush=True)
 
+    # ── v2 结构化辩论 (改进计划#3) ──
     debate_bull_bear: dict[str, Any] = {}
-    for r in range(1, debate_rounds + 1):
-        bull = max(submissions, key=lambda x: x.score_0_100)
-        bear = min(submissions, key=lambda x: x.score_0_100)
-        bull_msg = f"Bull观点：{bull.reason}。请反驳并给出风险点。"
-        bear_msg = f"Bear观点：{bear.reason}。请回应并给出触发条件。"
-        write_message(run_dir, bull.agent_id, bear.agent_id, r, bull_msg)
-        write_message(run_dir, bear.agent_id, bull.agent_id, r, bear_msg)
-        judge_msg = (
-            f"Judge仲裁：Bull={bull.score_0_100:.1f}, Bear={bear.score_0_100:.1f}。"
-            f"结论以证据完整性与数据时效优先。"
-        )
-        write_message(run_dir, manager_cfg["agent_id"], "all_agents", r, judge_msg)
-        debate_bull_bear = {
-            "bull_agent_id": bull.agent_id,
-            "bull_role": next((a.role for a in analysts if a.agent_id == bull.agent_id), bull.agent_id),
-            "bull_reason": bull.reason,
-            "bull_score": round(bull.score_0_100, 2),
-            "bear_agent_id": bear.agent_id,
-            "bear_role": next((a.role for a in analysts if a.agent_id == bear.agent_id), bear.agent_id),
-            "bear_reason": bear.reason,
-            "bear_score": round(bear.score_0_100, 2),
-            "judge_msg": judge_msg,
-        }
-        manager_logger.info("debate_round=%s bull=%s bear=%s", r, bull.agent_id, bear.agent_id)
-        done += 1
-        print(
-            f"[辩论] {done}/{total_steps} 第{r}轮 Bull={agent_registry.get(bull.agent_id)}({bull.score_0_100:.1f}) vs Bear={agent_registry.get(bear.agent_id)}({bear.score_0_100:.1f})",
-            flush=True,
-        )
+    debate_result_data: dict[str, Any] = {}
+    _enable_structured_debate = bool(project_cfg.get("structured_debate", True))
+    if _enable_structured_debate and llm_routers and submissions:
+        from .debate import run_structured_debate
+        # 选择辩论用路由器 (优先用 deep_model 配置的 provider)
+        _debate_provider = project_cfg.get("llm", {}).get("debate_provider") or next(iter(llm_routers), None)
+        _debate_router = llm_routers.get(_debate_provider) if _debate_provider else None
+        if _debate_router:
+            print(f"[辩论] 启动结构化辩论 (provider={_debate_provider})", flush=True)
+            pipeline.advance("结构化辩论")
+            _current_price = float(analysis_context.get("snapshot", {}).get("close", 0) or 0)
+            _debate_subs = [
+                {
+                    "agent_id": r.agent_id, "dim_code": r.dim_code,
+                    "role": next((a.role for a in analysts if a.agent_id == r.agent_id), r.agent_id),
+                    "score": r.score_0_100, "reason": r.reason,
+                }
+                for r in submissions
+            ]
+            try:
+                _dr = run_structured_debate(
+                    _debate_router, _debate_subs, symbol, name,
+                    _current_price, debate_rounds=1,
+                )
+                debate_result_data = {
+                    "decision": _dr.decision,
+                    "score_override": _dr.score_override,
+                    "target_price": _dr.target_price,
+                    "stop_loss": _dr.stop_loss,
+                    "confidence": _dr.confidence,
+                    "risk_score": _dr.risk_score,
+                    "reasoning": _dr.reasoning,
+                    "team_reports": _dr.team_reports,
+                    "debate_transcript": _dr.debate_transcript,
+                    "risk_assessment": _dr.risk_assessment,
+                }
+                # 辩论结果保存
+                dump_json(run_dir / "data" / "debate_result.json", debate_result_data)
+                print(
+                    f"[辩论] 完成: decision={_dr.decision} score={_dr.score_override} "
+                    f"target={_dr.target_price} stop={_dr.stop_loss}",
+                    flush=True,
+                )
+            except Exception as e:
+                manager_logger.warning("structured debate failed: %s", e)
+                print(f"[辩论] 结构化辩论失败: {e}, 使用加权评分", flush=True)
+    elif debate_rounds > 0:
+        # v1 旧辩论逻辑 (串行模式降级)
+        for r in range(1, debate_rounds + 1):
+            bull = max(submissions, key=lambda x: x.score_0_100)
+            bear = min(submissions, key=lambda x: x.score_0_100)
+            bull_msg = f"Bull观点：{bull.reason}。请反驳并给出风险点。"
+            bear_msg = f"Bear观点：{bear.reason}。请回应并给出触发条件。"
+            write_message(run_dir, bull.agent_id, bear.agent_id, r, bull_msg)
+            write_message(run_dir, bear.agent_id, bull.agent_id, r, bear_msg)
+            judge_msg = (
+                f"Judge仲裁：Bull={bull.score_0_100:.1f}, Bear={bear.score_0_100:.1f}。"
+                f"结论以证据完整性与数据时效优先。"
+            )
+            write_message(run_dir, manager_cfg["agent_id"], "all_agents", r, judge_msg)
+            debate_bull_bear = {
+                "bull_agent_id": bull.agent_id,
+                "bull_role": next((a.role for a in analysts if a.agent_id == bull.agent_id), bull.agent_id),
+                "bull_reason": bull.reason,
+                "bull_score": round(bull.score_0_100, 2),
+                "bear_agent_id": bear.agent_id,
+                "bear_role": next((a.role for a in analysts if a.agent_id == bear.agent_id), bear.agent_id),
+                "bear_reason": bear.reason,
+                "bear_score": round(bear.score_0_100, 2),
+                "judge_msg": judge_msg,
+            }
+            done += 1
 
     detail = []
     for a, result in zip(analysts, submissions):
@@ -526,6 +570,19 @@ def run_analysis(
             for a, r in zip(analysts, submissions)
         )
         final_score = weighted_score / total_weight
+    # ── v2: 辩论评分融合 ──
+    # 如果结构化辩论产出了 score_override, 以 40% 权重融入最终评分
+    _debate_score = debate_result_data.get("score_override")
+    if _debate_score is not None and 0 <= float(_debate_score) <= 100:
+        _debate_w = 0.40
+        _weighted_score_before = final_score
+        final_score = final_score * (1.0 - _debate_w) + float(_debate_score) * _debate_w
+        manager_logger.info(
+            "debate score fusion: weighted=%.2f debate=%.2f → final=%.2f",
+            _weighted_score_before, _debate_score, final_score,
+        )
+        print(f"[辩论融合] 加权评分={_weighted_score_before:.1f} × 60% + 辩论评分={_debate_score} × 40% = {final_score:.1f}", flush=True)
+
     # 基于市场状态动态调整阈值
     _regime = analysis_context.get("features", {}).get("market_regime", {}).get("regime", "unknown")
     if _regime == "bull":
@@ -654,6 +711,7 @@ def run_analysis(
         "short_term_hold": short_term_hold,
         "medium_long_term_hold": medium_long_term_hold,
         "debate_bull_bear": debate_bull_bear if debate_rounds else {},
+        "structured_debate": debate_result_data if debate_result_data else {},
         "scenario_analysis": scenario_analysis,
         "scenarios": scenarios_data,
         "sniper_points": sniper_points,

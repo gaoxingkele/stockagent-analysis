@@ -7,6 +7,7 @@
     "sell"
   ],
   "debate_rounds": 2,
+  "structured_debate": true,
   "decision_threshold_buy": 70,
   "decision_threshold_sell": 50,
   "multi_model_weight_mode": true,
@@ -24,6 +25,7 @@
   "llm": {
     "enabled": true,
     "default_provider": "grok",
+    "debate_provider": "grok",
     "multi_eval_providers": [
       "grok"
     ],
