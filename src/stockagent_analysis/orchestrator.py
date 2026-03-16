@@ -462,8 +462,8 @@ def run_analysis(
         )
 
     model_totals: dict[str, float] = {}
-    # TOP_STRUCTURE 评分语义: 高分=顶部信号强(卖出)，在加权时需反转(100-score)使其拉低总分
-    _INVERT_DIMS = {"TOP_STRUCTURE"}
+    # v2: 不再需要 _INVERT_DIMS — PATTERN agent 内部已处理顶底结构反转
+    _INVERT_DIMS: set[str] = set()
 
     # ── 逐Agent动态LLM权重计算 ──
     # 每个Agent有 llm_base_weight (config, 0.20/0.35/0.45)
@@ -505,7 +505,7 @@ def run_analysis(
                     score = local_s * _local_w + llm_s * _llm_w
                 else:
                     score = local_s
-                # TOP_STRUCTURE: 高分=顶部强→反转后拉低总分
+                # v2: PATTERN agent内部已处理顶底反转, 无需外部反转
                 if _dim_map.get(a.agent_id) in _INVERT_DIMS:
                     score = 100.0 - score
                 total += score * w

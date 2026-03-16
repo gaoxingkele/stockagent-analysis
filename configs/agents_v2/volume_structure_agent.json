@@ -1,0 +1,18 @@
+{
+  "agent_id": "volume_structure_agent",
+  "agent_type": "volume_structure",
+  "dim_code": "VOLUME_STRUCTURE",
+  "name": "量价结构Agent",
+  "role": "量价关系与支撑阻力分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.06,
+  "merged_from": ["volume_price_agent", "support_resistance_agent"],
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tdx", "akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["量价信号", "OBV", "支撑阻力位", "缺口"]
+  },
+  "llm_base_weight": 0.20
+}

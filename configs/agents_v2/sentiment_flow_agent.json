@@ -1,0 +1,18 @@
+{
+  "agent_id": "sentiment_flow_agent",
+  "agent_type": "sentiment_flow",
+  "dim_code": "SENTIMENT_FLOW",
+  "name": "情绪舆情Agent",
+  "role": "市场情绪与舆情分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.08,
+  "merged_from": ["sentiment_agent", "nlp_sentiment_agent", "mm_behavior_agent", "sector_policy_agent", "industry_agent", "macro_agent"],
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["新闻情绪", "行业政策", "主力行为", "量比异动"]
+  },
+  "llm_base_weight": 0.40
+}

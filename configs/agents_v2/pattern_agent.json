@@ -1,0 +1,18 @@
+{
+  "agent_id": "pattern_agent",
+  "agent_type": "pattern",
+  "dim_code": "PATTERN",
+  "name": "形态综合Agent",
+  "role": "K线形态与图形分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.08,
+  "merged_from": ["kline_pattern_agent", "chart_pattern_agent", "top_structure_agent", "bottom_structure_agent"],
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tdx", "akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["K线形态", "图表形态", "顶底结构", "连续性统计"]
+  },
+  "llm_base_weight": 0.25
+}

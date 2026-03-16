@@ -1,0 +1,18 @@
+{
+  "agent_id": "tech_quant_agent",
+  "agent_type": "analyst",
+  "dim_code": "TECH_QUANT",
+  "name": "技术指标量化Agent",
+  "role": "技术指标与量化因子分析师",
+  "enabled": true,
+  "mandatory": true,
+  "weight": 0.10,
+  "merged_from": ["tech_indicator_agent", "quant_agent"],
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tdx", "akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["RSI", "MACD", "KDJ", "布林带", "动量", "波动率"]
+  },
+  "llm_base_weight": 0.30
+}

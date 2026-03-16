@@ -1,0 +1,18 @@
+{
+  "agent_id": "capital_liquidity_agent",
+  "agent_type": "capital_liquidity",
+  "dim_code": "CAPITAL_LIQUIDITY",
+  "name": "资金流动性Agent",
+  "role": "资金流向与流动性分析师",
+  "enabled": true,
+  "mandatory": true,
+  "weight": 0.12,
+  "merged_from": ["capital_flow_agent", "flow_detail_agent", "liquidity_agent"],
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["量比", "OBV", "换手率", "主力净流入", "量价信号"]
+  },
+  "llm_base_weight": 0.35
+}
