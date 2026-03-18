@@ -35,6 +35,15 @@ _AKSHARE_NO_PROXY = _DATA_NO_PROXY
 _TUSHARE_LAST_CALL: float = 0.0
 
 
+def _is_trading_session() -> bool:
+    """判断当前是否在A股交易时段（工作日 9:15-15:05）。"""
+    now = datetime.now()
+    if now.weekday() >= 5:  # 周六日
+        return False
+    t = now.hour * 100 + now.minute
+    return 915 <= t <= 1505
+
+
 def _tushare_throttle() -> None:
     """Tushare 调用节流，避免触发限频（参考 https://tushare.pro/document/1?doc_id=290）。"""
     global _TUSHARE_LAST_CALL
@@ -99,6 +108,8 @@ class DataBackend:
         self._tushare_timeout = int(os.getenv("TUSHARE_TIMEOUT_SEC", "15"))
         self._tdx_reader = None  # lazy init; None means not yet tried
         self._tdx_reader_ok: bool | None = None  # True/False after first try
+        import threading
+        self._remote_api_sem = threading.Semaphore(3)  # 远程数据API最多3路并发
         _ensure_akshare_no_proxy()
 
     def _get_tdx_reader(self):
@@ -127,6 +138,9 @@ class DataBackend:
         # 通达信本地数据最高优先级（无网络，速度最快）
         if "tdx" not in sources:
             sources = ["tdx"] + sources
+        # 腾讯实时行情作为最终兜底
+        if "tencent" not in sources:
+            sources.append("tencent")
         if self.mode == "single":
             return self._fetch_from_source(sources[0], symbol, name)
         # combined: 按顺序尝试，成功即返回
@@ -181,6 +195,14 @@ class DataBackend:
             import logging
             logging.getLogger(__name__).warning("1h kline fetch failed (non-fatal): %s", e)
             kline_bundle["1h"] = {"ok": False, "partial": False, "df": None, "rows": 0, "source": "unknown", "attempts": 1, "error": str(e)}
+        # 盘中模式：非TDX源的日线追加今日虚拟bar（TDX源已在 _patch_intraday_as_daily 中处理）
+        if kline_bundle.get("day", {}).get("ok") and kline_bundle["day"].get("source") != "tdx":
+            _day_df = kline_bundle["day"].get("df")
+            if _day_df is not None:
+                _patched = self._append_virtual_bar_to_day(_day_df, symbol)
+                if _patched is not None and len(_patched) > len(_day_df):
+                    kline_bundle["day"]["df"] = _patched
+                    kline_bundle["day"]["rows"] = len(_patched)
         for tf, item in kline_bundle.items():
             (kline_dir / f"{tf}.meta.json").write_text(
                 json.dumps(
@@ -222,6 +244,8 @@ class DataBackend:
         snapshot = self._retry_snapshot_fetch(symbol, name, preferred_sources, progress_cb=progress_cb)
         if snapshot.source == "mock":
             snapshot = self._snapshot_from_klines(symbol, name, kline_bundle.get("day", {}).get("df")) or snapshot
+        # Tushare PE/PB 修正层：先拿数据保覆盖率，再用权威源修正估值
+        snapshot = self._correct_snapshot_pe_pb(snapshot)
         if progress_cb:
             progress_cb("行情快照抓取", f"完成 source={snapshot.source}")
 
@@ -388,9 +412,8 @@ class DataBackend:
         timeframes: dict[str, int],
         progress_cb=None,
     ) -> dict[str, dict[str, Any]]:
-        """K线抓取：通达信本地 → Tushare → AKShare，依次降级。每周期最多重试 3 次。"""
-        # 确保顺序：通达信本地最优先，其次 Tushare，最后 AKShare
-        ordered_sources = ["tdx", "akshare", "tushare"]
+        """K线抓取：TDX(P1) → AKShare(P2) → Tushare(P3) → 腾讯(P3.5)，依次降级。每周期最多重试 3 次。"""
+        ordered_sources = ["tdx", "akshare", "tushare", "tencent"]
         for s in sources:
             if s not in ordered_sources:
                 ordered_sources.append(s)
@@ -408,13 +431,19 @@ class DataBackend:
                         progress_cb("K线抓取", f"{tf} 第{used_attempts}/3次 source={source}")
                     try:
                         if source == "tdx":
+                            # TDX本地读取，不占远程信号量
                             data = self._fetch_kline_tdx(symbol, tf, limit)
-                        elif source == "akshare":
-                            data = self._fetch_kline_akshare(symbol, tf, limit)
-                        elif source == "tushare":
-                            data = self._fetch_kline_tushare(symbol, tf, limit)
                         else:
-                            raise ValueError(f"unsupported source: {source}")
+                            # 远程API调用，受信号量控速
+                            with self._remote_api_sem:
+                                if source == "akshare":
+                                    data = self._fetch_kline_akshare(symbol, tf, limit)
+                                elif source == "tushare":
+                                    data = self._fetch_kline_tushare(symbol, tf, limit)
+                                elif source == "tencent":
+                                    data = self._fetch_kline_tencent(symbol, tf, limit)
+                                else:
+                                    raise ValueError(f"unsupported source: {source}")
                         # 新股K线少，有多少拿多少，只要非空即可
                         if data is not None and not data.empty and len(data) >= 1:
                             ok = True
@@ -444,6 +473,8 @@ class DataBackend:
             return self._fetch_akshare(symbol, name)
         if source == "tushare":
             return self._fetch_tushare(symbol, name)
+        if source == "tencent":
+            return self._fetch_snapshot_tencent(symbol, name)
         raise ValueError(f"unsupported source: {source}")
 
     def _fetch_kline_tdx(self, symbol: str, timeframe: str, limit: int):
@@ -818,6 +849,59 @@ class DataBackend:
         if last_err:
             raise last_err
         raise RuntimeError(f"tushare_{timeframe}_empty")
+
+    def _fetch_kline_tencent(self, symbol: str, timeframe: str, limit: int):
+        """腾讯K线直调（web.ifzq.gtimg.cn），绕过akshare封装。仅支持日线。"""
+        import json as _json
+        import pandas as pd
+        import urllib.request
+
+        if timeframe != "day":
+            raise RuntimeError("tencent_kline_only_daily")
+
+        market_code = f"sh{symbol}" if symbol.startswith("6") else f"sz{symbol}"
+        start_date = (datetime.now() - timedelta(days=limit * 2)).strftime("%Y-%m-%d")
+        url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+        params = f"param={market_code},day,{start_date},,{limit},qfq&_var=kline_dayqfq&r={time.time()}"
+        full_url = f"{url}?{params}"
+        req = urllib.request.Request(full_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            text = resp.read().decode("utf-8", errors="replace")
+        if "=" in text:
+            text = text.split("=", 1)[1]
+        data = _json.loads(text)
+
+        kdata = data.get("data", {}).get(market_code, {})
+        bars = kdata.get("qfqday") or kdata.get("day") or []
+        if not bars:
+            raise RuntimeError("tencent_kline_empty")
+
+        rows = []
+        for bar in bars:
+            if len(bar) < 6:
+                continue
+            rows.append({
+                "ts": bar[0],
+                "open": float(bar[1]),
+                "close": float(bar[2]),
+                "high": float(bar[3]),
+                "low": float(bar[4]),
+                "volume": float(bar[5]),
+                "amount": 0.0,
+                "pct_chg": 0.0,
+            })
+        if not rows:
+            raise RuntimeError("tencent_kline_no_valid_bars")
+
+        df = pd.DataFrame(rows)
+        for col in ["open", "high", "low", "close", "volume"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        df["pct_chg"] = df["close"].pct_change() * 100
+        df["pct_chg"] = df["pct_chg"].fillna(0.0)
+        df = df.dropna(subset=["close"]).sort_values("ts").reset_index(drop=True)
+        if len(df) < 5:
+            raise RuntimeError("tencent_kline_insufficient")
+        return df.tail(limit)
 
     @staticmethod
     def _normalize_kline_df(df):
@@ -3478,6 +3562,106 @@ class DataBackend:
             turnover_rate=turnover,
             source="tushare",
         )
+
+    def _fetch_snapshot_tencent(self, symbol: str, name: str) -> MarketSnapshot:
+        """腾讯财经实时行情（web.sqt.gtimg.cn），作为最终兜底数据源。"""
+        import urllib.request
+        import json as _json
+
+        prefix = "sz" if symbol.startswith(("0", "3")) else "sh"
+        url = f"http://web.sqt.gtimg.cn/q={prefix}{symbol}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            text = resp.read().decode("gbk", errors="replace")
+        # 格式: v_sz002571="1~索菲亚~002571~17.50~17.40~17.41~...~"
+        parts = text.split("~")
+        if len(parts) < 50:
+            raise RuntimeError("tencent_snapshot_parse_error")
+        close = float(parts[3])
+        pct_chg = float(parts[32]) if parts[32] else 0.0
+        pe_ttm = self._safe_float(parts[39]) if len(parts) > 39 else None
+        turnover = self._safe_float(parts[38]) if len(parts) > 38 else None
+        return MarketSnapshot(
+            symbol=symbol,
+            name=parts[1] or name,
+            close=close,
+            pct_chg=pct_chg,
+            pe_ttm=pe_ttm,
+            turnover_rate=turnover,
+            source="tencent",
+        )
+
+    def _correct_snapshot_pe_pb(self, snap: MarketSnapshot) -> MarketSnapshot:
+        """用 Tushare daily_basic 修正 PE/PB，提升估值数据可靠性。
+        仅当快照来源非 tushare 且 Tushare token 可用时生效。"""
+        if snap.source == "tushare" or not self._tushare_token:
+            return snap
+        try:
+            import tushare as ts
+            _tushare_throttle()
+            ts.set_token(self._tushare_token)
+            pro = ts.pro_api(timeout=self._tushare_timeout)
+            ts_code = self._to_ts_code(snap.symbol)
+            basic = pro.daily_basic(ts_code=ts_code, limit=1)
+            if basic is not None and not basic.empty:
+                pe = self._safe_float(basic.iloc[0].get("pe_ttm"))
+                turnover = self._safe_float(basic.iloc[0].get("turnover_rate"))
+                if pe is not None:
+                    snap.pe_ttm = pe
+                if turnover is not None:
+                    snap.turnover_rate = turnover
+        except Exception:
+            pass  # 修正失败不影响主流程
+        return snap
+
+    def _append_virtual_bar_to_day(self, day_df, symbol: str):
+        """盘中模式：用实时行情为非TDX源的日线追加今日虚拟bar。
+        与 _patch_intraday_as_daily（TDX专用，用1h线合成）不同，
+        此方法通过腾讯实时行情获取当日OHLCV，适用于AKShare/Tushare等远程源。"""
+        import pandas as pd
+
+        if not _is_trading_session():
+            return None
+        today = pd.Timestamp(datetime.now().date())
+        if day_df.index[-1] >= today:
+            return None  # 今天的bar已存在
+
+        try:
+            prefix = "sz" if symbol.startswith(("0", "3")) else "sh"
+            url = f"http://web.sqt.gtimg.cn/q={prefix}{symbol}"
+            import urllib.request
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                text = resp.read().decode("gbk", errors="replace")
+            parts = text.split("~")
+            if len(parts) < 50:
+                return None
+            o = float(parts[5])  # 今开
+            h = float(parts[33]) if parts[33] else float(parts[3])  # 最高
+            l = float(parts[34]) if parts[34] else float(parts[3])  # 最低
+            c = float(parts[3])  # 最新价
+            vol = float(parts[6]) if parts[6] else 0.0  # 成交量(手)
+            amt = float(parts[37]) if len(parts) > 37 and parts[37] else 0.0  # 成交额(万)
+
+            if o <= 0 or c <= 0:
+                return None
+
+            prev_close = float(day_df.iloc[-1].get("close", 0.0) or 0.0)
+            pct = (c / prev_close - 1.0) * 100 if prev_close > 0 else 0.0
+
+            virtual = pd.DataFrame([{
+                "open": o, "high": h, "low": l, "close": c,
+                "volume": vol, "amount": amt * 10000, "pct_chg": round(pct, 2),
+            }], index=pd.DatetimeIndex([today], name="date"))
+
+            common_cols = [col for col in day_df.columns if col in virtual.columns]
+            virtual = virtual[common_cols]
+            merged = pd.concat([day_df, virtual])
+            merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+            print(f"[数据] 盘中虚拟日线(tencent) {symbol}: O={o:.2f} H={h:.2f} L={l:.2f} C={c:.2f}", flush=True)
+            return merged
+        except Exception:
+            return None
 
     @staticmethod
     def _clean_symbol(symbol: str) -> str:

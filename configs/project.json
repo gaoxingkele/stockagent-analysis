@@ -36,14 +36,14 @@
     ],
     "default_providers": [
       "grok",
-      "qwen",
+      "doubao",
       "deepseek"
     ],
     "candidate_providers": [
       "gemini",
       "kimi",
       "minmax",
-      "doubao",
+      "qwen",
       "glm"
     ],
     "supported_providers": [
