@@ -416,6 +416,8 @@ class DataBackend:
         else:
             features["chip_distribution"] = {}
         # 相对强弱分析（个股 vs 沪深300）
+        # 同业对比（TOP5 + 行业均值）
+        features["peer_comparison"] = self._fetch_peer_comparison(symbol, fundamentals)
         features["relative_strength"] = self._fetch_and_compute_rs(kline_bundle)
         # 相对强弱分析（个股 vs 行业板块指数）
         features["rs_vs_industry"] = self._fetch_and_compute_rs_industry(kline_bundle, fundamentals)
@@ -1120,13 +1122,23 @@ class DataBackend:
                         data["grossprofit_margin"] = self._safe_float(row_f.get("grossprofit_margin"))
                         data["netprofit_margin"] = self._safe_float(row_f.get("netprofit_margin"))
                         data["debt_to_assets"] = self._safe_float(row_f.get("debt_to_assets"))
+                        data["current_ratio"] = self._safe_float(row_f.get("current_ratio"))
+                        data["quick_ratio"] = self._safe_float(row_f.get("quick_ratio"))
                         data["revenue_yoy"] = self._safe_float(row_f.get("tr_yoy"))
                         data["netprofit_yoy"] = self._safe_float(row_f.get("q_profit_yoy"))
                         data["eps"] = self._safe_float(row_f.get("eps"))
                         data["cfps"] = self._safe_float(row_f.get("cfps"))
                 except Exception:
                     pass
-                # 获取行业名称（用于RS vs行业分析）
+                # 获取行业名称（用于RS vs行业分析 + 同业对比）
+                if not data.get("industry"):
+                    try:
+                        _tushare_throttle()
+                        sb = pro.stock_basic(ts_code=ts_code, fields="industry")
+                        if sb is not None and not sb.empty:
+                            data["industry"] = str(sb.iloc[0]["industry"]).strip()
+                    except Exception:
+                        pass
                 if not data.get("industry"):
                     try:
                         import akshare as ak
@@ -1178,6 +1190,142 @@ class DataBackend:
             except Exception:
                 pass
         return data
+
+    def _fetch_peer_comparison(self, symbol: str, fundamentals: dict) -> dict[str, Any]:
+        """获取同行业 TOP5 公司关键指标，用于横向对比估值。
+        结果缓存到 output/cache/industry/{industry}_{date}.json。
+        """
+        industry = fundamentals.get("industry", "")
+        if not industry or not self._tushare_token:
+            return {}
+        import tushare as ts
+        from datetime import date
+        from pathlib import Path
+
+        today = date.today().isoformat()
+        cache_dir = Path("output/cache/industry")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_key = f"{industry}_{today}".replace("/", "_").replace(" ", "_")
+        cache_file = cache_dir / f"{cache_key}.json"
+
+        # 命中缓存直接返回
+        if cache_file.exists():
+            try:
+                cached = json.loads(cache_file.read_text(encoding="utf-8"))
+                if cached.get("peers"):
+                    return cached
+            except Exception:
+                pass
+
+        try:
+            _tushare_throttle()
+            ts.set_token(self._tushare_token)
+            pro = ts.pro_api(timeout=self._tushare_timeout)
+
+            # 1. 同行业股票列表
+            _tushare_throttle()
+            stock_list = pro.stock_basic(exchange="", list_status="L",
+                                         fields="ts_code,symbol,name,industry,market")
+            if stock_list is None or stock_list.empty:
+                return {}
+            peers_all = stock_list[
+                (stock_list["industry"] == industry)
+                & (~stock_list["name"].str.contains("ST", na=False))
+            ].copy()
+            if peers_all.empty:
+                return {}
+
+            # 2. 逐个拉取估值数据，按市值排序取 TOP5
+            ts_code_self = self._to_ts_code(symbol)
+            peer_basics = []
+            for _, pr in peers_all.head(30).iterrows():  # 最多查30家，取够5家即停
+                tc = pr["ts_code"]
+                if tc == ts_code_self:
+                    continue
+                try:
+                    _tushare_throttle()
+                    b = pro.daily_basic(ts_code=tc, limit=1,
+                                        fields="ts_code,pe_ttm,pb,total_mv")
+                    if b is not None and not b.empty:
+                        row = b.iloc[0]
+                        mv = self._safe_float(row.get("total_mv"))
+                        if mv and mv > 0:
+                            peer_basics.append({
+                                "ts_code": tc, "name": pr["name"],
+                                "pe_ttm": self._safe_float(row.get("pe_ttm")),
+                                "pb": self._safe_float(row.get("pb")),
+                                "total_mv": mv,
+                            })
+                except Exception:
+                    continue
+                if len(peer_basics) >= 10:  # 拉够10家用于排序
+                    break
+
+            if not peer_basics:
+                return {}
+
+            # 按市值排序取 TOP5
+            peer_basics.sort(key=lambda x: x.get("total_mv") or 0, reverse=True)
+            peers_top5 = peer_basics[:5]
+
+            # 3. 批量拉取财务指标
+            peers_data = []
+            for entry in peers_top5:
+                tc = entry["ts_code"]
+                try:
+                    _tushare_throttle()
+                    fina = pro.fina_indicator(ts_code=tc, limit=1)
+                    if fina is not None and not fina.empty:
+                        rf = fina.iloc[0]
+                        entry["roe"] = self._safe_float(rf.get("roe"))
+                        entry["revenue_yoy"] = self._safe_float(rf.get("tr_yoy"))
+                        entry["netprofit_yoy"] = self._safe_float(rf.get("q_profit_yoy"))
+                        entry["debt_to_assets"] = self._safe_float(rf.get("debt_to_assets"))
+                        entry["grossprofit_margin"] = self._safe_float(rf.get("grossprofit_margin"))
+                    peers_data.append(entry)
+                except Exception:
+                    peers_data.append(entry)  # 即使财务数据失败也保留基础估值
+
+            if not peers_data:
+                return {}
+
+            # 4. 计算行业均值（含目标股自身）
+            all_pe = [p["pe_ttm"] for p in peers_data if p.get("pe_ttm") and p["pe_ttm"] > 0]
+            all_roe = [p["roe"] for p in peers_data if p.get("roe") is not None]
+            all_rev = [p["revenue_yoy"] for p in peers_data if p.get("revenue_yoy") is not None]
+            # 加入自身数据计算行业均值
+            self_pe = self._safe_float(fundamentals.get("pe_ttm"))
+            if self_pe and self_pe > 0:
+                all_pe.append(self_pe)
+            self_roe = self._safe_float(fundamentals.get("roe"))
+            if self_roe is not None:
+                all_roe.append(self_roe)
+            self_rev = self._safe_float(fundamentals.get("revenue_yoy"))
+            if self_rev is not None:
+                all_rev.append(self_rev)
+
+            result = {
+                "industry": industry,
+                "date": today,
+                "peers": peers_data,
+                "industry_avg": {
+                    "pe_ttm": round(sum(all_pe) / len(all_pe), 2) if all_pe else None,
+                    "roe": round(sum(all_roe) / len(all_roe), 2) if all_roe else None,
+                    "revenue_yoy": round(sum(all_rev) / len(all_rev), 2) if all_rev else None,
+                },
+            }
+
+            # 写入缓存
+            try:
+                cache_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+
+            return result
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("peer comparison fetch failed: %s", e)
+            return {}
 
     def _fetch_margin_data(self, symbol: str) -> dict[str, Any]:
         """获取融资融券数据（最近20个交易日）。"""

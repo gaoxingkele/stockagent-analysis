@@ -201,11 +201,28 @@ class AnalystAgent:
         debt = f.get("debt_to_assets")
         if debt is not None:
             fund_parts.append(f"资产负债率={debt:.1f}%")
+        cr = f.get("current_ratio")
+        if cr is not None:
+            fund_parts.append(f"流动比率={cr:.2f}")
+        qr = f.get("quick_ratio")
+        if qr is not None:
+            fund_parts.append(f"速动比率={qr:.2f}")
         gm = f.get("grossprofit_margin")
         if gm is not None:
             fund_parts.append(f"毛利率={gm:.1f}%")
         if fund_parts:
             parts.append("基本面: " + " | ".join(fund_parts))
+        # 同业对比
+        peer = f.get("peer_comparison", {})
+        if peer.get("peers"):
+            ind_avg = peer.get("industry_avg", {})
+            peer_names = [p["name"] for p in peer["peers"][:5]]
+            peer_line = f"同业({peer.get('industry','')})TOP5: {', '.join(peer_names)}"
+            if ind_avg.get("pe_ttm"):
+                peer_line += f" | 行业PE均值={ind_avg['pe_ttm']:.1f}"
+            if ind_avg.get("roe"):
+                peer_line += f" | 行业ROE均值={ind_avg['roe']:.1f}%"
+            parts.append(peer_line)
         # 筹码分布
         chip = f.get("chip_distribution", {})
         if chip:
@@ -250,14 +267,17 @@ class AnalystAgent:
     # ------------------------------------------------------------------
     @staticmethod
     def _calc_fundamental_extra(f: dict) -> float:
-        """ROE/成长性/负债率评分偏差。"""
+        """ROE/成长性/负债率/流动性/同业相对估值评分偏差。"""
         bias = 0.0
+        # ── ROE ──
         roe = f.get("roe")
         if roe is not None:
             roe_v = float(roe)
             if roe_v > 20: bias += 8
-            elif roe_v > 10: bias += 4
+            elif roe_v > 15: bias += 5
+            elif roe_v > 10: bias += 3
             elif roe_v < 0: bias -= 6
+        # ── 成长性 ──
         rev_yoy = f.get("revenue_yoy")
         np_yoy = f.get("netprofit_yoy")
         if rev_yoy is not None and np_yoy is not None:
@@ -265,12 +285,40 @@ class AnalystAgent:
             if rv > 30 and nv > 30: bias += 10
             elif rv > 15 and nv > 15: bias += 5
             elif rv < -10 or nv < -20: bias -= 8
+        # ── 负债率 ──
         debt = f.get("debt_to_assets")
         if debt is not None:
             dv = float(debt)
             if dv > 80: bias -= 6
-            elif dv > 60: bias -= 3
+            elif dv > 70: bias -= 4
+            elif dv > 60: bias -= 2
             elif dv < 30: bias += 3
+        # ── 流动比率 ──
+        cr = f.get("current_ratio")
+        if cr is not None:
+            cv = float(cr)
+            if cv < 1.0: bias -= 4
+            elif cv < 1.5: bias -= 2
+            elif cv > 2.5: bias += 2
+        # ── 速动比率 ──
+        qr = f.get("quick_ratio")
+        if qr is not None:
+            qv = float(qr)
+            if qv < 0.8: bias -= 3
+            elif qv < 1.0: bias -= 1
+            elif qv > 1.5: bias += 2
+        # ── 同业相对估值 ──
+        peer = f.get("peer_comparison", {})
+        ind_avg = peer.get("industry_avg", {})
+        if ind_avg:
+            pe_self = f.get("pe_ttm")
+            pe_avg = ind_avg.get("pe_ttm")
+            if pe_self and pe_avg and pe_avg > 0 and pe_self > 0:
+                ratio = float(pe_self) / float(pe_avg)
+                if ratio < 0.6: bias += 6     # 远低于行业均值
+                elif ratio < 0.85: bias += 3  # 略低于行业
+                elif ratio > 1.5: bias -= 5   # 远高于行业
+                elif ratio > 1.2: bias -= 2   # 略高于行业
         return bias
 
     @staticmethod

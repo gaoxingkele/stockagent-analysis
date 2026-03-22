@@ -755,6 +755,165 @@ def _add_weighted_score_table(
 # ─────────────────────────────────────────────────────────────────
 #  行业竞争格局（来自 industry agent 研判）
 # ─────────────────────────────────────────────────────────────────
+def _add_financial_health_table(
+    flow: list,
+    result: dict[str, Any],
+    st_h: Any,
+    st_body: Any,
+    body_font: str,
+) -> None:
+    """财务健康度 + 成长性表格。"""
+    features = result.get("analysis_features", {})
+    debt = features.get("debt_to_assets")
+    cr = features.get("current_ratio")
+    qr = features.get("quick_ratio")
+    roe = features.get("roe")
+    gm = features.get("grossprofit_margin")
+    rev_yoy = features.get("revenue_yoy")
+    np_yoy = features.get("netprofit_yoy")
+    # 如果全部缺失则跳过
+    if all(v is None for v in [debt, cr, qr, roe, rev_yoy, np_yoy]):
+        return
+
+    flow.append(Paragraph("财务健康度与成长性", st_h))
+
+    def _fmt(v, suffix="%", decimals=1):
+        if v is None:
+            return "—"
+        return f"{float(v):.{decimals}f}{suffix}"
+
+    def _eval(v, good_range, warn_range, label_good="✅", label_warn="⚠️", label_bad="❌"):
+        if v is None:
+            return "—"
+        fv = float(v)
+        if good_range[0] <= fv <= good_range[1]:
+            return label_good
+        if warn_range[0] <= fv <= warn_range[1]:
+            return label_warn
+        return label_bad
+
+    hdr = [_cell("指标", body_font, bold=True), _cell("数值", body_font, bold=True),
+           _cell("安全线", body_font, bold=True), _cell("评价", body_font, bold=True)]
+    rows = [hdr]
+    if debt is not None:
+        rows.append([_cell("资产负债率", body_font), _cell(_fmt(debt), body_font),
+                      _cell("<60% 优 / >70% 危险", body_font),
+                      _cell(_eval(debt, (0, 50), (50, 70)), body_font)])
+    if cr is not None:
+        rows.append([_cell("流动比率", body_font), _cell(_fmt(cr, "", 2), body_font),
+                      _cell(">1.5 安全", body_font),
+                      _cell(_eval(cr, (1.5, 99), (1.0, 1.5)), body_font)])
+    if qr is not None:
+        rows.append([_cell("速动比率", body_font), _cell(_fmt(qr, "", 2), body_font),
+                      _cell(">1.0 安全", body_font),
+                      _cell(_eval(qr, (1.0, 99), (0.8, 1.0)), body_font)])
+    if roe is not None:
+        rows.append([_cell("ROE", body_font), _cell(_fmt(roe), body_font),
+                      _cell(">15% 优秀", body_font),
+                      _cell(_eval(roe, (15, 99), (8, 15)), body_font)])
+    if gm is not None:
+        rows.append([_cell("毛利率", body_font), _cell(_fmt(gm), body_font),
+                      _cell("行业相关", body_font), _cell("—", body_font)])
+    if rev_yoy is not None:
+        rows.append([_cell("营收增速(YoY)", body_font), _cell(_fmt(rev_yoy), body_font),
+                      _cell(">15% 良好", body_font),
+                      _cell(_eval(rev_yoy, (15, 999), (0, 15)), body_font)])
+    if np_yoy is not None:
+        rows.append([_cell("净利润增速(YoY)", body_font), _cell(_fmt(np_yoy), body_font),
+                      _cell(">20% 优秀", body_font),
+                      _cell(_eval(np_yoy, (20, 999), (0, 20)), body_font)])
+
+    col_w = [90, 70, 100, 50]
+    t = Table(rows, colWidths=col_w, repeatRows=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C3E50")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CCCCCC")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8F9FA")]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    flow.append(t)
+    flow.append(Spacer(1, 6))
+
+
+def _add_peer_comparison_table(
+    flow: list,
+    result: dict[str, Any],
+    st_h: Any,
+    st_body: Any,
+    body_font: str,
+) -> None:
+    """同业估值对比表（TOP5 + 目标股 + 行业均值）。"""
+    features = result.get("analysis_features", {})
+    peer = features.get("peer_comparison", {})
+    peers = peer.get("peers", [])
+    if not peers:
+        return
+
+    flow.append(Paragraph(f"同业估值对比（{peer.get('industry', '')}）", st_h))
+
+    def _f(v, d=1):
+        if v is None:
+            return "—"
+        return f"{float(v):.{d}f}"
+
+    hdr = [_cell(h, body_font, bold=True) for h in
+           ["公司", "PE(TTM)", "PB", "ROE%", "营收增速%", "利润增速%", "市值(亿)"]]
+    rows = [hdr]
+
+    # 目标股自身（高亮）
+    symbol_name = result.get("name", "目标股")
+    rows.append([
+        _cell(f"<b>{_esc(symbol_name)}</b>", body_font),
+        _cell(_f(features.get("pe_ttm")), body_font),
+        _cell(_f(features.get("pb")), body_font),
+        _cell(_f(features.get("roe")), body_font),
+        _cell(_f(features.get("revenue_yoy")), body_font),
+        _cell(_f(features.get("netprofit_yoy")), body_font),
+        _cell(_f(features.get("total_mv"), 0), body_font),
+    ])
+
+    # TOP5 同业
+    for p in peers[:5]:
+        rows.append([
+            _cell(_esc(p.get("name", "")), body_font),
+            _cell(_f(p.get("pe_ttm")), body_font),
+            _cell(_f(p.get("pb")), body_font),
+            _cell(_f(p.get("roe")), body_font),
+            _cell(_f(p.get("revenue_yoy")), body_font),
+            _cell(_f(p.get("netprofit_yoy")), body_font),
+            _cell(_f(p.get("total_mv"), 0), body_font),
+        ])
+
+    # 行业均值
+    ind_avg = peer.get("industry_avg", {})
+    if ind_avg:
+        rows.append([
+            _cell("<b>行业均值</b>", body_font),
+            _cell(_f(ind_avg.get("pe_ttm")), body_font),
+            _cell("—", body_font),
+            _cell(_f(ind_avg.get("roe")), body_font),
+            _cell(_f(ind_avg.get("revenue_yoy")), body_font),
+            _cell("—", body_font),
+            _cell("—", body_font),
+        ])
+
+    col_w = [70, 50, 40, 45, 55, 55, 55]
+    t = Table(rows, colWidths=col_w, repeatRows=1)
+    style_cmds = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C3E50")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CCCCCC")),
+        ("ROWBACKGROUNDS", (0, 2), (-1, -1), [colors.white, colors.HexColor("#F8F9FA")]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        # 目标股行高亮
+        ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#FFF3CD")),
+    ]
+    t.setStyle(TableStyle(style_cmds))
+    flow.append(t)
+    flow.append(Spacer(1, 6))
+
+
 def _add_industry_competition(
     flow: list,
     result: dict[str, Any],
@@ -1589,6 +1748,12 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
         ))
         flow.append(Paragraph(f"<b>Judge 仲裁：</b>{_esc(debate.get('judge_msg', ''))}", st_body))
         flow.append(Spacer(1, 6))
+
+    # ── 财务健康度与成长性 ──
+    _add_financial_health_table(flow, result, st_h, st_body, body_font)
+
+    # ── 同业估值对比 ──
+    _add_peer_comparison_table(flow, result, st_h, st_body, body_font)
 
     # ── 行业竞争格局 ──
     _add_industry_competition(flow, result, st_h, st_body, body_font)
