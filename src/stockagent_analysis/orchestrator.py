@@ -624,17 +624,28 @@ def run_analysis(
         )
         final_score = weighted_score / total_weight
     # ── v2: 辩论评分融合 ──
-    # 如果结构化辩论产出了 score_override, 以 40% 权重融入最终评分
-    _debate_score = debate_result_data.get("score_override")
-    if _debate_score is not None and 0 <= float(_debate_score) <= 100:
+    # 辩论返回的 score 是"对 decision 的置信度"，需要对齐到 0-100 看多量表：
+    #   decision=buy  → score 直接使用（高=看多）
+    #   decision=sell → 100 - score（高置信卖出 = 低看多分）
+    #   decision=hold → 固定 50（中性）
+    _debate_score_raw = debate_result_data.get("score_override")
+    _debate_decision = debate_result_data.get("decision", "").lower()
+    if _debate_score_raw is not None and 0 <= float(_debate_score_raw) <= 100:
+        _ds = float(_debate_score_raw)
+        if _debate_decision == "sell":
+            _debate_score_aligned = 100.0 - _ds  # sell+87 → 13（强烈看空）
+        elif _debate_decision == "buy":
+            _debate_score_aligned = _ds           # buy+80 → 80（看多）
+        else:
+            _debate_score_aligned = 50.0          # hold → 中性
         _debate_w = 0.40
         _weighted_score_before = final_score
-        final_score = final_score * (1.0 - _debate_w) + float(_debate_score) * _debate_w
+        final_score = final_score * (1.0 - _debate_w) + _debate_score_aligned * _debate_w
         manager_logger.info(
-            "debate score fusion: weighted=%.2f debate=%.2f → final=%.2f",
-            _weighted_score_before, _debate_score, final_score,
+            "debate score fusion: weighted=%.2f debate_raw=%s(%s) aligned=%.2f → final=%.2f",
+            _weighted_score_before, _debate_score_raw, _debate_decision, _debate_score_aligned, final_score,
         )
-        print(f"[辩论融合] 加权评分={_weighted_score_before:.1f} × 60% + 辩论评分={_debate_score} × 40% = {final_score:.1f}", flush=True)
+        print(f"[辩论融合] 加权评分={_weighted_score_before:.1f} × 60% + 辩论评分={_ds:.0f}({_debate_decision})→对齐={_debate_score_aligned:.0f} × 40% = {final_score:.1f}", flush=True)
 
     # 基于市场状态动态调整阈值
     _regime = analysis_context.get("features", {}).get("market_regime", {}).get("regime", "unknown")
