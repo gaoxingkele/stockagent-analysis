@@ -277,6 +277,59 @@ def config_weights(agents: list[dict]) -> dict[str, float]:
     return {k: v / total for k, v in weights.items()}
 
 
+def _fix_sniper_points(sp: dict, current_price: float | None) -> dict:
+    """后处理校验狙击点位，确保盈亏比>=2且止损距离合理。"""
+    if not sp or not current_price or current_price <= 0:
+        return sp
+
+    def _f(v):
+        try:
+            return float(v) if v is not None else 0.0
+        except (ValueError, TypeError):
+            return 0.0
+
+    buy = _f(sp.get("ideal_buy"))
+    sl = _f(sp.get("stop_loss"))
+    tp1 = _f(sp.get("take_profit_1"))
+    tp2 = _f(sp.get("take_profit_2"))
+    sec = _f(sp.get("secondary_buy"))
+
+    if buy <= 0:
+        buy = round(current_price * 0.97, 2)
+    if sl <= 0 or sl >= buy:
+        sl = round(buy * 0.95, 2)
+
+    risk = buy - sl  # 止损距离
+
+    # 约束1: 止损距买点不超过10%
+    max_risk = buy * 0.10
+    if risk > max_risk:
+        sl = round(buy - max_risk, 2)
+        risk = max_risk
+
+    # 约束2: 盈亏比 >= 2
+    if risk > 0:
+        min_tp1 = buy + risk * 2
+        if tp1 < min_tp1:
+            tp1 = round(min_tp1, 2)
+        # tp2 至少比 tp1 高一个 risk
+        if tp2 <= tp1:
+            tp2 = round(tp1 + risk, 2)
+
+    # 约束3: secondary_buy 在 buy 和 sl 之间
+    if sec <= 0 or sec >= buy:
+        sec = round((buy + sl) / 2, 2)
+    if sec <= sl:
+        sec = round(sl + (buy - sl) * 0.3, 2)
+
+    sp["ideal_buy"] = buy
+    sp["secondary_buy"] = sec
+    sp["stop_loss"] = sl
+    sp["take_profit_1"] = tp1
+    sp["take_profit_2"] = tp2
+    return sp
+
+
 def generate_scenario_and_position(
     router: Any,
     symbol: str,
@@ -306,7 +359,9 @@ def generate_scenario_and_position(
         f' "position_advice": {{"no_position": "空仓者操作建议（1-2句）",'
         f' "has_position": "持仓者操作建议（1-2句）",'
         f' "position_ratio": "建议仓位比例如50%"}}}}\n'
-        f"注意：价格必须为数字，不要加单位。"
+        f"注意：价格必须为数字，不要加单位。\n"
+        f"【盈亏比硬约束】止盈距买点的距离 必须 >= 止损距买点距离的2倍，即 (take_profit_1 - ideal_buy) >= 2 * (ideal_buy - stop_loss)。"
+        f"止损距买点不应超过买点的10%。如果找不到合理的止损位，宁可缩小止损距离也要保证盈亏比>=2。"
     )
     try:
         text = router._chat(prompt, multi_turn=True)
@@ -336,6 +391,7 @@ def generate_scenario_and_position(
             if isinstance(obj, dict):
                 scenarios = obj.get("scenarios", {})
                 sniper_points = obj.get("sniper_points", {})
+                sniper_points = _fix_sniper_points(sniper_points, current_price)
                 position_strategy = str(obj.get("position_strategy", ""))
                 position_advice = obj.get("position_advice", {})
                 return scenarios, sniper_points, position_strategy, position_advice

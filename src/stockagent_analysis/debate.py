@@ -75,6 +75,59 @@ def _safe_chat(router: LLMRouter, prompt: str, label: str) -> str:
         return ""
 
 
+def _safe_chat_multi_agent(router: LLMRouter, prompt: str, label: str) -> str:
+    """通过 Grok Multi-Agent API (/v1/responses) 调用，16路推理线程并行分析。"""
+    try:
+        sys_msg = "你是一位专业的中国股市投资委员会主席，请基于团队分析和辩论内容做出客观决策。"
+        text = router.chat_multi_agent(prompt, system_message=sys_msg)
+        return (text or "").strip()
+    except Exception as e:
+        logger.warning("[辩论] %s multi-agent调用失败: %s", label, e)
+        return ""
+
+
+def _chat_for_json(
+    routers: list[LLMRouter],
+    prompt: str,
+    label: str,
+    max_retries: int = 2,
+    use_multi_agent: bool = False,
+) -> dict:
+    """调用LLM获取JSON结果，失败时重试同一provider，再切换备用provider。
+    use_multi_agent=True时，优先尝试 Grok Multi-Agent API，失败后降级到普通模式。
+    """
+    # ── Multi-Agent 优先尝试 ──
+    if use_multi_agent and routers:
+        grok_router = next((r for r in routers if getattr(r, "provider", "") == "grok"), routers[0])
+        for attempt in range(2):
+            text = _safe_chat_multi_agent(grok_router, prompt, f"{label}(multi-agent #{attempt+1})")
+            if not text:
+                continue
+            result = _extract_json(text)
+            if result and result.get("decision"):
+                logger.info("[辩论] %s multi-agent JSON解析成功 (attempt=%d)", label, attempt + 1)
+                return result
+            logger.warning("[辩论] %s multi-agent JSON解析失败 (attempt=%d), 原文: %s",
+                           label, attempt + 1, text[:200])
+        logger.info("[辩论] %s multi-agent 失败, 降级到普通模式", label)
+
+    # ── 普通模式：逐个 provider 重试 ──
+    for idx, router in enumerate(routers):
+        provider_name = getattr(router, "provider", f"router_{idx}")
+        for attempt in range(max_retries):
+            text = _safe_chat(router, prompt, f"{label}({provider_name} #{attempt+1})")
+            if not text:
+                continue
+            result = _extract_json(text)
+            if result and result.get("decision"):
+                logger.info("[辩论] %s JSON解析成功 (provider=%s attempt=%d)", label, provider_name, attempt + 1)
+                return result
+            logger.warning("[辩论] %s JSON解析失败 (provider=%s attempt=%d), 原文: %s",
+                           label, provider_name, attempt + 1, text[:200])
+        logger.info("[辩论] %s provider=%s 重试耗尽, 尝试下一个", label, provider_name)
+    return {}
+
+
 # ────────────────────────────────────────────────
 # Phase 1: 团队汇报
 # ────────────────────────────────────────────────
@@ -196,8 +249,11 @@ def run_arbitration(
     symbol: str,
     name: str,
     current_price: float,
+    fallback_routers: list[LLMRouter] | None = None,
+    use_multi_agent: bool = False,
 ) -> dict:
-    """Phase 3: 仲裁者综合辩论, 给出投资计划。"""
+    """Phase 3: 仲裁者综合辩论, 给出投资计划。
+    use_multi_agent=True 时优先用 Grok Multi-Agent (16路推理) 做仲裁。"""
     reports_block = "\n".join(
         f"【{TEAM_NAMES[k][0]}报告】\n{v}" for k, v in team_reports.items()
     )
@@ -215,12 +271,15 @@ def run_arbitration(
         f' "stop_loss": 止损价格,'
         f' "confidence": 0到1的置信度,'
         f' "reasoning": "2-3句核心理由"}}\n\n'
-        f"必须给出具体的 target_price 和 stop_loss 数值。"
+        f"必须给出具体的 target_price 和 stop_loss 数值。\n"
+        f"【盈亏比硬约束】(target_price - 当前价) >= 2 * (当前价 - stop_loss)，止损距当前价不超过10%。\n"
+        f"注意：只输出JSON，不要添加其他内容。"
     )
-    text = _safe_chat(router, prompt, "仲裁决策")
-    result = _extract_json(text)
+    routers = [router] + (fallback_routers or [])
+    result = _chat_for_json(routers, prompt, "仲裁决策", use_multi_agent=use_multi_agent)
     if not result:
-        result = {"decision": "hold", "score": 50, "reasoning": text[:200] if text else "仲裁失败"}
+        result = {"decision": "hold", "score": 50, "reasoning": "仲裁JSON解析全部失败"}
+        logger.warning("[辩论] 仲裁所有provider均解析失败, 使用默认 hold/50")
     logger.info("[辩论] 仲裁完成: decision=%s score=%s", result.get("decision"), result.get("score"))
     return result
 
@@ -235,8 +294,10 @@ def run_risk_assessment(
     team_reports: dict[str, str],
     symbol: str,
     name: str,
+    fallback_routers: list[LLMRouter] | None = None,
+    use_multi_agent: bool = False,
 ) -> dict:
-    """Phase 4: 激进/保守/中立三方风险评估 → 风险经理最终决策。"""
+    """Phase 4: 激进/保守/中立三方风险评估 → 风险经理最终决策。JSON解析失败时重试+切换provider。"""
     arb_block = json.dumps(arbitration_result, ensure_ascii=False, indent=2)
     reports_block = "\n".join(
         f"【{TEAM_NAMES[k][0]}】{v[:150]}" for k, v in team_reports.items()
@@ -258,7 +319,7 @@ def run_risk_assessment(
     )
     conservative = _safe_chat(router, conservative_prompt, "保守派")
 
-    # 风险经理仲裁
+    # 风险经理仲裁 — 使用重试+切换provider
     risk_prompt = (
         f"你是{symbol} {name}的风险经理。综合以下三方意见做出最终风险评估:\n\n"
         f"【投资计划】\n{arb_block}\n\n"
@@ -270,13 +331,16 @@ def run_risk_assessment(
         f' "risk_score": 0到1(越高风险越大),'
         f' "target_price": 风险调整后目标价,'
         f' "stop_loss": 风险调整后止损价,'
-        f' "reasoning": "2-3句核心理由"}}'
+        f' "reasoning": "2-3句核心理由"}}\n'
+        f"【盈亏比硬约束】(target_price - 当前价) >= 2 * (当前价 - stop_loss)，止损距当前价不超过10%。\n"
+        f"注意：只输出JSON，不要添加其他内容。"
     )
-    text = _safe_chat(router, risk_prompt, "风险经理")
-    result = _extract_json(text)
+    routers = [router] + (fallback_routers or [])
+    result = _chat_for_json(routers, risk_prompt, "风险经理", use_multi_agent=use_multi_agent)
     if not result:
         result = arbitration_result.copy()
         result["risk_score"] = 0.5
+        logger.warning("[辩论] 风险评估所有provider均解析失败, 继承仲裁结果")
     result["_aggressive"] = aggressive
     result["_conservative"] = conservative
     logger.info("[辩论] 风险评估完成: decision=%s risk=%s", result.get("decision"), result.get("risk_score"))
@@ -294,6 +358,8 @@ def run_structured_debate(
     name: str,
     current_price: float,
     debate_rounds: int = 1,
+    fallback_routers: list[LLMRouter] | None = None,
+    use_multi_agent: bool = False,
 ) -> DebateResult:
     """运行完整结构化辩论流程。
 
@@ -304,6 +370,8 @@ def run_structured_debate(
         name: 股票名称
         current_price: 当前价格
         debate_rounds: 辩论轮次 (默认1轮)
+        fallback_routers: 备用LLMRouter列表, JSON解析失败时依次切换
+        use_multi_agent: 仲裁阶段使用 Grok Multi-Agent (16路推理并行)
 
     Returns:
         DebateResult 包含最终决策、辩论记录等
@@ -322,16 +390,21 @@ def run_structured_debate(
     )
     result.debate_transcript = transcript
 
-    # Phase 3: 仲裁
-    logger.info("[辩论] Phase 3: 仲裁")
+    # Phase 3: 仲裁 (multi-agent 或 普通模式)
+    _mode = "multi-agent" if use_multi_agent else "普通"
+    logger.info("[辩论] Phase 3: 仲裁 (模式=%s)", _mode)
     arb_result = run_arbitration(
-        router, team_reports, transcript, symbol, name, current_price
+        router, team_reports, transcript, symbol, name, current_price,
+        fallback_routers=fallback_routers,
+        use_multi_agent=use_multi_agent,
     )
 
-    # Phase 4: 风险评估
-    logger.info("[辩论] Phase 4: 风险评估")
+    # Phase 4: 风险评估 (multi-agent 或 普通模式)
+    logger.info("[辩论] Phase 4: 风险评估 (模式=%s)", _mode)
     risk_result = run_risk_assessment(
-        router, arb_result, team_reports, symbol, name
+        router, arb_result, team_reports, symbol, name,
+        fallback_routers=fallback_routers,
+        use_multi_agent=use_multi_agent,
     )
 
     # 填充最终结果

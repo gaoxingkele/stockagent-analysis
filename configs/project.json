@@ -8,6 +8,7 @@
   ],
   "debate_rounds": 2,
   "structured_debate": true,
+  "debate_multi_agent": false,
   "news_enhance": true,
   "decision_threshold_buy": 70,
   "decision_threshold_sell": 50,
@@ -35,16 +36,17 @@
       "gemini"
     ],
     "default_providers": [
-      "grok",
+      "minmax",
       "doubao",
-      "deepseek"
+      "claude",
+      "openai"
     ],
     "candidate_providers": [
-      "gemini",
+      "grok",
       "kimi",
-      "minmax",
-      "qwen",
-      "glm"
+      "deepseek",
+      "glm",
+      "qwen"
     ],
     "supported_providers": [
       "kimi",

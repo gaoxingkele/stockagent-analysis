@@ -228,11 +228,26 @@ def run_analysis(
 
     provider = default_providers[0] if default_providers else "kimi"
 
-    # 过滤：只保留有API_KEY的Provider
-    default_providers = [p for p in default_providers if os.getenv(f"{p.upper()}_API_KEY", "").strip()]
+    # 过滤：只保留有API_KEY的Provider（Cloubic桥接的provider用CLOUBIC_API_KEY即可）
+    from core.router import _should_route_via_cloubic
+    cloubic_key = os.getenv("CLOUBIC_API_KEY", "").strip()
+
+    def _has_api_key(p: str) -> bool:
+        """检查provider是否有可用的API Key。"""
+        # Claude 的环境变量是 ANTHROPIC_API_KEY，特殊映射
+        key_map = {"claude": "ANTHROPIC_API_KEY"}
+        env_key = key_map.get(p.lower(), f"{p.upper()}_API_KEY")
+        if os.getenv(env_key, "").strip():
+            return True
+        # Cloubic 桥接的 provider，有 CLOUBIC_API_KEY 即可
+        if _should_route_via_cloubic(p) and cloubic_key:
+            return True
+        return False
+
+    default_providers = [p for p in default_providers if _has_api_key(p)]
     candidate_providers = [
         p for p in candidate_providers_cfg
-        if p not in default_providers and os.getenv(f"{p.upper()}_API_KEY", "").strip()
+        if p not in default_providers and _has_api_key(p)
     ]
 
     # 全部Provider = 默认 + 候选，都启动子任务
@@ -286,8 +301,8 @@ def run_analysis(
     integrity = analysis_context.get("data_integrity", {})
     is_complete = bool(integrity.get("is_complete", False))
     failed_items = integrity.get("failed_items", [])
-    # day/week 必须；month 缺失可降级继续
-    only_optional_missing = set(failed_items) <= {"month"}
+    # day 必须；week/month 缺失可降级继续（新股/北交所数据源不全时）
+    only_optional_missing = set(failed_items) <= {"month", "week"}
     if not is_complete and not only_optional_missing:
         err_msg = f"数据获取失败，缺失项: {', '.join(failed_items) if failed_items else '基础数据'}"
         manager_logger.warning("data_integrity_incomplete=%s; terminate_no_llm_no_report", integrity)
@@ -452,7 +467,9 @@ def run_analysis(
         _debate_provider = project_cfg.get("llm", {}).get("debate_provider") or next(iter(llm_routers), None)
         _debate_router = llm_routers.get(_debate_provider) if _debate_provider else None
         if _debate_router:
-            print(f"[辩论] 启动结构化辩论 (provider={_debate_provider})", flush=True)
+            _use_multi_agent = bool(project_cfg.get("debate_multi_agent", False))
+            _mode_tag = "multi-agent" if _use_multi_agent else "普通"
+            print(f"[辩论] 启动结构化辩论 (provider={_debate_provider}, 仲裁={_mode_tag})", flush=True)
             pipeline.advance("结构化辩论")
             _current_price = float(analysis_context.get("snapshot", {}).get("close", 0) or 0)
             _debate_subs = [
@@ -463,10 +480,17 @@ def run_analysis(
                 }
                 for r in submissions
             ]
+            # 构建备用router列表: 排除主辩论provider, 优先用gemini/minmax等
+            _fallback_routers = [
+                r for p, r in llm_routers.items()
+                if p != _debate_provider
+            ]
             try:
                 _dr = run_structured_debate(
                     _debate_router, _debate_subs, symbol, name,
                     _current_price, debate_rounds=1,
+                    fallback_routers=_fallback_routers,
+                    use_multi_agent=_use_multi_agent,
                 )
                 debate_result_data = {
                     "decision": _dr.decision,

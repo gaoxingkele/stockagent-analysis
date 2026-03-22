@@ -132,6 +132,98 @@ class DataBackend:
             self._tdx_reader_ok = False
             return None
 
+    def _read_tdx_bj_daily(self, symbol: str):
+        """直接解析北交所 vipdoc/bj/lday/bj{symbol}.day 二进制文件（mootdx不支持bj市场）。
+        TDX .day 格式：每条32字节 = date(u4) open(u4) high(u4) low(u4) close(u4) amount_fen(u4) volume(u4) reserved(u4)
+        """
+        import struct
+        import datetime as _dt
+        import pandas as pd
+
+        tdx_dir = os.getenv("TDX_DIR", "D:/tdx")
+        day_path = os.path.join(tdx_dir, "vipdoc", "bj", "lday", f"bj{symbol}.day")
+        if not os.path.isfile(day_path):
+            return None
+        records = []
+        try:
+            with open(day_path, "rb") as f:
+                while True:
+                    data = f.read(32)
+                    if len(data) < 32:
+                        break
+                    fields = struct.unpack("<8I", data)
+                    date_int = fields[0]
+                    year, month, day = date_int // 10000, (date_int % 10000) // 100, date_int % 100
+                    try:
+                        dt = _dt.date(year, month, day)
+                    except ValueError:
+                        continue
+                    records.append({
+                        "date": dt,
+                        "open": fields[1] / 100.0,
+                        "high": fields[2] / 100.0,
+                        "low": fields[3] / 100.0,
+                        "close": fields[4] / 100.0,
+                        "amount": fields[5] / 100.0,
+                        "volume": fields[6],
+                    })
+        except Exception:
+            return None
+        if not records:
+            return None
+        df = pd.DataFrame(records)
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.set_index("date")
+        return df
+
+    def _read_tdx_bj_fzline(self, symbol: str):
+        """直接解析北交所 vipdoc/bj/fzline/bj{symbol}.lc5（5分钟线）。
+        TDX .lc5 格式：每条32字节 = date(H) time(H) open(f) high(f) low(f) close(f) amount(f) volume(I)
+        """
+        import struct
+        import datetime as _dt
+        import pandas as pd
+
+        tdx_dir = os.getenv("TDX_DIR", "D:/tdx")
+        lc5_path = os.path.join(tdx_dir, "vipdoc", "bj", "fzline", f"bj{symbol}.lc5")
+        if not os.path.isfile(lc5_path):
+            return None
+        records = []
+        try:
+            with open(lc5_path, "rb") as f:
+                while True:
+                    data = f.read(32)
+                    if len(data) < 32:
+                        break
+                    fields = struct.unpack("<HHfffffI", data)
+                    date_raw, time_raw = fields[0], fields[1]
+                    year = (date_raw >> 11) + 2004
+                    month = (date_raw >> 7) & 0x0F
+                    day = date_raw & 0x1F
+                    hour = time_raw // 60
+                    minute = time_raw % 60
+                    try:
+                        dt = _dt.datetime(year, month, day, hour, minute)
+                    except ValueError:
+                        continue
+                    records.append({
+                        "date": dt,
+                        "open": round(fields[2], 2),
+                        "high": round(fields[3], 2),
+                        "low": round(fields[4], 2),
+                        "close": round(fields[5], 2),
+                        "amount": round(fields[6], 2),
+                        "volume": fields[7],
+                    })
+        except Exception:
+            return None
+        if not records:
+            return None
+        df = pd.DataFrame(records)
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.set_index("date")
+        return df
+
     def fetch_snapshot(self, symbol: str, name: str, preferred_sources: list[str] | None = None) -> MarketSnapshot:
         symbol = self._clean_symbol(symbol)
         sources = list(preferred_sources or self.default_sources)
@@ -203,6 +295,34 @@ class DataBackend:
                 if _patched is not None and len(_patched) > len(_day_df):
                     kline_bundle["day"]["df"] = _patched
                     kline_bundle["day"]["rows"] = len(_patched)
+        # ── 降级：week/month 全部失败但 day 成功时，从日线 resample 生成 ──
+        import pandas as pd
+        _day_ok = kline_bundle.get("day", {}).get("ok", False)
+        _day_df_for_resample = kline_bundle.get("day", {}).get("df")
+        if _day_ok and _day_df_for_resample is not None and not _day_df_for_resample.empty:
+            for _resample_tf, _resample_rule in [("week", "W-FRI"), ("month", "ME")]:
+                if not kline_bundle.get(_resample_tf, {}).get("ok", False):
+                    try:
+                        _rdf = _day_df_for_resample.copy()
+                        _rdf["_dt"] = pd.to_datetime(_rdf["ts"])
+                        _rdf = _rdf.set_index("_dt").resample(_resample_rule).agg(
+                            {"open": "first", "high": "max", "low": "min", "close": "last",
+                             "volume": "sum", "amount": "sum"}
+                        ).dropna().reset_index()
+                        if len(_rdf) >= 3:
+                            _rdf.rename(columns={"_dt": "ts"}, inplace=True)
+                            _rdf["ts"] = pd.to_datetime(_rdf["ts"]).dt.strftime("%Y-%m-%d")
+                            _rdf["pct_chg"] = _rdf["close"].pct_change().fillna(0.0) * 100
+                            kline_bundle[_resample_tf] = {
+                                "ok": True, "partial": True, "df": _rdf,
+                                "rows": len(_rdf), "source": "resample_from_day",
+                                "attempts": 0, "error": None,
+                            }
+                            import logging
+                            logging.getLogger(__name__).info(
+                                "%s kline resampled from day: %d rows", _resample_tf, len(_rdf))
+                    except Exception:
+                        pass
         for tf, item in kline_bundle.items():
             (kline_dir / f"{tf}.meta.json").write_text(
                 json.dumps(
@@ -490,6 +610,9 @@ class DataBackend:
 
         if timeframe in ("day", "week", "month"):
             df = reader.daily(symbol=symbol)
+            # mootdx 不识别北交所 bj/ 目录，手动读取
+            if (df is None or df.empty) and symbol.startswith(("8", "4", "9")):
+                df = self._read_tdx_bj_daily(symbol)
             if df is None or df.empty:
                 raise RuntimeError(f"tdx_{timeframe}_no_data")
 
@@ -516,6 +639,9 @@ class DataBackend:
 
         elif timeframe == "1h":
             df_min = reader.minute(symbol=symbol, suffix=1)
+            # mootdx 不识别北交所，尝试读 bj/fzline (5分钟线)
+            if (df_min is None or df_min.empty) and symbol.startswith(("8", "4", "9")):
+                df_min = self._read_tdx_bj_fzline(symbol)
             if df_min is None or df_min.empty:
                 raise RuntimeError("tdx_1h_no_minute_data")
 
@@ -727,7 +853,12 @@ class DataBackend:
             # 东财失败时尝试腾讯数据源（gu.qq.com，可规避代理对东财的拦截）
             if raw is None or raw.empty:
                 try:
-                    ts_symbol = f"sz{symbol}" if symbol.startswith(("0", "3")) else f"sh{symbol}"
+                    if symbol.startswith(("0", "3")):
+                        ts_symbol = f"sz{symbol}"
+                    elif symbol.startswith(("8", "4", "9")):
+                        ts_symbol = f"bj{symbol}"
+                    else:
+                        ts_symbol = f"sh{symbol}"
                     raw = ak.stock_zh_a_hist_tx(symbol=ts_symbol, adjust="")
                     if raw is not None and not raw.empty and timeframe in {"week", "month"}:
                         raw = raw.copy()
@@ -765,7 +896,12 @@ class DataBackend:
         # 东财失败时尝试新浪备选（finance.sina.com.cn，不同数据源）
         if raw is None or raw.empty:
             try:
-                sina_symbol = f"sz{symbol}" if symbol.startswith(("0", "3")) else f"sh{symbol}"
+                if symbol.startswith(("0", "3")):
+                    sina_symbol = f"sz{symbol}"
+                elif symbol.startswith(("8", "4", "9")):
+                    sina_symbol = f"bj{symbol}"
+                else:
+                    sina_symbol = f"sh{symbol}"
                 raw = ak.stock_zh_a_minute(symbol=sina_symbol, period=period, adjust="")
                 if raw is not None and not raw.empty:
                     raw["day"] = raw["day"].astype(str)
@@ -859,7 +995,12 @@ class DataBackend:
         if timeframe != "day":
             raise RuntimeError("tencent_kline_only_daily")
 
-        market_code = f"sh{symbol}" if symbol.startswith("6") else f"sz{symbol}"
+        if symbol.startswith("6"):
+            market_code = f"sh{symbol}"
+        elif symbol.startswith(("8", "4", "9")):
+            market_code = f"bj{symbol}"
+        else:
+            market_code = f"sz{symbol}"
         start_date = (datetime.now() - timedelta(days=limit * 2)).strftime("%Y-%m-%d")
         url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
         params = f"param={market_code},day,{start_date},,{limit},qfq&_var=kline_dayqfq&r={time.time()}"
@@ -3568,7 +3709,12 @@ class DataBackend:
         import urllib.request
         import json as _json
 
-        prefix = "sz" if symbol.startswith(("0", "3")) else "sh"
+        if symbol.startswith(("0", "3")):
+            prefix = "sz"
+        elif symbol.startswith(("8", "4", "9")):
+            prefix = "bj"
+        else:
+            prefix = "sh"
         url = f"http://web.sqt.gtimg.cn/q={prefix}{symbol}"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=8) as resp:
@@ -3627,7 +3773,12 @@ class DataBackend:
             return None  # 今天的bar已存在
 
         try:
-            prefix = "sz" if symbol.startswith(("0", "3")) else "sh"
+            if symbol.startswith(("0", "3")):
+                prefix = "sz"
+            elif symbol.startswith(("8", "4", "9")):
+                prefix = "bj"
+            else:
+                prefix = "sh"
             url = f"http://web.sqt.gtimg.cn/q={prefix}{symbol}"
             import urllib.request
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -3680,6 +3831,6 @@ class DataBackend:
         s = DataBackend._clean_symbol(symbol)
         if s.startswith("6"):
             return f"{s}.SH"
-        if s.startswith("8") or s.startswith("4"):
+        if s.startswith(("8", "4", "9")):
             return f"{s}.BJ"
         return f"{s}.SZ"
