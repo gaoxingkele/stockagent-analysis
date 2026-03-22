@@ -1,0 +1,17 @@
+{
+  "agent_id": "deriv_margin_agent",
+  "agent_type": "analyst",
+  "dim_code": "DERIV_MARGIN",
+  "name": "融资融券Agent",
+  "role": "融资融券与北向资金分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.05,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tushare", "akshare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["融资余额变化", "北向资金持仓变化"]
+  },
+  "llm_base_weight": 0.30
+}

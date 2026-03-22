@@ -7,6 +7,9 @@
     "sell"
   ],
   "debate_rounds": 2,
+  "structured_debate": true,
+  "debate_multi_agent": false,
+  "news_enhance": true,
   "decision_threshold_buy": 70,
   "decision_threshold_sell": 50,
   "multi_model_weight_mode": true,
@@ -24,6 +27,7 @@
   "llm": {
     "enabled": true,
     "default_provider": "grok",
+    "debate_provider": "grok",
     "multi_eval_providers": [
       "grok"
     ],
@@ -32,16 +36,17 @@
       "gemini"
     ],
     "default_providers": [
-      "grok",
-      "qwen",
-      "deepseek"
-    ],
-    "candidate_providers": [
-      "gemini",
-      "kimi",
       "minmax",
       "doubao",
-      "glm"
+      "claude",
+      "openai"
+    ],
+    "candidate_providers": [
+      "grok",
+      "kimi",
+      "deepseek",
+      "glm",
+      "qwen"
     ],
     "supported_providers": [
       "kimi",

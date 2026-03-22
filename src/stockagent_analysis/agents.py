@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""v2 Agent体系：12个精简Agent，差异化评分公式。
+
+合并前29个Agent → 12个真正独立的分析维度，每个维度有独立的量化逻辑。
+"""
 from __future__ import annotations
 
 import os
@@ -44,6 +48,10 @@ class AgentBaseResult:
     vision_prompt: str | None = None
 
 
+# ---------------------------------------------------------------------------
+# Base Agent
+# ---------------------------------------------------------------------------
+
 class AnalystAgent:
     def __init__(
         self,
@@ -65,7 +73,6 @@ class AnalystAgent:
         self.llm_routers = llm_routers or {}
 
     def _build_snapshot(self, symbol: str, name: str, ctx: dict[str, Any]) -> MarketSnapshot:
-        """从 analysis_context 构建 MarketSnapshot，或从后端获取。"""
         ctx_snap = ctx.get("snapshot", {})
         if ctx_snap:
             return MarketSnapshot(
@@ -85,7 +92,6 @@ class AnalystAgent:
         name: str,
         analysis_context: dict[str, Any] | None = None,
     ) -> AgentBaseResult:
-        """本地策略分析（无LLM调用），返回 AgentBaseResult 供并行Provider执行使用。"""
         ctx = analysis_context or {}
         snap = self._build_snapshot(symbol, name, ctx)
         vote, score_0_100, confidence, reason = self._simple_policy(snap, ctx)
@@ -132,9 +138,11 @@ class AnalystAgent:
         self._submit(result, snap, ctx)
         return result
 
+    # ------------------------------------------------------------------
+    # 通用数据上下文（供LLM参考）
+    # ------------------------------------------------------------------
     @staticmethod
     def _build_data_context(ctx: dict[str, Any]) -> str:
-        """从 analysis_context 构建供大模型参考的本地数据摘要（控制长度）。"""
         parts = []
         snap = ctx.get("snapshot", {})
         if snap:
@@ -198,7 +206,7 @@ class AnalystAgent:
             fund_parts.append(f"毛利率={gm:.1f}%")
         if fund_parts:
             parts.append("基本面: " + " | ".join(fund_parts))
-        # 筹码分布上下文
+        # 筹码分布
         chip = f.get("chip_distribution", {})
         if chip:
             parts.append(
@@ -208,7 +216,7 @@ class AnalystAgent:
                 f"平均成本{chip.get('avg_cost', 'N/A')} | "
                 f"健康度{chip.get('health_score', 'N/A')}"
             )
-        # 市场策略上下文
+        # 市场策略
         strategy = f.get("market_strategy", {})
         if strategy:
             parts.append(
@@ -228,18 +236,21 @@ class AnalystAgent:
         if not llm_evals:
             return fallback
         parts = []
-        for p in ("grok", "gemini", "kimi"):
+        for p in ("grok", "gemini", "kimi", "deepseek", "glm"):
             if p in llm_evals:
                 short = llm_evals[p].replace("\n", " ").strip()
                 parts.append(f"{p}: {short[:90]}")
         if not parts:
             for p, txt in llm_evals.items():
                 parts.append(f"{p}: {txt.replace(chr(10), ' ')[:90]}")
-        return "综合评价（grok+gemini+kimi）：" + "；".join(parts)
+        return "综合评价：" + "；".join(parts)
 
+    # ------------------------------------------------------------------
+    # 辅助评分函数
+    # ------------------------------------------------------------------
     @staticmethod
     def _calc_fundamental_extra(f: dict) -> float:
-        """基于ROE/成长性/负债率计算额外基本面评分偏差。"""
+        """ROE/成长性/负债率评分偏差。"""
         bias = 0.0
         roe = f.get("roe")
         if roe is not None:
@@ -264,30 +275,25 @@ class AnalystAgent:
 
     @staticmethod
     def _calc_margin_hsgt_bias(f: dict) -> float:
-        """基于融资融券和北向资金计算DERIV_MARGIN偏差。"""
+        """融资融券和北向资金偏差。"""
         bias = 0.0
         margin = f.get("margin_data", {})
         rzye_5d = float(margin.get("rzye_change_5d") or 0)
-        if rzye_5d > 5:
-            bias += 6
-        elif rzye_5d < -5:
-            bias -= 6
-        elif rzye_5d > 2:
-            bias += 3
-        elif rzye_5d < -2:
-            bias -= 3
+        if rzye_5d > 5: bias += 6
+        elif rzye_5d < -5: bias -= 6
+        elif rzye_5d > 2: bias += 3
+        elif rzye_5d < -2: bias -= 3
         hsgt = f.get("hsgt_data", {})
         hk_chg = float(hsgt.get("hk_hold_change_pct") or 0)
-        if hk_chg > 3:
-            bias += 5
-        elif hk_chg < -3:
-            bias -= 5
-        elif hk_chg > 1:
-            bias += 2
-        elif hk_chg < -1:
-            bias -= 2
+        if hk_chg > 3: bias += 5
+        elif hk_chg < -3: bias -= 5
+        elif hk_chg > 1: bias += 2
+        elif hk_chg < -1: bias -= 2
         return bias
 
+    # ------------------------------------------------------------------
+    # v2 差异化评分公式
+    # ------------------------------------------------------------------
     def _simple_policy(self, snap: MarketSnapshot, analysis_context: dict[str, Any]) -> tuple[str, float, float, str]:
         f = analysis_context.get("features", {})
         pct = float(f.get("pct_chg", snap.pct_chg or 0.0))
@@ -300,179 +306,289 @@ class AnalystAgent:
         pe = f.get("pe_ttm")
         pb = f.get("pb")
         turn = f.get("turnover_rate")
-
-        # ── 新闻情绪截断：原始值可能 -100~100，截断至 ±10 避免单因子主导 ──
+        kli = f.get("kline_indicators", {})
         news_c = max(-10.0, min(10.0, news * 0.10))
 
-        # ── PE/PB 多级偏差（放大信号，增加估值区分度） ──
+        score = self._calc_dim_score(
+            pct, mom, vol, dd, vr, trend, news_c, pe, pb, turn, kli, f
+        )
+        score = max(0.0, min(100.0, score))
+
+        data_quality = float(f.get("data_quality_score", 0.6))
+        confidence = 0.45 + 0.45 * data_quality
+        if snap.source == "mock":
+            confidence -= 0.18
+        confidence = max(0.1, min(0.98, confidence))
+        if score >= 70:
+            return "buy", score, confidence, f"{self.role}({self.dim_code})：偏强，评分{score:.1f}"
+        if score < 50:
+            return "sell", score, confidence, f"{self.role}({self.dim_code})：偏弱，评分{score:.1f}"
+        return "hold", score, confidence, f"{self.role}({self.dim_code})：中性，评分{score:.1f}"
+
+    def _calc_dim_score(self, pct, mom, vol, dd, vr, trend, news_c, pe, pb, turn, kli, f) -> float:
+        """按 dim_code 分发到对应评分公式。子类可覆盖此方法。"""
+        dim = self.dim_code
+        if dim == "TREND_MOMENTUM":
+            return self._score_trend_momentum(pct, mom, vol, dd, vr, trend, kli, f)
+        if dim == "TECH_QUANT":
+            return self._score_tech_quant(pct, mom, vol, vr, kli)
+        if dim == "CAPITAL_LIQUIDITY":
+            return self._score_capital_liquidity(pct, mom, vr, turn, kli)
+        if dim == "FUNDAMENTAL":
+            return self._score_fundamental(mom, pe, pb, f)
+        if dim == "SENTIMENT_FLOW":
+            return self._score_sentiment_flow(pct, mom, vol, vr, news_c, f)
+        if dim == "DERIV_MARGIN":
+            return 50 + self._calc_margin_hsgt_bias(f) + 0.3 * pct - 0.15 * vol
+        if dim == "DIVERGENCE":
+            return self._score_multi_tf(kli, "divergence", "divergence_score", 0.8)
+        if dim == "CHANLUN":
+            return self._score_multi_tf(kli, "chanlun", "chanlun_score", 1.0)
+        if dim == "PATTERN":
+            return self._score_pattern(kli)
+        if dim == "VOLUME_STRUCTURE":
+            return self._score_volume_structure(pct, vr, kli)
+        if dim == "RESONANCE":
+            return self._score_resonance(mom, kli, f)
+        if dim == "KLINE_VISION":
+            return self._score_kline_vision_fallback(mom, vol, vr, pct, kli)
+        # 未知维度: 中性
+        return 50.0
+
+    # ---------- 1. TREND_MOMENTUM: MA排列+趋势线+乖离率 ----------
+    def _score_trend_momentum(self, pct, mom, vol, dd, vr, trend, kli, f) -> float:
+        day = kli.get("day", {}) if isinstance(kli, dict) else {}
+        ma_sys = day.get("ma_system", {}) if isinstance(day, dict) else {}
+
+        # (a) MA排列评分：统计短>长的相邻对数
+        ma_vals = {}
+        for p in (5, 10, 20, 60, 120):
+            mv = ma_sys.get(f"ma{p}", {})
+            v = mv.get("value") if isinstance(mv, dict) else None
+            if v is not None:
+                ma_vals[p] = float(v)
+        periods = sorted(ma_vals.keys())
+        ordered = sum(1 for i in range(len(periods) - 1) if ma_vals[periods[i]] > ma_vals[periods[i + 1]])
+        reversed_ = sum(1 for i in range(len(periods) - 1) if ma_vals[periods[i]] < ma_vals[periods[i + 1]])
+        n_pairs = max(1, len(periods) - 1)
+        # 全多头+20, 全空头-20, 线性插值
+        ma_score = (ordered - reversed_) / n_pairs * 20.0
+
+        # (b) 趋势斜率: slope_pct → [-15, +15]
+        slope = float(day.get("trend_slope_pct", 0)) if isinstance(day, dict) else 0
+        slope_score = max(-15.0, min(15.0, slope * 80))
+
+        # (c) 趋势线突破
+        tl_bonus = 0.0
+        _tl = day.get("trendlines", {}) if isinstance(day, dict) else {}
+        if isinstance(_tl, dict):
+            _dtl = _tl.get("down_trendline")
+            if isinstance(_dtl, dict) and _dtl.get("broken"):
+                _bo = _dtl.get("breakout", {})
+                if isinstance(_bo, dict) and _bo.get("confirmed"):
+                    tl_bonus += 12
+                else:
+                    tl_bonus += 5
+            _utl = _tl.get("up_trendline")
+            if isinstance(_utl, dict) and _utl.get("broken"):
+                _bo = _utl.get("breakout", {})
+                if isinstance(_bo, dict) and _bo.get("confirmed"):
+                    tl_bonus -= 12
+                else:
+                    tl_bonus -= 5
+
+        # (d) 乖离率惩罚
+        bias_ma5 = float(ma_sys.get("ma5", {}).get("pct_above", 0) if isinstance(ma_sys.get("ma5"), dict) else 0)
+        bias_pen = 0.0
+        if abs(bias_ma5) > 8: bias_pen = -25
+        elif abs(bias_ma5) > 5: bias_pen = -15
+        elif abs(bias_ma5) > 3: bias_pen = -5
+
+        score = 50 + ma_score + slope_score + tl_bonus + 0.3 * mom + bias_pen
+        if bias_ma5 > 8:
+            score = min(score, 35)
+        return score
+
+    # ---------- 2. TECH_QUANT: RSI+MACD+布林+量比+动量 ----------
+    def _score_tech_quant(self, pct, mom, vol, vr, kli) -> float:
+        day = kli.get("day", {}) if isinstance(kli, dict) else {}
+        if not isinstance(day, dict):
+            day = {}
+
+        # RSI位置评分
+        rsi = float(day.get("rsi") or 50)
+        rsi_score = 0.0
+        if rsi > 80: rsi_score = -12
+        elif rsi > 70: rsi_score = -6
+        elif rsi < 20: rsi_score = 12
+        elif rsi < 30: rsi_score = 6
+
+        # MACD柱状图方向
+        macd_hist = float(day.get("macd_hist") or 0)
+        macd_score = max(-10.0, min(10.0, macd_hist * 5))
+
+        # KDJ超买超卖
+        kdj_k = float(day.get("kdj_k") or 50)
+        kdj_score = 0.0
+        if kdj_k > 80: kdj_score = -5
+        elif kdj_k < 20: kdj_score = 5
+
+        # 量比
+        vr_score = max(-10.0, min(10.0, (vr - 1.0) * 12))
+
+        return 50 + rsi_score + macd_score + kdj_score + vr_score + 0.3 * mom - 0.2 * vol
+
+    # ---------- 3. CAPITAL_LIQUIDITY: OBV+量比+换手+量价信号 ----------
+    def _score_capital_liquidity(self, pct, mom, vr, turn, kli) -> float:
+        day = kli.get("day", {}) if isinstance(kli, dict) else {}
+        vp = day.get("volume_price", {}) if isinstance(day, dict) else {}
+        if not isinstance(vp, dict):
+            vp = {}
+
+        # OBV趋势
+        obv_trend = vp.get("obv_trend", "flat")
+        obv_score = 8.0 if obv_trend == "up" else (-8.0 if obv_trend == "down" else 0.0)
+
+        # 量比趋势
+        vr_score = max(-15.0, min(15.0, (vr - 1.0) * 18))
+
+        # 换手率评估
+        turn_score = 0.0
+        if turn is not None:
+            t = float(turn)
+            if t > 15: turn_score = -6      # 过度换手
+            elif t > 8: turn_score = -2
+            elif t < 0.5: turn_score = -4   # 流动性不足
+            elif 1 <= t <= 5: turn_score = 3  # 健康换手
+
+        # 量价信号
+        vp_score = 0.0
+        if vp.get("volume_breakout"): vp_score += 8
+        if vp.get("shrink_pullback"): vp_score += 6
+        if vp.get("climax_volume"): vp_score -= 8
+        if vp.get("volume_anomaly"): vp_score += 4
+
+        return 50 + obv_score + vr_score + turn_score + vp_score + 0.2 * pct
+
+    # ---------- 4. FUNDAMENTAL: PE/PB+PEG+F-Score+筹码 ----------
+    def _score_fundamental(self, mom, pe, pb, f) -> float:
+        # PE分级
         pe_bias = 0.0
         if pe is not None:
             pe_f = float(pe)
-            if pe_f < 0:
-                pe_bias = -10.0    # 亏损股
-            elif pe_f < 15:
-                pe_bias = 12.0     # 深度价值
-            elif pe_f < 25:
-                pe_bias = 5.0      # 合理偏低
-            elif pe_f > 100:
-                pe_bias = -10.0    # 严重高估
-            elif pe_f > 60:
-                pe_bias = -8.0     # 高估
-            elif pe_f > 40:
-                pe_bias = -4.0     # 偏高
+            if pe_f < 0: pe_bias = -10
+            elif pe_f < 15: pe_bias = 12
+            elif pe_f < 25: pe_bias = 5
+            elif pe_f > 100: pe_bias = -10
+            elif pe_f > 60: pe_bias = -8
+            elif pe_f > 40: pe_bias = -4
+
+        # PB分级
         pb_bias = 0.0
         if pb is not None:
             pb_f = float(pb)
-            if pb_f < 1:
-                pb_bias = 8.0      # 破净
-            elif pb_f < 2:
-                pb_bias = 4.0      # 低估
-            elif pb_f > 50:
-                pb_bias = -8.0     # 极度高估
-            elif pb_f > 15:
-                pb_bias = -5.0     # 高估
-            elif pb_f > 8:
-                pb_bias = -3.0     # 偏高
+            if pb_f < 1: pb_bias = 8
+            elif pb_f < 2: pb_bias = 4
+            elif pb_f > 50: pb_bias = -8
+            elif pb_f > 15: pb_bias = -5
+            elif pb_f > 8: pb_bias = -3
 
-        # ── 乖离率惩罚（MA5乖离率过大时降低TREND评分） ──
-        ma_sys = f.get("kline_indicators", {}).get("day", {}).get("ma_system", {})
-        bias_ma5 = float(ma_sys.get("ma5", {}).get("pct_above", 0))
-        bias_penalty = 0
-        if abs(bias_ma5) > 8:
-            bias_penalty = -25
-        elif abs(bias_ma5) > 5:
-            bias_penalty = -15
-        elif abs(bias_ma5) > 3:
-            bias_penalty = -5
+        # PEG估值 (PE / 净利增速)
+        peg_bias = 0.0
+        np_yoy = f.get("netprofit_yoy")
+        if pe is not None and np_yoy is not None:
+            pe_f = float(pe)
+            np_f = float(np_yoy)
+            if pe_f > 0 and np_f > 5:
+                peg = pe_f / np_f
+                if peg < 0.5: peg_bias = 8
+                elif peg < 1.0: peg_bias = 4
+                elif peg > 3.0: peg_bias = -6
+                elif peg > 2.0: peg_bias = -3
 
-        # ── 15维度评分公式（放大系数，覆盖 [15,85] 区间） ──
-        base_dim = {
-            "TREND":         50 + 1.0 * mom + 0.8 * trend + 0.3 * pct + 0.12 * dd + bias_penalty,
-            "TECH":          50 + 0.7 * mom + 0.6 * trend + (vr - 1.0) * 12 - 0.4 * vol,
-            "LIQ":           50 + (vr - 1.0) * 18 - 0.3 * abs(pct) - 0.2 * vol + (3.0 if turn is not None else -2.0),
-            "CAPITAL_FLOW":  50 + 0.5 * pct + (vr - 1.0) * 16 + news_c * 0.5 + 0.35 * mom,
-            "SECTOR_POLICY": 50 + news_c * 0.8 + 0.3 * mom,
-            "BETA":          50 + 0.6 * trend + 0.5 * pct - 0.8 * vol + 0.15 * mom,
-            "SENTIMENT":     50 + news_c + 0.3 * pct,
-            "FUNDAMENTAL":   50 + pe_bias + pb_bias + self._calc_fundamental_extra(f) + 0.15 * mom,
-            "QUANT":         50 + 0.7 * mom - 0.35 * vol + (vr - 1.0) * 10,
-            "MACRO":         50 + 0.25 * mom - 0.25 * vol + news_c * 0.5,
-            "INDUSTRY":      50 + news_c * 0.8 + 0.3 * mom,
-            "FLOW_DETAIL":   50 + (vr - 1.0) * 20 + 0.4 * pct,
-            "MM_BEHAVIOR":   50 + (vr - 1.0) * 14 + news_c * 0.6 - 0.35 * vol,
-            "NLP_SENTIMENT": 50 + news_c * 1.2 + 0.2 * mom,
-            "DERIV_MARGIN":  50 + self._calc_margin_hsgt_bias(f) + 0.3 * pct - 0.15 * vol,
-        }
-        # ── 筹码结构叠加到FUNDAMENTAL ──
+        # F-Score简化 (ROE+成长+负债)
+        f_extra = self._calc_fundamental_extra(f)
+
+        # 筹码分布
         chip = f.get("chip_distribution", {})
+        chip_bias = 0.0
         if chip:
-            chip_bias = 0.0
             profit_r = float(chip.get("profit_ratio", 50))
             trapped_r = float(chip.get("trapped_ratio", 50))
             health = float(chip.get("health_score", 50))
-            if profit_r > 80:
-                chip_bias += 6
-            elif profit_r > 60:
-                chip_bias += 3
-            elif profit_r < 30:
-                chip_bias -= 6
-            if trapped_r > 60:
-                chip_bias -= 5
+            if profit_r > 80: chip_bias += 6
+            elif profit_r > 60: chip_bias += 3
+            elif profit_r < 30: chip_bias -= 6
+            if trapped_r > 60: chip_bias -= 5
             chip_bias += (health - 50) * 0.08
-            base_dim["FUNDAMENTAL"] = base_dim.get("FUNDAMENTAL", 50) + chip_bias
 
-        # ── RELATIVE_STRENGTH：相对强弱（个股 vs 大盘） ──
-        rs = f.get("relative_strength", {})
-        if isinstance(rs, dict) and rs.get("ok"):
-            rs_score = 50.0
-            # 超额收益
-            ex20 = float(rs.get("excess_return_20d") or 0)
-            ex10 = float(rs.get("excess_return_10d") or 0)
-            if ex20 > 15:
-                rs_score += 12
-            elif ex20 > 8:
-                rs_score += 8
-            elif ex20 > 3:
-                rs_score += 4
-            elif ex20 < -15:
-                rs_score -= 12
-            elif ex20 < -8:
-                rs_score -= 8
-            elif ex20 < -3:
-                rs_score -= 4
-            # RS趋势
-            rs_trend = rs.get("rs_trend", "flat")
-            if rs_trend == "up":
-                rs_score += 6
-            elif rs_trend == "down":
-                rs_score -= 6
-            # RS新高/新低
-            if rs.get("rs_new_high"):
-                rs_score += 5
-            if rs.get("rs_new_low"):
-                rs_score -= 5
-            # RS背离信号
-            if rs.get("rs_divergence_bearish"):
-                rs_score -= 8
-            if rs.get("rs_divergence_bullish"):
-                rs_score += 6
-            # 短期超额收益加速
-            if ex10 > 5 and ex20 > 8:
-                rs_score += 4
-            elif ex10 < -5 and ex20 < -8:
-                rs_score -= 4
-            # ── 多层RS修正：vs行业 (±8) ──
-            rs_ind = f.get("rs_vs_industry", {})
-            if isinstance(rs_ind, dict) and rs_ind.get("ok"):
-                ind_ex20 = float(rs_ind.get("excess_return_20d") or 0)
-                ind_trend = rs_ind.get("rs_trend", "flat")
-                if ind_ex20 > 10 and ind_trend == "up":
-                    rs_score += 6
-                elif ind_ex20 < -10 and ind_trend == "down":
-                    rs_score -= 6
-                if rs_ind.get("rs_new_high"):
-                    rs_score += 2
-                if rs_ind.get("rs_new_low"):
-                    rs_score -= 2
-            # ── 多层RS修正：vs龙头TOP3 (±6) ──
-            rs_ld = f.get("rs_vs_leaders", {})
-            if isinstance(rs_ld, dict) and rs_ld.get("ok"):
-                ld_ex20 = float(rs_ld.get("excess_return_20d") or 0)
-                if ld_ex20 > 5:
-                    rs_score += 4
-                elif ld_ex20 < -10:
-                    rs_score -= 4
-            # ── 多层RS修正：vs ETF (±4) ──
-            rs_etf = f.get("rs_vs_etf", {})
-            if isinstance(rs_etf, dict) and rs_etf.get("ok"):
-                etf_ex20 = float(rs_etf.get("excess_return_20d") or 0)
-                if etf_ex20 > 8:
-                    rs_score += 3
-                elif etf_ex20 < -8:
-                    rs_score -= 3
-            # ── 多层共振 (±5)：3层以上RS趋势一致 ──
-            trend_signals = []
-            for _rs_key in ("relative_strength", "rs_vs_industry", "rs_vs_leaders", "rs_vs_etf"):
-                _rs_d = f.get(_rs_key, {})
-                if isinstance(_rs_d, dict) and _rs_d.get("ok"):
-                    trend_signals.append(_rs_d.get("rs_trend", "flat"))
-            up_count = sum(1 for t in trend_signals if t == "up")
-            down_count = sum(1 for t in trend_signals if t == "down")
-            if up_count >= 3:
-                rs_score += 5
-            elif down_count >= 3:
-                rs_score -= 5
-            base_dim["RELATIVE_STRENGTH"] = max(5.0, min(95.0, rs_score))
-        else:
-            base_dim["RELATIVE_STRENGTH"] = 50.0
-        # TOP_STRUCTURE / BOTTOM_STRUCTURE：基于 kline_indicators 多周期结构研判
-        # 评分语义：TOP高分=顶部信号强(卖出警示)，BOTTOM高分=底部信号强(买入参考)
-        # 两者独立评估，交叉印证；通常只有一个结构显著
-        kli = f.get("kline_indicators", {})
-        top_signals, bot_signals = 0.0, 0.0
-        top_tf_detail: dict[str, float] = {}
-        bot_tf_detail: dict[str, float] = {}
-        tf_label_map = {"day": "日线", "week": "周线", "month": "月线"}
+        return 50 + pe_bias + pb_bias + peg_bias + f_extra + chip_bias + 0.1 * mom
+
+    # ---------- 5. SENTIMENT_FLOW: 新闻+行业+主力行为+量比异动 ----------
+    def _score_sentiment_flow(self, pct, mom, vol, vr, news_c, f) -> float:
+        # 新闻情绪（主导因子，权重最大）
+        news_score = news_c * 1.5
+
+        # 量比异动作为主力行为代理
+        mm_score = 0.0
+        if vr > 1.8: mm_score = 8      # 大幅放量 → 主力活跃
+        elif vr > 1.3: mm_score = 4
+        elif vr < 0.5: mm_score = -6   # 极度缩量 → 无人关注
+        elif vr < 0.7: mm_score = -3
+
+        # 融资融券趋势作为情绪指标
+        margin_sent = 0.0
+        margin = f.get("margin_data", {})
+        rzye_5d = float(margin.get("rzye_change_5d") or 0)
+        if rzye_5d > 3: margin_sent = 4
+        elif rzye_5d < -3: margin_sent = -4
+
+        return 50 + news_score + mm_score + margin_sent + 0.2 * mom + 0.15 * pct
+
+    # ---------- 6. 多周期加权评分通用 (DIVERGENCE, CHANLUN) ----------
+    def _score_multi_tf(self, kli, data_key: str, score_key: str, scale: float) -> float:
+        score = 50.0
+        total_w = 0.0
+        for _tf, _w in (("day", 0.50), ("week", 0.35), ("month", 0.15)):
+            td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
+            sub = td.get(data_key, {}) if isinstance(td, dict) else {}
+            ds = float(sub.get(score_key) or 0) if isinstance(sub, dict) else 0
+            if ds != 0:
+                score += ds * _w * scale
+                total_w += _w
+        if total_w > 0:
+            score = 50.0 + (score - 50.0) / total_w
+        return max(10.0, min(90.0, score))
+
+    # ---------- 7. PATTERN: K线形态+图表形态+顶底结构合并 ----------
+    def _score_pattern(self, kli) -> float:
+        if not isinstance(kli, dict):
+            return 50.0
+
+        # (a) K线形态 (原KLINE_PATTERN)
+        kp_score = 0.0
+        for _tf, _w in (("day", 0.50), ("week", 0.35), ("month", 0.15)):
+            td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
+            pats = td.get("kline_patterns", []) if isinstance(td, dict) else []
+            if not pats:
+                continue
+            bull = sorted([(float(p.get("confidence", 50)) - 50) for p in pats if p.get("direction") == "bullish"], reverse=True)
+            bear = sorted([(float(p.get("confidence", 50)) - 50) for p in pats if p.get("direction") == "bearish"], reverse=True)
+            net = ((bull[0] if bull else 0) + sum(bull[1:]) * 0.25
+                   - (bear[0] if bear else 0) - sum(bear[1:]) * 0.25)
+            kp_score += max(-15.0, min(15.0, net)) * _w
+
+        # (b) 图表形态 (原CHART_PATTERN)
+        cp_score = 0.0
+        for _tf, _w in (("day", 0.50), ("week", 0.35), ("month", 0.15)):
+            td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
+            cp = td.get("chart_patterns", {}) if isinstance(td, dict) else {}
+            cps = float(cp.get("chart_pattern_score") or 0) if isinstance(cp, dict) else 0
+            if cps != 0:
+                cp_score += cps * _w * 0.5
+
+        # (c) 顶底结构 (原TOP/BOTTOM, 内部反转处理)
+        top_sig, bot_sig = 0.0, 0.0
         for tf in ("day", "week", "month"):
             ind = kli.get(tf)
             if not isinstance(ind, dict) or not ind.get("ok"):
@@ -480,249 +596,115 @@ class AnalystAgent:
             upper = float(ind.get("upper_shadow_ratio") or 0)
             lower = float(ind.get("lower_shadow_ratio") or 0)
             mom_tf = float(ind.get("momentum_10") or 0)
-            amp = float(ind.get("amplitude_20") or 0)
-            # 顶部结构：长上影线+负动量 或 高振幅+负动量（头肩顶/M顶/长上影线）
-            tf_top = 0.0
-            if upper > 40 and mom_tf < 0:
-                tf_top = 10
-            elif upper > 35:
-                tf_top = 5
-            elif mom_tf < -5 and amp > 15:
-                tf_top = 6
-            elif mom_tf < 0:
-                tf_top = 2
-            top_signals += tf_top
-            if tf_top > 0:
-                top_tf_detail[tf_label_map[tf]] = tf_top
-            # 底部结构：长下影线+正动量 或 正动量反弹（W底/长下影线阳线）
-            tf_bot = 0.0
-            if lower > 40 and mom_tf > 0:
-                tf_bot = 10
-            elif lower > 35:
-                tf_bot = 5
-            elif mom_tf > 5:
-                tf_bot = 6
-            elif mom_tf > 0:
-                tf_bot = 2
-            bot_signals += tf_bot
-            if tf_bot > 0:
-                bot_tf_detail[tf_label_map[tf]] = tf_bot
-        # TOP: 高分=顶部信号强(卖出警示)；在最终加权中需用 100-score 反转
-        base_dim["TOP_STRUCTURE"] = 50.0 + top_signals * 1.5 - bot_signals * 0.4
-        # BOTTOM: 高分=底部信号强(买入参考)
-        base_dim["BOTTOM_STRUCTURE"] = 50.0 + bot_signals * 1.5 - top_signals * 0.4
-        # per-tf detail 可从 kline_indicators 重算，不需要存到 self
-        # K线视觉智能体的文字降级评分（无图时使用综合技术信号）
-        tech_score = float(base_dim.get("TECH", 50.0))
-        base_dim["KLINE_DAY"] = tech_score
-        base_dim["KLINE_WEEK"] = (tech_score + float(base_dim.get("TREND", 50.0))) / 2.0
-        base_dim["KLINE_MONTH"] = (tech_score + float(base_dim.get("TREND", 50.0)) + float(base_dim.get("FUNDAMENTAL", 50.0))) / 3.0
-        base_dim["KLINE_1H"] = 50 + (vr - 1.0) * 14 + 0.4 * pct - 0.2 * vol
-        # KLINE_PATTERN：多周期K线形态组合评分（日线0.50 + 周线0.40 + 月线0.10）
-        kp_score = 50.0
-        kp_total_w = 0.0
-        for _tf, _w in (("day", 0.50), ("week", 0.40), ("month", 0.10)):
-            _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
-            _pats = _td.get("kline_patterns", []) if isinstance(_td, dict) else []
-            if not _pats:
-                continue
-            _bull = sorted([(float(p.get("confidence", 50)) - 50) for p in _pats if p.get("direction") == "bullish"], reverse=True)
-            _bear = sorted([(float(p.get("confidence", 50)) - 50) for p in _pats if p.get("direction") == "bearish"], reverse=True)
-            _net = ((_bull[0] if _bull else 0.0) + sum(_bull[1:]) * 0.25
-                    - (_bear[0] if _bear else 0.0) - sum(_bear[1:]) * 0.25)
-            _net = max(-35.0, min(35.0, _net))
-            kp_score += _net * _w
-            kp_total_w += _w
-        if kp_total_w > 0:
-            kp_score = 50.0 + (kp_score - 50.0) / kp_total_w
-        # 连续性修正（使用日线数据）
-        _day_td = kli.get("day", {}) if isinstance(kli, dict) else {}
-        _cs = _day_td.get("continuity_stats", {}) if isinstance(_day_td, dict) else {}
-        if _cs.get("consecutive_bull", 0) >= 3 and _cs.get("body_trend") == "escalating":
-            kp_score += 4
-        if _cs.get("consecutive_bear", 0) >= 3 and _cs.get("body_trend") == "escalating":
-            kp_score -= 4
-        if _cs.get("higher_highs", 0) >= 3:
-            kp_score += 2
-        if _cs.get("lower_lows", 0) >= 3:
-            kp_score -= 2
-        base_dim["KLINE_PATTERN"] = max(10.0, min(90.0, kp_score))
+            # 顶部信号
+            if upper > 40 and mom_tf < 0: top_sig += 8
+            elif upper > 35: top_sig += 4
+            elif mom_tf < -5: top_sig += 3
+            # 底部信号
+            if lower > 40 and mom_tf > 0: bot_sig += 8
+            elif lower > 35: bot_sig += 4
+            elif mom_tf > 5: bot_sig += 3
+        # 顶部信号压制评分, 底部信号抬升评分 (内部完成反转)
+        structure_score = (bot_sig - top_sig) * 1.2
 
-        # DIVERGENCE：MACD/RSI背离信号（多周期加权: 日0.50 + 周0.40 + 月0.10）
-        div_score = 50.0
-        div_total_w = 0.0
-        for _tf, _w in (("day", 0.50), ("week", 0.40), ("month", 0.10)):
-            _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
-            _dv = _td.get("divergence", {}) if isinstance(_td, dict) else {}
-            _ds = float(_dv.get("divergence_score") or 0)
-            if _ds != 0:
-                div_score += _ds * _w * 0.8  # 放大缩放
-                div_total_w += _w
-        if div_total_w > 0:
-            div_score = 50.0 + (div_score - 50.0) / div_total_w
-        base_dim["DIVERGENCE"] = max(10.0, min(90.0, div_score))
+        # 连续性修正
+        day_td = kli.get("day", {}) if isinstance(kli, dict) else {}
+        cs = day_td.get("continuity_stats", {}) if isinstance(day_td, dict) else {}
+        cont_bonus = 0.0
+        if cs.get("consecutive_bull", 0) >= 3 and cs.get("body_trend") == "escalating":
+            cont_bonus += 3
+        if cs.get("consecutive_bear", 0) >= 3 and cs.get("body_trend") == "escalating":
+            cont_bonus -= 3
+        if cs.get("higher_highs", 0) >= 3: cont_bonus += 2
+        if cs.get("lower_lows", 0) >= 3: cont_bonus -= 2
 
-        # VOLUME_PRICE：量价关系信号（多周期加权: 日0.50 + 周0.40 + 月0.10）
-        vp_score = 50.0
-        vp_total_w = 0.0
-        for _tf, _w in (("day", 0.50), ("week", 0.40), ("month", 0.10)):
-            _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
-            _vp = _td.get("volume_price", {}) if isinstance(_td, dict) else {}
-            _vs = float(_vp.get("volume_price_score") or 0)
-            if _vs != 0:
-                vp_score += _vs * _w * 1.0
-                vp_total_w += _w
-        if vp_total_w > 0:
-            vp_score = 50.0 + (vp_score - 50.0) / vp_total_w
-        base_dim["VOLUME_PRICE"] = max(10.0, min(90.0, vp_score))
+        return max(10.0, min(90.0, 50 + kp_score + cp_score + structure_score + cont_bonus))
 
-        # SUPPORT_RESISTANCE：支撑阻力位信号（仅日线,最直接）
-        # v2: sr_score已包含突破事件加减分（_detect_support_resistance内部计算）
+    # ---------- 8. VOLUME_STRUCTURE: 量价+支撑阻力 ----------
+    def _score_volume_structure(self, pct, vr, kli) -> float:
+        # 量价关系多周期
+        vp_score = 0.0
+        for _tf, _w in (("day", 0.50), ("week", 0.35), ("month", 0.15)):
+            td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
+            vp = td.get("volume_price", {}) if isinstance(td, dict) else {}
+            vs = float(vp.get("volume_price_score") or 0) if isinstance(vp, dict) else 0
+            if vs != 0:
+                vp_score += vs * _w
+
+        # 支撑阻力 (日线)
         sr_data = (kli.get("day", {}) or {}).get("support_resistance", {})
         sr_raw = float(sr_data.get("sr_score") or 0) if isinstance(sr_data, dict) else 0
-        base_dim["SUPPORT_RESISTANCE"] = max(10.0, min(90.0, 50.0 + sr_raw))
 
-        # CHANLUN：缠论买卖点信号（多周期加权: 日0.50 + 周0.40 + 月0.10）
-        cl_score = 50.0
-        cl_total_w = 0.0
-        for _tf, _w in (("day", 0.50), ("week", 0.40), ("month", 0.10)):
-            _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
-            _cl = _td.get("chanlun", {}) if isinstance(_td, dict) else {}
-            _cs = float(_cl.get("chanlun_score") or 0)
-            if _cs != 0:
-                cl_score += _cs * _w * 1.0
-                cl_total_w += _w
-        if cl_total_w > 0:
-            cl_score = 50.0 + (cl_score - 50.0) / cl_total_w
-        base_dim["CHANLUN"] = max(10.0, min(90.0, cl_score))
+        return max(10.0, min(90.0, 50 + vp_score * 0.6 + sr_raw * 0.4))
 
-        # CHART_PATTERN：大级别图形形态（日0.50 + 周0.40 + 月0.10）
-        cp_score = 50.0
-        cp_total_w = 0.0
-        for _tf, _w in (("day", 0.50), ("week", 0.40), ("month", 0.10)):
-            _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
-            _cp = _td.get("chart_patterns", {}) if isinstance(_td, dict) else {}
-            _cps = float(_cp.get("chart_pattern_score") or 0)
-            if _cps != 0:
-                cp_score += _cps * _w * 0.8
-                cp_total_w += _w
-        if cp_total_w > 0:
-            cp_score = 50.0 + (cp_score - 50.0) / cp_total_w
-        base_dim["CHART_PATTERN"] = max(10.0, min(90.0, cp_score))
-
-        # TIMEFRAME_RESONANCE：多周期共振评分
-        # 检查日/周/月三周期的趋势斜率和动量方向是否一致
-        tf_directions = {}
+    # ---------- 9. RESONANCE: 多周期共振+相对强弱 ----------
+    def _score_resonance(self, mom, kli, f) -> float:
+        # (a) 多周期共振
+        tf_dirs = {}
         for _tf in ("day", "week", "month"):
-            _td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
-            if not isinstance(_td, dict) or not _td.get("ok"):
+            td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
+            if not isinstance(td, dict) or not td.get("ok"):
                 continue
-            _slope = float(_td.get("trend_slope_pct") or 0)
-            _mom = float(_td.get("momentum_10") or 0)
-            if _slope > 0.05 and _mom > 0:
-                tf_directions[_tf] = "bullish"
-            elif _slope < -0.05 and _mom < 0:
-                tf_directions[_tf] = "bearish"
+            slope = float(td.get("trend_slope_pct") or 0)
+            _mom = float(td.get("momentum_10") or 0)
+            if slope > 0.05 and _mom > 0:
+                tf_dirs[_tf] = "bullish"
+            elif slope < -0.05 and _mom < 0:
+                tf_dirs[_tf] = "bearish"
             else:
-                tf_directions[_tf] = "neutral"
+                tf_dirs[_tf] = "neutral"
         res_score = 50.0
-        if len(tf_directions) >= 2:
-            directions = list(tf_directions.values())
-            bull_count = sum(1 for d in directions if d == "bullish")
-            bear_count = sum(1 for d in directions if d == "bearish")
-            if bull_count >= 3:
-                res_score = 80.0  # 三周期共振看涨
-            elif bull_count == 2 and bear_count == 0:
-                res_score = 68.0
-            elif bear_count >= 3:
-                res_score = 20.0  # 三周期共振看跌
-            elif bear_count == 2 and bull_count == 0:
-                res_score = 32.0
-            elif bull_count >= 1 and bear_count >= 1:
-                res_score = 45.0  # 多空分歧
-        base_dim["TIMEFRAME_RESONANCE"] = max(10.0, min(90.0, res_score))
+        if len(tf_dirs) >= 2:
+            dirs = list(tf_dirs.values())
+            bull_c = sum(1 for d in dirs if d == "bullish")
+            bear_c = sum(1 for d in dirs if d == "bearish")
+            if bull_c >= 3: res_score = 78
+            elif bull_c == 2 and bear_c == 0: res_score = 66
+            elif bear_c >= 3: res_score = 22
+            elif bear_c == 2 and bull_c == 0: res_score = 34
+            elif bull_c >= 1 and bear_c >= 1: res_score = 45
 
-        # TRENDLINE：趋势线突破检测
-        # v2: 真实趋势线构造+穿越判断; v1: 仅斜率+动量
-        tl_score = 50.0
-        day_data = kli.get("day", {}) if isinstance(kli, dict) else {}
-        if isinstance(day_data, dict) and day_data.get("ok"):
-            slope = float(day_data.get("trend_slope_pct") or 0)
-            day_mom = float(day_data.get("momentum_10") or 0)
-            day_vr = vr
+        # (b) 相对强弱
+        rs = f.get("relative_strength", {})
+        rs_adj = 0.0
+        if isinstance(rs, dict) and rs.get("ok"):
+            ex20 = float(rs.get("excess_return_20d") or 0)
+            if ex20 > 15: rs_adj = 10
+            elif ex20 > 8: rs_adj = 6
+            elif ex20 > 3: rs_adj = 3
+            elif ex20 < -15: rs_adj = -10
+            elif ex20 < -8: rs_adj = -6
+            elif ex20 < -3: rs_adj = -3
+            rs_trend = rs.get("rs_trend", "flat")
+            if rs_trend == "up": rs_adj += 4
+            elif rs_trend == "down": rs_adj -= 4
+            # 多层共振
+            trend_sigs = []
+            for key in ("relative_strength", "rs_vs_industry", "rs_vs_leaders"):
+                _rd = f.get(key, {})
+                if isinstance(_rd, dict) and _rd.get("ok"):
+                    trend_sigs.append(_rd.get("rs_trend", "flat"))
+            up_c = sum(1 for t in trend_sigs if t == "up")
+            down_c = sum(1 for t in trend_sigs if t == "down")
+            if up_c >= 3: rs_adj += 4
+            elif down_c >= 3: rs_adj -= 4
 
-            # v2: 真实趋势线突破信号
-            _tl = day_data.get("trendlines", {}) if isinstance(day_data, dict) else {}
-            _has_v2 = False
-            if isinstance(_tl, dict):
-                # 下降趋势线被向上突破 → 强利多
-                _dtl = _tl.get("down_trendline")
-                if isinstance(_dtl, dict) and _dtl.get("broken"):
-                    _bo = _dtl.get("breakout", {})
-                    _tp = _dtl.get("touch_points", 0)
-                    if isinstance(_bo, dict) and _bo.get("confirmed") and _tp >= 3:
-                        tl_score += 25  # 有效下降趋势线突破
-                        _has_v2 = True
-                    elif isinstance(_bo, dict) and _bo.get("confirmed"):
-                        tl_score += 16
-                        _has_v2 = True
-                    elif _dtl.get("broken"):
-                        tl_score += 8
-                        _has_v2 = True
-                # 上升趋势线被向下跌破 → 强利空
-                _utl = _tl.get("up_trendline")
-                if isinstance(_utl, dict) and _utl.get("broken"):
-                    _bo = _utl.get("breakout", {})
-                    _tp = _utl.get("touch_points", 0)
-                    if isinstance(_bo, dict) and _bo.get("confirmed") and _tp >= 3:
-                        tl_score -= 25
-                        _has_v2 = True
-                    elif isinstance(_bo, dict) and _bo.get("confirmed"):
-                        tl_score -= 16
-                        _has_v2 = True
-                    elif _utl.get("broken"):
-                        tl_score -= 8
-                        _has_v2 = True
+        return max(10.0, min(90.0, res_score + rs_adj))
 
-            # v1 fallback: 仅斜率+动量（v2无数据时使用）
-            if not _has_v2:
-                if slope > 0.1 and day_mom > 3:
-                    tl_score += 18
-                    if day_vr > 1.3:
-                        tl_score += 10
-                elif slope < -0.1 and day_mom < -3:
-                    tl_score -= 18
-                    if day_vr > 1.3:
-                        tl_score -= 10
+    # ---------- 10. KLINE_VISION fallback (无视觉时的文本降级评分) ----------
+    def _score_kline_vision_fallback(self, mom, vol, vr, pct, kli) -> float:
+        day = kli.get("day", {}) if isinstance(kli, dict) else {}
+        rsi = float(day.get("rsi") or 50) if isinstance(day, dict) else 50
+        slope = float(day.get("trend_slope_pct") or 0) if isinstance(day, dict) else 0
+        rsi_score = 0.0
+        if rsi > 75: rsi_score = -8
+        elif rsi < 25: rsi_score = 8
+        slope_score = max(-10.0, min(10.0, slope * 60))
+        return 50 + slope_score + rsi_score + 0.3 * mom + (vr - 1.0) * 8 - 0.15 * vol
 
-            # 斜率反转信号（v1/v2通用）
-            week_data = kli.get("week", {}) if isinstance(kli, dict) else {}
-            if isinstance(week_data, dict) and week_data.get("ok"):
-                week_slope = float(week_data.get("trend_slope_pct") or 0)
-                if slope > 0 and week_slope < 0:
-                    tl_score += 8
-                elif slope < 0 and week_slope > 0:
-                    tl_score -= 8
-        base_dim["TRENDLINE"] = max(10.0, min(90.0, tl_score))
-
-        # ── 乖离率硬封顶：MA5乖离>8%时TREND不超过35 ──
-        if bias_ma5 > 8:
-            base_dim["TREND"] = min(base_dim["TREND"], 35)
-
-        score_0_100 = float(base_dim.get(self.dim_code, 50.0))
-        score_0_100 = max(0.0, min(100.0, score_0_100))
-
-        data_quality = float(f.get("data_quality_score", 0.6))
-        confidence = 0.45 + 0.45 * data_quality
-        if snap.source == "mock":
-            confidence -= 0.18
-        confidence = max(0.1, min(0.98, confidence))
-        if score_0_100 >= 70:
-            return "buy", score_0_100, confidence, f"{self.role}({self.dim_code})：偏强，评分{score_0_100:.1f}"
-        if score_0_100 < 50:
-            return "sell", score_0_100, confidence, f"{self.role}({self.dim_code})：偏弱，评分{score_0_100:.1f}"
-        return "hold", score_0_100, confidence, f"{self.role}({self.dim_code})：中性，评分{score_0_100:.1f}"
-
+    # ------------------------------------------------------------------
+    # 提交结果
+    # ------------------------------------------------------------------
     def _submit(self, result: AgentResult, snap: MarketSnapshot, analysis_context: dict[str, Any]) -> None:
         now = datetime.now().isoformat()
         payload = {
@@ -752,6 +734,10 @@ class AnalystAgent:
         dump_json(path, payload)
 
 
+# ---------------------------------------------------------------------------
+# Agent间消息写入
+# ---------------------------------------------------------------------------
+
 def write_message(
     run_dir: Path,
     from_agent: str,
@@ -772,7 +758,10 @@ def write_message(
     dump_json(run_dir / "messages" / f"r{round_idx}_{from_agent}_to_{to_agent}_{ts}.json", payload)
 
 
-# K线视觉智能体的 dim_code 与周期对应关系
+# ---------------------------------------------------------------------------
+# K线视觉Agent (保留，合并为单实例)
+# ---------------------------------------------------------------------------
+
 _KLINE_VISION_DIMS = {
     "1h":    "KLINE_1H",
     "day":   "KLINE_DAY",
@@ -782,14 +771,10 @@ _KLINE_VISION_DIMS = {
 
 
 def _parse_vision_response(text: str) -> tuple[str, float, str]:
-    """从视觉模型回复中解析 建议/评分/核心判断。
-    返回 (vote, score_0_100, core_reason)。解析失败时返回默认值。
-    """
+    """从视觉模型回复中解析 建议/评分/核心判断。"""
     vote = "hold"
     score = 50.0
     core = text.strip()[:200] if text else ""
-
-    # 建议解析
     vote_match = re.search(r"建议[：:]\s*(buy|hold|sell|买入|持有|观望|卖出|减仓)", text or "", re.I)
     if vote_match:
         v = vote_match.group(1).lower()
@@ -799,8 +784,6 @@ def _parse_vision_response(text: str) -> tuple[str, float, str]:
             vote = "sell"
         else:
             vote = "hold"
-
-    # 评分解析（兼容 "评分：72" / "72/100" / "72分"）
     for pat in [
         r"评分[：:]\s*([0-9]{1,3}\.?\d*)",
         r"([0-9]{1,3}\.?\d*)\s*/\s*100",
@@ -812,20 +795,17 @@ def _parse_vision_response(text: str) -> tuple[str, float, str]:
             if 0 <= v <= 100:
                 score = v
                 break
-
-    # 核心判断
     core_match = re.search(r"核心判断[：:]\s*(.+?)(?:\n|$)", text or "", re.S)
     if core_match:
         core = core_match.group(1).strip()[:300]
     elif text:
         core = text.strip()[:300]
-
     return vote, score, core
 
 
 class KlineVisionAgent(AnalystAgent):
-    """多周期K线视觉智能体：把K线图作为图像输入给支持视觉的LLM进行辅助研判。
-    每个实例对应一个K线周期（1h/day/week/month）。
+    """K线视觉智能体：日线图像输入给支持视觉的LLM进行研判。
+    v2: 合并为单实例, 默认使用日线图。
     """
 
     def __init__(
@@ -833,12 +813,13 @@ class KlineVisionAgent(AnalystAgent):
         cfg: dict[str, Any],
         run_dir: Path,
         backend: DataBackend,
-        timeframe: str,
+        timeframe: str = "day",
         llm_routers: dict[str, LLMRouter] | None = None,
     ):
         super().__init__(cfg, run_dir, backend, llm_routers=llm_routers)
-        self.timeframe = timeframe  # "1h" / "day" / "week" / "month"
-        self.dim_code = _KLINE_VISION_DIMS.get(timeframe, f"KLINE_{timeframe.upper()}")
+        self.timeframe = timeframe
+        # v2: 统一dim_code为KLINE_VISION, 不再按周期分
+        self.dim_code = cfg.get("dim_code", "KLINE_VISION")
 
     def analyze_local(
         self,
@@ -846,7 +827,6 @@ class KlineVisionAgent(AnalystAgent):
         name: str,
         analysis_context: dict[str, Any] | None = None,
     ) -> AgentBaseResult:
-        """本地策略分析 + 加载K线图 + 构建视觉prompt，不调用LLM。"""
         from .chart_generator import load_image_base64, TIMEFRAME_LABEL
 
         base = super().analyze_local(symbol, name, analysis_context)
@@ -891,11 +871,8 @@ class KlineVisionAgent(AnalystAgent):
         ctx = analysis_context or {}
         chart_files: dict[str, str] = ctx.get("chart_files", {})
         chart_path = chart_files.get(self.timeframe)
-
-        # 筛选支持视觉的 router
         vision_routers = {p: r for p, r in self.llm_routers.items() if r.supports_vision()}
 
-        # 若无视觉 router，尝试用默认视觉回退提供商（默认 kimi）补位
         if not vision_routers and chart_path:
             fallback_p = os.getenv("VISION_FALLBACK_PROVIDER", _DEFAULT_VISION_FALLBACK)
             fallback_key = os.getenv(f"{fallback_p.upper()}_API_KEY", "").strip()
@@ -908,20 +885,8 @@ class KlineVisionAgent(AnalystAgent):
                     request_timeout_sec=ref.request_timeout_sec if ref else 45.0,
                 )
                 vision_routers = {fallback_p: fallback_router}
-                self.logger.info(
-                    "[KlineVision] 当前providers无视觉能力，回退到 %s 视觉模型 (timeframe=%s)",
-                    fallback_p, self.timeframe,
-                )
-                if progress_cb:
-                    progress_cb("K线视觉回退", f"{self.agent_id} 无视觉provider → 使用 {fallback_p} 视觉模型")
 
-        # 若仍无视觉 router 或无图表，降级到父类文字分析
         if not chart_path or not vision_routers:
-            self.logger.info(
-                "[KlineVision] no chart or no vision provider, fallback to text. "
-                "timeframe=%s chart=%s vision_providers=%s",
-                self.timeframe, chart_path, list(vision_routers.keys()),
-            )
             result = super().analyze(symbol, name, analysis_context=analysis_context, progress_cb=progress_cb)
             result.dim_code = self.dim_code
             return result
@@ -932,7 +897,6 @@ class KlineVisionAgent(AnalystAgent):
             result.dim_code = self.dim_code
             return result
 
-        # 快照
         ctx_snap = ctx.get("snapshot", {})
         if ctx_snap:
             snap = MarketSnapshot(
@@ -969,11 +933,7 @@ class KlineVisionAgent(AnalystAgent):
 
         for provider, router in vision_routers.items():
             if progress_cb:
-                progress_cb("K线视觉分析", f"{self.agent_id}({tf_label}) → {provider} | 提交图像 {len(image_b64)//1024}KB")
-            self.logger.info(
-                "[LLM提交] K线视觉分析 agent=%s provider=%s timeframe=%s | 图像 %dKB",
-                self.agent_id, provider, self.timeframe, len(image_b64) // 1024,
-            )
+                progress_cb("K线视觉分析", f"{self.agent_id}({tf_label}) → {provider}")
             text = router.chat_with_image(prompt, image_b64)
             if text:
                 llm_evals[provider] = text.strip()
@@ -982,18 +942,12 @@ class KlineVisionAgent(AnalystAgent):
                 all_scores.append(s)
 
         if not llm_evals:
-            # 所有视觉调用失败，降级
             result = super().analyze(symbol, name, analysis_context=analysis_context, progress_cb=progress_cb)
             result.dim_code = self.dim_code
             return result
 
-        # 综合多个视觉模型结果
         avg_score = sum(all_scores) / len(all_scores)
         avg_score = max(0.0, min(100.0, avg_score))
-        # 投票决定最终方向
-        from collections import Counter
-        vote_counts = Counter(all_votes)
-        final_vote = vote_counts.most_common(1)[0][0]
         if avg_score >= 70:
             final_vote = "buy"
         elif avg_score < 50:
@@ -1001,7 +955,6 @@ class KlineVisionAgent(AnalystAgent):
         else:
             final_vote = "hold"
 
-        # 合并多模型评价文本
         parts = []
         for p in ("gemini", "grok", "claude", "openai"):
             if p in llm_evals:
@@ -1013,337 +966,130 @@ class KlineVisionAgent(AnalystAgent):
         reason = f"【{tf_label}K线视觉研判】" + "；".join(parts)
 
         data_quality = float(ctx.get("features", {}).get("data_quality_score", 0.7))
-        confidence = 0.5 + 0.4 * data_quality
-        confidence = max(0.1, min(0.98, confidence))
-
-        self.logger.info(
-            "dim=%s timeframe=%s vote=%s score=%.2f conf=%.2f providers=%s",
-            self.dim_code, self.timeframe, final_vote, avg_score, confidence, list(llm_evals.keys()),
-        )
+        confidence = max(0.1, min(0.98, 0.5 + 0.4 * data_quality))
 
         result = AgentResult(
-            agent_id=self.agent_id,
-            dim_code=self.dim_code,
-            vote=final_vote,
-            score_0_100=avg_score,
-            confidence_0_1=confidence,
-            reason=reason,
-            llm_multi_evaluations=llm_evals,
+            agent_id=self.agent_id, dim_code=self.dim_code,
+            vote=final_vote, score_0_100=avg_score, confidence_0_1=confidence,
+            reason=reason, llm_multi_evaluations=llm_evals,
         )
         self._submit(result, snap, ctx)
         return result
 
 
+# ---------------------------------------------------------------------------
+# 专业Agent子类 (各自覆盖 _build_data_context)
+# ---------------------------------------------------------------------------
+
 class DivergenceAgent(AnalystAgent):
-    """MACD/RSI背离检测Agent：检测多周期顶底背离信号。"""
+    """MACD/RSI背离检测Agent。"""
 
     def _build_data_context(self, ctx: dict[str, Any]) -> str:
         parts: list[str] = []
         snap = ctx.get("snapshot", {})
         if snap:
             parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
-
         kli = ctx.get("features", {}).get("kline_indicators", {})
-        tf_labels = {"day": "日线", "week": "周线", "month": "月线"}
-        for tf, label in tf_labels.items():
+        for tf, label in (("day", "日线"), ("week", "周线"), ("month", "月线")):
             td = kli.get(tf, {}) if isinstance(kli, dict) else {}
             if not isinstance(td, dict) or not td.get("ok"):
                 continue
             dv = td.get("divergence", {})
-            vp = td.get("volume_price", {})
             lines = [f"[{label}] RSI={td.get('rsi', 'N/A')} | MACD DIF={td.get('macd_dif', 'N/A')} | 动量={td.get('momentum_10') or 0:.1f}%"]
             if dv:
-                if dv.get("macd_top_div"):
-                    lines.append(f"  !! {dv.get('macd_div_desc', 'MACD顶背离')}")
-                if dv.get("macd_bot_div"):
-                    lines.append(f"  !! {dv.get('macd_div_desc', 'MACD底背离')}")
-                if dv.get("rsi_top_div"):
-                    lines.append(f"  !! {dv.get('rsi_div_desc', 'RSI顶背离')}")
-                if dv.get("rsi_bot_div"):
-                    lines.append(f"  !! {dv.get('rsi_div_desc', 'RSI底背离')}")
+                if dv.get("macd_top_div"): lines.append(f"  !! {dv.get('macd_div_desc', 'MACD顶背离')}")
+                if dv.get("macd_bot_div"): lines.append(f"  !! {dv.get('macd_div_desc', 'MACD底背离')}")
+                if dv.get("rsi_top_div"): lines.append(f"  !! {dv.get('rsi_div_desc', 'RSI顶背离')}")
+                if dv.get("rsi_bot_div"): lines.append(f"  !! {dv.get('rsi_div_desc', 'RSI底背离')}")
                 if not any(dv.get(k) for k in ("macd_top_div", "macd_bot_div", "rsi_top_div", "rsi_bot_div")):
                     lines.append("  无背离信号")
                 lines.append(f"  背离综合分={dv.get('divergence_score', 0)}")
             parts.append("\n".join(lines))
-
         parts.append(
-            "\n分析要求：\n1.背离信号可靠性评估（是否真背离vs假背离）\n"
-            "2.多周期背离是否共振\n3.结合RSI超买超卖区域判断背离有效性\n"
-            "4.给出操作建议和风险提示\n\n"
-            "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
-        )
-        return "\n".join(parts)
-
-
-class VolumePriceAgent(AnalystAgent):
-    """量价关系分析Agent：检测放量突破、缩量回踩、量能异动等信号。"""
-
-    def _build_data_context(self, ctx: dict[str, Any]) -> str:
-        parts: list[str] = []
-        snap = ctx.get("snapshot", {})
-        if snap:
-            parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
-
-        kli = ctx.get("features", {}).get("kline_indicators", {})
-        tf_labels = {"day": "日线", "week": "周线", "month": "月线"}
-        for tf, label in tf_labels.items():
-            td = kli.get(tf, {}) if isinstance(kli, dict) else {}
-            if not isinstance(td, dict) or not td.get("ok"):
-                continue
-            vp = td.get("volume_price", {})
-            lines = [f"[{label}] 动量={td.get('momentum_10') or 0:.1f}%"]
-            if vp:
-                flags = []
-                if vp.get("volume_breakout"): flags.append("放量突破")
-                if vp.get("shrink_pullback"): flags.append("缩量回踩")
-                if vp.get("volume_anomaly"): flags.append("底部放量")
-                if vp.get("climax_volume"): flags.append("天量滞涨")
-                lines.append(f"  信号: {', '.join(flags) if flags else '无特殊信号'}")
-                lines.append(f"  OBV趋势: {vp.get('obv_trend', 'N/A')}")
-                lines.append(f"  量价评分: {vp.get('volume_price_score', 0)}")
-                if vp.get("desc"):
-                    lines.append(f"  详情: {vp['desc']}")
-            parts.append("\n".join(lines))
-
-        parts.append(
-            "\n分析要求：\n1.量价配合是否健康\n"
-            "2.是否有主力资金进出信号\n3.成交量变化趋势分析\n"
-            "4.给出操作建议\n\n"
-            "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
-        )
-        return "\n".join(parts)
-
-
-class SupportResistanceAgent(AnalystAgent):
-    """支撑阻力位检测Agent：检测关键价格位并评估当前位置。"""
-
-    def _build_data_context(self, ctx: dict[str, Any]) -> str:
-        parts: list[str] = []
-        snap = ctx.get("snapshot", {})
-        if snap:
-            parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
-
-        kli = ctx.get("features", {}).get("kline_indicators", {})
-        # 主要用日线的支撑阻力
-        td = kli.get("day", {}) if isinstance(kli, dict) else {}
-        sr = td.get("support_resistance", {}) if isinstance(td, dict) else {}
-        if sr:
-            parts.append(f"价格位置: {sr.get('price_position', 'N/A')}")
-            sups = sr.get("support_levels", [])
-            if sups:
-                lines = ["支撑位:"]
-                for s in sups[:5]:
-                    lines.append(f"  {s.get('price', 'N/A')} ({s.get('label', '')})")
-                parts.append("\n".join(lines))
-            ress = sr.get("resistance_levels", [])
-            if ress:
-                lines = ["阻力位:"]
-                for r in ress[:5]:
-                    lines.append(f"  {r.get('price', 'N/A')} ({r.get('label', '')})")
-                parts.append("\n".join(lines))
-            gaps = sr.get("gaps", [])
-            if gaps:
-                parts.append(f"跳空缺口: {len(gaps)}个")
-            if sr.get("desc"):
-                parts.append(f"评估: {sr['desc']}")
-
-        # Fibonacci
-        fib = ctx.get("features", {}).get("fibonacci_key_levels", {})
-        if fib and fib.get("ok"):
-            parts.append(
-                f"Fibonacci: 波段高={fib.get('band_high')}, 低={fib.get('band_low')}, "
-                f"38.2%={fib.get('retrace_382')}, 50%={fib.get('retrace_50')}, 61.8%={fib.get('retrace_618')}"
-            )
-
-        parts.append(
-            "\n分析要求：\n1.当前价格距支撑/阻力位的距离和突破可能性\n"
-            "2.哪些是强支撑/强阻力（多重验证）\n3.建议的入场区间和止损位\n"
-            "4.给出操作建议\n\n"
-            "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
-        )
-        return "\n".join(parts)
-
-
-class TimeframeResonanceAgent(AnalystAgent):
-    """多周期共振评分Agent：检测日/周/月周期信号是否一致共振。"""
-
-    def _build_data_context(self, ctx: dict[str, Any]) -> str:
-        parts: list[str] = []
-        snap = ctx.get("snapshot", {})
-        if snap:
-            parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
-
-        kli = ctx.get("features", {}).get("kline_indicators", {})
-        tf_labels = {"day": "日线(短期)", "week": "周线(中期)", "month": "月线(长期)"}
-        for tf, label in tf_labels.items():
-            td = kli.get(tf, {}) if isinstance(kli, dict) else {}
-            if not isinstance(td, dict) or not td.get("ok"):
-                continue
-            slope = td.get("trend_slope_pct", 0)
-            mom = td.get("momentum_10", 0)
-            rsi = td.get("rsi", "N/A")
-            macd_hist = td.get("macd_hist", "N/A")
-            parts.append(
-                f"[{label}] 趋势斜率={slope:.4f}%/bar | 动量={mom:.1f}% | RSI={rsi} | MACD柱={macd_hist}"
-            )
-
-        parts.append(
-            "\n分析要求：\n1.日/周/月三周期趋势方向是否一致\n"
-            "2.共振程度评估（强共振/弱共振/分歧）\n"
-            "3.如有分歧应以哪个周期为主\n"
-            "4.给出操作建议和信号强度\n\n"
-            "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
-        )
-        return "\n".join(parts)
-
-
-class TrendlineAgent(AnalystAgent):
-    """趋势线突破检测Agent：检测价格对趋势线的突破或跌破信号。"""
-
-    def _build_data_context(self, ctx: dict[str, Any]) -> str:
-        parts: list[str] = []
-        snap = ctx.get("snapshot", {})
-        if snap:
-            parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
-
-        f = ctx.get("features", {})
-        vr = f.get("volume_ratio_5_20", 1.0)
-        parts.append(f"量比5/20: {vr:.2f}")
-
-        kli = f.get("kline_indicators", {})
-        tf_labels = {"day": "日线", "week": "周线", "month": "月线"}
-        for tf, label in tf_labels.items():
-            td = kli.get(tf, {}) if isinstance(kli, dict) else {}
-            if not isinstance(td, dict) or not td.get("ok"):
-                continue
-            slope = td.get("trend_slope_pct", 0)
-            mom = td.get("momentum_10", 0)
-            ma = td.get("ma_system", {})
-            ma20 = ma.get("ma20", {}).get("pct_above", "N/A")
-            ma60 = ma.get("ma60", {}).get("pct_above", "N/A")
-            parts.append(f"[{label}] 趋势斜率={slope:.4f}%/bar | 动量={mom:.1f}% | 偏离MA20={ma20}% | 偏离MA60={ma60}%")
-
-        parts.append(
-            "\n分析要求：\n1.趋势线是否被有效突破（需放量确认）\n"
-            "2.突破后是否存在回踩确认\n"
-            "3.趋势转折还是短暂波动\n"
-            "4.给出操作建议\n\n"
-            "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
-        )
-        return "\n".join(parts)
-
-
-class ChartPatternAgent(AnalystAgent):
-    """大级别图形形态Agent：三角形、旗形、箱体、杯柄、圆弧底/顶等20-60根K线级别形态。"""
-
-    def _build_data_context(self, ctx: dict[str, Any]) -> str:
-        parts: list[str] = []
-        snap = ctx.get("snapshot", {})
-        if snap:
-            parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
-
-        kli = ctx.get("features", {}).get("kline_indicators", {})
-        tf_labels = {"day": "日线", "week": "周线", "month": "月线"}
-        for tf, label in tf_labels.items():
-            td = kli.get(tf, {}) if isinstance(kli, dict) else {}
-            if not isinstance(td, dict) or not td.get("ok"):
-                continue
-            cp = td.get("chart_patterns", {})
-            lines = [f"[{label}图形形态]"]
-            if cp and cp.get("patterns"):
-                for p in cp["patterns"]:
-                    icon = "↑" if p.get("direction") == "bullish" else ("↓" if p.get("direction") == "bearish" else "→")
-                    lines.append(f"  {icon}【{p['name']}】置信度{p.get('confidence', 50)}% | {p.get('desc', '')}")
-                lines.append(f"  图形评分: {cp.get('chart_pattern_score', 0)}")
-            else:
-                lines.append("  未检测到明显形态")
-            parts.append("\n".join(lines))
-
-        parts.append(
-            "\n分析要求：\n1.图形形态的完整度和可靠性\n"
-            "2.预期突破方向和目标位\n3.形态失败的止损位\n"
-            "4.给出操作建议\n\n"
+            "\n分析要求：\n1.背离信号可靠性评估\n2.多周期背离是否共振\n"
+            "3.结合RSI超买超卖判断有效性\n4.操作建议和风险提示\n\n"
             "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
         )
         return "\n".join(parts)
 
 
 class ChanlunAgent(AnalystAgent):
-    """缠论买卖点Agent：基于缠中说禅理论检测分型、笔、中枢和三类买卖点。"""
+    """缠论买卖点Agent。"""
 
     def _build_data_context(self, ctx: dict[str, Any]) -> str:
         parts: list[str] = []
         snap = ctx.get("snapshot", {})
         if snap:
             parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
-
         kli = ctx.get("features", {}).get("kline_indicators", {})
-        tf_labels = {"day": "日线", "week": "周线", "month": "月线"}
-        for tf, label in tf_labels.items():
+        for tf, label in (("day", "日线"), ("week", "周线"), ("month", "月线")):
             td = kli.get(tf, {}) if isinstance(kli, dict) else {}
             if not isinstance(td, dict) or not td.get("ok"):
                 continue
             cl = td.get("chanlun", {})
             lines = [f"[{label}缠论]"]
             if cl:
-                # 中枢
                 zs = cl.get("zhongshu", [])
                 if zs:
                     last_zs = zs[-1]
                     lines.append(f"  中枢: [{last_zs.get('low','?')}-{last_zs.get('high','?')}] ({last_zs.get('bi_count',0)}笔)")
-                # 笔
                 bis = cl.get("bi_list", [])
                 if bis:
                     for b in bis[-3:]:
                         lines.append(f"  笔: {b.get('dir','')} {b.get('start_price','?')}→{b.get('end_price','?')}")
-                # 买卖点
                 for s in cl.get("buy_signals", []):
                     lines.append(f"  ↑ 【{s.get('type','')}】{s.get('desc','')}")
                 for s in cl.get("sell_signals", []):
                     lines.append(f"  ↓ 【{s.get('type','')}】{s.get('desc','')}")
                 lines.append(f"  缠论评分: {cl.get('chanlun_score', 0)}")
-                if cl.get("desc"):
-                    lines.append(f"  概述: {cl['desc']}")
             else:
                 lines.append("  数据不足")
             parts.append("\n".join(lines))
-
         parts.append(
-            "\n分析要求：\n1.当前处于缠论哪个阶段（上涨/下跌/中枢震荡）\n"
-            "2.是否存在明确的买卖点信号\n3.中枢位置对后续走势的指引意义\n"
-            "4.结合笔的方向给出操作建议\n\n"
+            "\n分析要求：\n1.当前缠论阶段（上涨/下跌/中枢震荡）\n"
+            "2.是否有买卖点信号\n3.中枢位置的指引意义\n4.操作建议\n\n"
             "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
         )
         return "\n".join(parts)
 
 
-class KlinePatternAgent(AnalystAgent):
-    """多周期K线形态组合风险评估Agent。
-
-    对日/周/月三周期最新3-5根K线进行形态识别，涵盖15+种经典形态（锤子线、
-    射击之星、吞噬、孕线、早晨/黄昏之星、红三兵/三乌鸦、W底/M顶、头肩顶底等），
-    综合多周期共振判断未来方向，作为独立风险评估维度加入整体框架。
-    """
+class PatternAgent(AnalystAgent):
+    """形态综合Agent: 合并K线形态+图表形态+顶底结构。"""
 
     def _build_data_context(self, ctx: dict[str, Any]) -> str:
-        """构建K线形态专属数据摘要，供大模型增强分析使用。"""
         parts: list[str] = []
         snap = ctx.get("snapshot", {})
         if snap:
             parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
-
         kli = ctx.get("features", {}).get("kline_indicators", {})
-        tf_labels = {"day": "日线(短期)", "week": "周线(中期)", "month": "月线(长期)"}
-
-        for tf, label in tf_labels.items():
+        for tf, label in (("day", "日线"), ("week", "周线"), ("month", "月线")):
             td = kli.get(tf, {}) if isinstance(kli, dict) else {}
             if not isinstance(td, dict) or not td.get("ok"):
-                parts.append(f"[{label}] 数据不足")
                 continue
-            lines = [f"[{label}] {td.get('rows', 0)}根K线 | 收盘={td.get('close', 'N/A')} "
-                     f"| 动量={td.get('momentum_10') or 0:.1f}% | RSI={td.get('rsi', 'N/A')}"]
-
-            # 连续性统计
+            lines = [f"[{label}形态分析]"]
+            # K线形态
+            pats = td.get("kline_patterns", [])
+            if pats:
+                for p in pats:
+                    icon = "↑" if p.get("direction") == "bullish" else ("↓" if p.get("direction") == "bearish" else "→")
+                    pos = p.get("position_pct")
+                    pos_str = f" ({pos:.0f}%位)" if pos is not None else ""
+                    lines.append(f"  {icon}【{p['name']}】置信度{p.get('confidence', 50)}%{pos_str}")
+            # 图表形态
+            cp = td.get("chart_patterns", {})
+            if cp and cp.get("patterns"):
+                for p in cp["patterns"]:
+                    icon = "↑" if p.get("direction") == "bullish" else ("↓" if p.get("direction") == "bearish" else "→")
+                    lines.append(f"  {icon}〖{p['name']}〗置信度{p.get('confidence', 50)}%")
+            # 顶底信号
+            upper = float(td.get("upper_shadow_ratio") or 0)
+            lower = float(td.get("lower_shadow_ratio") or 0)
+            mom_tf = float(td.get("momentum_10") or 0)
+            if upper > 35 and mom_tf < 0:
+                lines.append(f"  ⚠ 顶部信号: 上影线{upper:.0f}%+负动量")
+            if lower > 35 and mom_tf > 0:
+                lines.append(f"  ★ 底部信号: 下影线{lower:.0f}%+正动量")
+            # 连续性
             cs = td.get("continuity_stats", {})
             if cs:
                 cs_parts = []
@@ -1351,154 +1097,198 @@ class KlinePatternAgent(AnalystAgent):
                     cs_parts.append(f"连阳{cs['consecutive_bull']}日")
                 elif cs.get("consecutive_bear", 0) > 0:
                     cs_parts.append(f"连阴{cs['consecutive_bear']}日")
-                bt = cs.get("body_trend", "stable")
-                cs_parts.append(f"实体{'递增' if bt == 'escalating' else '递减' if bt == 'de-escalating' else '稳定'}")
-                if cs.get("higher_highs", 0) > 0:
-                    cs_parts.append(f"高点抬升{cs['higher_highs']}日")
-                if cs.get("lower_lows", 0) > 0:
-                    cs_parts.append(f"低点下移{cs['lower_lows']}日")
-                gap_parts = []
-                if cs.get("gap_up_count", 0) > 0:
-                    gap_parts.append(f"跳空高开{cs['gap_up_count']}次")
-                if cs.get("gap_down_count", 0) > 0:
-                    gap_parts.append(f"跳空低开{cs['gap_down_count']}次")
-                if not gap_parts:
-                    gap_parts.append("无跳空")
-                cs_parts.extend(gap_parts)
-                lines.append("  连续性: " + " | ".join(cs_parts))
-
-            # 相邻K线关系摘要
-            adj = td.get("kline_adjacency", [])
-            if adj:
-                adj_parts = []
-                for a in adj:
-                    pair_label = "[-3→-2]" if "倒数第3" in a.get("pair", "") else "[-2→-1]"
-                    adj_parts.append(f"{pair_label} {a.get('relationship', '')}")
-                lines.append("  相邻关系: " + " | ".join(adj_parts))
-
-            # K线形态（含位置信息）
-            pats = td.get("kline_patterns", [])
-            if pats:
-                for p in pats:
-                    icon = "↑" if p.get("direction") == "bullish" else ("↓" if p.get("direction") == "bearish" else "→")
-                    pos = p.get("position_pct")
-                    pos_str = ""
-                    if pos is not None:
-                        if pos < 30:
-                            pos_str = f" (底部{pos:.0f}%位)"
-                        elif pos > 70:
-                            pos_str = f" (顶部{pos:.0f}%位)"
-                        else:
-                            pos_str = f" (中部{pos:.0f}%位)"
-                    lines.append(f"  {icon}【{p['name']}】置信度{p.get('confidence', 50)}%{pos_str} | {p.get('desc', '')}")
-
-            ma = td.get("ma_system", {})
-            ma_parts = []
-            for period in (5, 20, 60):
-                mv = ma.get(f"ma{period}", {})
-                if mv.get("value"):
-                    ma_parts.append(f"MA{period}={mv['value']:.2f}({mv.get('pct_above', 0):+.1f}%)")
-            if ma_parts:
-                lines.append("  " + " | ".join(ma_parts))
+                if cs_parts:
+                    lines.append("  连续性: " + " | ".join(cs_parts))
+            if len(lines) == 1:
+                lines.append("  未检测到明显形态")
             parts.append("\n".join(lines))
-
         parts.append(
-            "\n分析要求：\n1.各周期形态是否共振（多头/空头/分歧）\n"
-            "2.当前最关键形态及其预测含义\n3.结合均线给出支撑/压力位\n"
-            "4.预判未来1-3根K线的方向与风险\n\n"
+            "\n分析要求：\n1.各周期形态是否共振\n2.最关键形态及其预测含义\n"
+            "3.是否有顶底反转信号\n4.操作建议\n\n"
             "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
         )
         return "\n".join(parts)
 
 
-class RelativeStrengthAgent(AnalystAgent):
-    """相对强弱分析Agent：个股 vs 大盘指数的超额收益与RS趋势。"""
+class VolumeStructureAgent(AnalystAgent):
+    """量价结构Agent: 合并量价关系+支撑阻力。"""
 
-    @staticmethod
-    def _build_data_context(ctx: dict[str, Any]) -> str:
-        parts = []
+    def _build_data_context(self, ctx: dict[str, Any]) -> str:
+        parts: list[str] = []
         snap = ctx.get("snapshot", {})
         if snap:
             parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
-
-        f = ctx.get("features", {})
-        rs = f.get("relative_strength", {})
-        if isinstance(rs, dict) and rs.get("ok"):
-            lines = ["[相对强弱 vs 沪深300]"]
-            ex5 = rs.get("excess_return_5d")
-            ex10 = rs.get("excess_return_10d")
-            ex20 = rs.get("excess_return_20d")
-            lines.append(f"  超额收益: 5日={ex5}% | 10日={ex10}% | 20日={ex20}%")
-            rsm5 = rs.get("rs_momentum_5d")
-            rsm10 = rs.get("rs_momentum_10d")
-            lines.append(f"  RS动量: 5日={rsm5}% | 10日={rsm10}%")
-            lines.append(f"  RS趋势: {rs.get('rs_trend', 'unknown')}")
-            if rs.get("rs_new_high"):
-                lines.append("  ★ RS创20日新高（相对领涨）")
-            if rs.get("rs_new_low"):
-                lines.append("  ★ RS创20日新低（相对落后）")
-            if rs.get("rs_divergence_bearish"):
-                lines.append("  ⚠ 看跌背离：股价创新高但RS未创新高（涨势可能不持续）")
-            if rs.get("rs_divergence_bullish"):
-                lines.append("  ★ 看涨信号：RS创新高但股价未创新高（潜在补涨）")
+        kli = ctx.get("features", {}).get("kline_indicators", {})
+        # 量价
+        for tf, label in (("day", "日线"), ("week", "周线"), ("month", "月线")):
+            td = kli.get(tf, {}) if isinstance(kli, dict) else {}
+            if not isinstance(td, dict) or not td.get("ok"):
+                continue
+            vp = td.get("volume_price", {})
+            lines = [f"[{label}量价]"]
+            if vp:
+                flags = []
+                if vp.get("volume_breakout"): flags.append("放量突破")
+                if vp.get("shrink_pullback"): flags.append("缩量回踩")
+                if vp.get("volume_anomaly"): flags.append("底部放量")
+                if vp.get("climax_volume"): flags.append("天量滞涨")
+                lines.append(f"  信号: {', '.join(flags) if flags else '无'}")
+                lines.append(f"  OBV: {vp.get('obv_trend', 'N/A')} | 量价评分: {vp.get('volume_price_score', 0)}")
             parts.append("\n".join(lines))
-        else:
-            parts.append("[相对强弱] 数据不可用")
-
-        # vs 行业板块指数
-        rs_ind = f.get("rs_vs_industry", {})
-        if isinstance(rs_ind, dict) and rs_ind.get("ok"):
-            bm = rs_ind.get("benchmark", "行业")
-            lines2 = [f"[相对强弱 vs {bm}]"]
-            lines2.append(f"  超额收益: 5日={rs_ind.get('excess_return_5d')}% | 10日={rs_ind.get('excess_return_10d')}% | 20日={rs_ind.get('excess_return_20d')}%")
-            lines2.append(f"  RS趋势: {rs_ind.get('rs_trend', 'unknown')}")
-            if rs_ind.get("rs_new_high"):
-                lines2.append("  ★ RS创20日新高（行业内领涨）")
-            if rs_ind.get("rs_new_low"):
-                lines2.append("  ★ RS创20日新低（行业内落后）")
-            parts.append("\n".join(lines2))
-
-        # vs 板块龙头TOP3
-        rs_ld = f.get("rs_vs_leaders", {})
-        if isinstance(rs_ld, dict) and rs_ld.get("ok"):
-            bm = rs_ld.get("benchmark", "龙头")
-            codes_str = ",".join(rs_ld.get("leader_codes", []))
-            lines3 = [f"[相对强弱 vs {bm}] 对标: {codes_str}"]
-            lines3.append(f"  超额收益: 5日={rs_ld.get('excess_return_5d')}% | 10日={rs_ld.get('excess_return_10d')}% | 20日={rs_ld.get('excess_return_20d')}%")
-            lines3.append(f"  RS趋势: {rs_ld.get('rs_trend', 'unknown')}")
-            parts.append("\n".join(lines3))
-
-        # vs 行业ETF
-        rs_etf = f.get("rs_vs_etf", {})
-        if isinstance(rs_etf, dict) and rs_etf.get("ok"):
-            bm = rs_etf.get("benchmark", "ETF")
-            lines4 = [f"[相对强弱 vs {bm}]"]
-            lines4.append(f"  超额收益: 5日={rs_etf.get('excess_return_5d')}% | 20日={rs_etf.get('excess_return_20d')}%")
-            lines4.append(f"  RS趋势: {rs_etf.get('rs_trend', 'unknown')}")
-            parts.append("\n".join(lines4))
-
-        regime = f.get("market_regime", {})
-        if isinstance(regime, dict) and regime.get("regime") != "unknown":
-            parts.append(
-                f"[大盘环境] 状态={regime.get('regime')} | "
-                f"沪深300={regime.get('index_close')} | "
-                f"20日涨幅={regime.get('index_ret_20d')}%"
-            )
-
-        mom = f.get("momentum_20", 0)
-        parts.append(f"个股20日动量: {mom:.2f}%")
-
+        # 支撑阻力 (日线)
+        td = kli.get("day", {}) if isinstance(kli, dict) else {}
+        sr = td.get("support_resistance", {}) if isinstance(td, dict) else {}
+        if sr:
+            parts.append(f"价格位置: {sr.get('price_position', 'N/A')}")
+            sups = sr.get("support_levels", [])
+            if sups:
+                lines = ["支撑位:"]
+                for s in sups[:3]:
+                    lines.append(f"  {s.get('price', 'N/A')} ({s.get('label', '')})")
+                parts.append("\n".join(lines))
+            ress = sr.get("resistance_levels", [])
+            if ress:
+                lines = ["阻力位:"]
+                for r in ress[:3]:
+                    lines.append(f"  {r.get('price', 'N/A')} ({r.get('label', '')})")
+                parts.append("\n".join(lines))
         parts.append(
-            "\n分析要求：\n1.个股相对大盘是跑赢还是跑输？强弱趋势是否在变化？\n"
-            "2.个股相对行业板块/龙头的超额收益如何？是行业领涨还是跟涨？\n"
-            "3.超额收益是否可持续（加速/减速/反转）？\n"
-            "4.多层对标是否共振（大盘+行业+龙头+ETF趋势一致）？\n"
-            "5.是否存在RS背离信号？\n"
-            "6.结合大盘环境给出相对强弱综合结论\n\n"
+            "\n分析要求：\n1.量价配合是否健康\n2.当前距支撑/阻力位距离\n"
+            "3.操作建议\n\n"
             "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
         )
         return "\n".join(parts)
 
+
+class CapitalLiquidityAgent(AnalystAgent):
+    """资金流动性Agent: 合并资金流向+流动性+量价信号。"""
+
+    def _build_data_context(self, ctx: dict[str, Any]) -> str:
+        parts: list[str] = []
+        snap = ctx.get("snapshot", {})
+        if snap:
+            parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
+        f = ctx.get("features", {})
+        vr = f.get("volume_ratio_5_20")
+        turn = f.get("turnover_rate")
+        parts.append(f"量比5/20: {vr:.2f}" if vr else "量比: N/A")
+        if turn is not None:
+            parts.append(f"换手率: {turn}%")
+        kli = f.get("kline_indicators", {})
+        day = kli.get("day", {}) if isinstance(kli, dict) else {}
+        vp = day.get("volume_price", {}) if isinstance(day, dict) else {}
+        if vp:
+            flags = []
+            if vp.get("volume_breakout"): flags.append("放量突破")
+            if vp.get("shrink_pullback"): flags.append("缩量回踩")
+            if vp.get("climax_volume"): flags.append("天量滞涨")
+            parts.append(f"量价信号: {', '.join(flags) if flags else '无'}")
+            parts.append(f"OBV趋势: {vp.get('obv_trend', 'N/A')}")
+        chip = f.get("chip_distribution", {})
+        if chip:
+            parts.append(f"筹码: 获利{chip.get('profit_ratio', 'N/A')}% | 集中度{chip.get('concentration', 'N/A')}%")
+        parts.append(
+            "\n分析要求：\n1.资金流向判断（净流入/出）\n2.量价配合分析\n"
+            "3.流动性风险评估\n4.操作建议\n\n"
+            "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
+        )
+        return "\n".join(parts)
+
+
+class SentimentFlowAgent(AnalystAgent):
+    """情绪舆情Agent: 合并新闻情绪+行业政策+主力行为。"""
+
+    def _build_data_context(self, ctx: dict[str, Any]) -> str:
+        parts: list[str] = []
+        snap = ctx.get("snapshot", {})
+        if snap:
+            parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
+        f = ctx.get("features", {})
+        news_sent = f.get("news_sentiment")
+        news_cnt = f.get("news_count")
+        if news_sent is not None:
+            parts.append(f"新闻情绪: {news_sent:.1f} ({news_cnt or 0}条)")
+        vr = f.get("volume_ratio_5_20")
+        if vr:
+            parts.append(f"量比(主力活跃度): {vr:.2f}")
+        margin = f.get("margin_data", {})
+        if margin:
+            parts.append(f"融资余额5日变化: {margin.get('rzye_change_5d', 'N/A')}%")
+        hsgt = f.get("hsgt_data", {})
+        if hsgt:
+            parts.append(f"北向持仓变化: {hsgt.get('hk_hold_change_pct', 'N/A')}%")
+        strategy = f.get("market_strategy", {})
+        if strategy:
+            parts.append(f"市场阶段: {strategy.get('phase_cn', '未知')}")
+        # v2: 优先使用LLM新闻分析结果
+        na = ctx.get("news_analysis", {})
+        if na:
+            if na.get("summary"):
+                parts.append(f"新闻情绪总结: {na['summary']}")
+            if na.get("sentiment_score") is not None:
+                parts.append(f"LLM情绪分: {na['sentiment_score']} (-100~100)")
+            events = na.get("key_events", [])
+            if events:
+                parts.append("关键事件: " + " | ".join(str(e)[:50] for e in events[:3]))
+            risks = na.get("risk_alerts", [])
+            if risks:
+                parts.append("风险预警: " + " | ".join(str(r)[:50] for r in risks))
+            catalysts = na.get("positive_catalysts", [])
+            if catalysts:
+                parts.append("利好催化: " + " | ".join(str(c)[:50] for c in catalysts))
+        else:
+            news = ctx.get("news", [])[:5]
+            if news:
+                titles = [str(n.get("title", ""))[:50] for n in news if n.get("title")]
+                if titles:
+                    parts.append("近期新闻: " + " | ".join(titles))
+        parts.append(
+            "\n分析要求：\n1.市场情绪偏多还是偏空\n2.是否有重大利好/利空消息\n"
+            "3.主力资金态度（融资+北向）\n4.操作建议\n\n"
+            "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
+        )
+        return "\n".join(parts)
+
+
+class ResonanceAgent(AnalystAgent):
+    """多周期共振Agent: 合并多周期共振+相对强弱。"""
+
+    def _build_data_context(self, ctx: dict[str, Any]) -> str:
+        parts: list[str] = []
+        snap = ctx.get("snapshot", {})
+        if snap:
+            parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
+        f = ctx.get("features", {})
+        kli = f.get("kline_indicators", {})
+        for tf, label in (("day", "日线(短期)"), ("week", "周线(中期)"), ("month", "月线(长期)")):
+            td = kli.get(tf, {}) if isinstance(kli, dict) else {}
+            if not isinstance(td, dict) or not td.get("ok"):
+                continue
+            parts.append(
+                f"[{label}] 斜率={td.get('trend_slope_pct', 0):.4f}%/bar | "
+                f"动量={td.get('momentum_10') or 0:.1f}% | RSI={td.get('rsi', 'N/A')}"
+            )
+        # 相对强弱
+        rs = f.get("relative_strength", {})
+        if isinstance(rs, dict) and rs.get("ok"):
+            parts.append(
+                f"[vs沪深300] 超额收益20日={rs.get('excess_return_20d')}% | "
+                f"RS趋势={rs.get('rs_trend', 'unknown')}"
+            )
+        rs_ind = f.get("rs_vs_industry", {})
+        if isinstance(rs_ind, dict) and rs_ind.get("ok"):
+            parts.append(f"[vs行业] 超额收益20日={rs_ind.get('excess_return_20d')}%")
+        parts.append(
+            "\n分析要求：\n1.日/周/月趋势是否一致共振\n2.个股相对大盘/行业强弱\n"
+            "3.共振信号强度和可靠性\n4.操作建议\n\n"
+            "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
+        )
+        return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Agent 工厂
+# ---------------------------------------------------------------------------
 
 def create_agent(
     cfg: dict[str, Any],
@@ -1506,27 +1296,23 @@ def create_agent(
     backend: DataBackend,
     llm_routers: dict[str, LLMRouter] | None = None,
 ) -> AnalystAgent:
-    """Agent 工厂：根据 cfg 中的 agent_type 决定返回对应 Agent 实例。"""
+    """v2 Agent 工厂：12个Agent类型。"""
     agent_type = cfg.get("agent_type", "analyst")
     if agent_type == "kline_vision":
         timeframe = cfg.get("timeframe", "day")
         return KlineVisionAgent(cfg, run_dir, backend, timeframe=timeframe, llm_routers=llm_routers)
-    if agent_type == "kline_pattern":
-        return KlinePatternAgent(cfg, run_dir, backend, llm_routers=llm_routers)
     if agent_type == "divergence":
         return DivergenceAgent(cfg, run_dir, backend, llm_routers=llm_routers)
-    if agent_type == "volume_price":
-        return VolumePriceAgent(cfg, run_dir, backend, llm_routers=llm_routers)
-    if agent_type == "support_resistance":
-        return SupportResistanceAgent(cfg, run_dir, backend, llm_routers=llm_routers)
     if agent_type == "chanlun":
         return ChanlunAgent(cfg, run_dir, backend, llm_routers=llm_routers)
-    if agent_type == "chart_pattern":
-        return ChartPatternAgent(cfg, run_dir, backend, llm_routers=llm_routers)
-    if agent_type == "timeframe_resonance":
-        return TimeframeResonanceAgent(cfg, run_dir, backend, llm_routers=llm_routers)
-    if agent_type == "trendline":
-        return TrendlineAgent(cfg, run_dir, backend, llm_routers=llm_routers)
-    if agent_type == "relative_strength":
-        return RelativeStrengthAgent(cfg, run_dir, backend, llm_routers=llm_routers)
+    if agent_type == "pattern":
+        return PatternAgent(cfg, run_dir, backend, llm_routers=llm_routers)
+    if agent_type == "volume_structure":
+        return VolumeStructureAgent(cfg, run_dir, backend, llm_routers=llm_routers)
+    if agent_type == "capital_liquidity":
+        return CapitalLiquidityAgent(cfg, run_dir, backend, llm_routers=llm_routers)
+    if agent_type == "sentiment_flow":
+        return SentimentFlowAgent(cfg, run_dir, backend, llm_routers=llm_routers)
+    if agent_type == "resonance":
+        return ResonanceAgent(cfg, run_dir, backend, llm_routers=llm_routers)
     return AnalystAgent(cfg, run_dir, backend, llm_routers=llm_routers)

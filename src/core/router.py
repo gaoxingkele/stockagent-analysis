@@ -32,6 +32,87 @@ def _get_llm_proxies(provider: str = "") -> dict | None:
     return {"http": proxy, "https": proxy}
 
 
+# ── Cloubic 多模型统一调度平台 ──
+
+def _load_cloubic_env():
+    """加载 .env.cloubic 配置（若存在）。"""
+    from pathlib import Path
+    cloubic_env = Path(__file__).resolve().parents[2] / ".env.cloubic"
+    if not cloubic_env.is_file():
+        return
+    for line in cloubic_env.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            key, _, val = line.partition("=")
+            key, val = key.strip(), val.strip()
+            if key and key not in os.environ:  # 不覆盖已有环境变量
+                os.environ[key] = val
+
+_load_cloubic_env()
+
+_CLOUBIC_ENABLED: bool | None = None
+
+def _is_cloubic_mode() -> bool:
+    """Cloubic 是否启用：CLOUBIC_ENABLED=true 且 CLOUBIC_API_KEY 非空。"""
+    global _CLOUBIC_ENABLED
+    if _CLOUBIC_ENABLED is None:
+        _CLOUBIC_ENABLED = (
+            os.getenv("CLOUBIC_ENABLED", "").strip().lower() == "true"
+            and bool(os.getenv("CLOUBIC_API_KEY", "").strip())
+        )
+    return _CLOUBIC_ENABLED
+
+
+def _should_route_via_cloubic(provider: str) -> bool:
+    """判断某 provider 是否应走 Cloubic 路由。"""
+    if not _is_cloubic_mode():
+        return False
+    p = provider.lower()
+    if p == "kimi":
+        return False  # kimi 始终直连
+    whitelist = os.getenv("CLOUBIC_ROUTED_PROVIDERS", "").strip()
+    if not whitelist:
+        return True  # 空白名单 = 全部走 Cloubic
+    return p in {x.strip().lower() for x in whitelist.split(",")}
+
+
+def _get_cloubic_model_chain(provider: str) -> list[str]:
+    """获取 provider 在 Cloubic 上的模型降级链（逗号分隔）。
+    例: 'cc/claude-opus-4-6,cc/claude-sonnet-4-6,cc/claude-haiku-4-5-20251001'
+    → ['cc/claude-opus-4-6', 'cc/claude-sonnet-4-6', 'cc/claude-haiku-4-5-20251001']
+    """
+    p = provider.lower()
+    env_key = f"CLOUBIC_{p.upper()}_MODEL"
+    raw = os.getenv(env_key, "").strip()
+    if not raw:
+        return []
+    return [m.strip() for m in raw.split(",") if m.strip()]
+
+
+def _get_cloubic_model(provider: str) -> str:
+    """获取 provider 在 Cloubic 上的首选模型名（向后兼容）。"""
+    chain = _get_cloubic_model_chain(provider)
+    return chain[0] if chain else ""
+
+
+def _get_direct_model_chain(provider: str, primary_model: str) -> list[str]:
+    """获取直连 provider 的模型降级链：主模型 → FALLBACK → FALLBACK2。
+    与 Gemini 已有的 FALLBACK_MODEL/FALLBACK_MODEL2 模式一致。"""
+    p = provider.upper()
+    chain = [primary_model]
+    fb1 = os.getenv(f"{p}_FALLBACK_MODEL", "").strip()
+    fb2 = os.getenv(f"{p}_FALLBACK_MODEL2", "").strip()
+    if fb1:
+        chain.append(fb1)
+    if fb2:
+        chain.append(fb2)
+    # 去重保序
+    seen: set[str] = set()
+    return [m for m in chain if not (m in seen or seen.add(m))]  # type: ignore[func-returns-value]
+
+
 # 支持图像输入的提供商（视觉模型原生支持）
 _VISION_PROVIDERS = {"gemini", "claude", "openai", "chatgpt", "grok"}
 
@@ -250,8 +331,12 @@ class LLMRouter:
             return None
         try:
             if self.provider == "gemini":
+                if _should_route_via_cloubic("gemini"):
+                    return self._chat_openai_vision(prompt, image_b64, mime_type)
                 return self._chat_gemini_vision(prompt, image_b64, mime_type)
             if self.provider == "claude":
+                if _should_route_via_cloubic("claude"):
+                    return self._chat_openai_vision(prompt, image_b64, mime_type)
                 return self._chat_claude_vision(prompt, image_b64, mime_type)
             return self._chat_openai_vision(prompt, image_b64, mime_type)
         except Exception as e:
@@ -262,44 +347,57 @@ class LLMRouter:
         if self.provider in {"grok", "deepseek", "kimi", "chatgpt", "openai", "minmax", "glm", "doubao", "qwen", "perplexity"}:
             return self._chat_openai_compatible(prompt, multi_turn=multi_turn)
         if self.provider == "gemini":
+            # Cloubic 路由时走 OpenAI 兼容接口
+            if _should_route_via_cloubic("gemini"):
+                return self._chat_openai_compatible(prompt, multi_turn=multi_turn)
             return self._chat_gemini(prompt, multi_turn=multi_turn)
         if self.provider == "claude":
+            # Cloubic 路由时走 OpenAI 兼容接口（国内直连，无需 Anthropic API Key）
+            if _should_route_via_cloubic("claude"):
+                return self._chat_openai_compatible(prompt, multi_turn=multi_turn)
             return self._chat_claude(prompt, multi_turn=multi_turn)
         return None
 
     def _chat_openai_compatible(self, prompt: str, multi_turn: bool = True) -> Optional[str]:
+        # ── Cloubic 路由：统一 API Key + Base URL，无代理直连 ──
+        via_cloubic = _should_route_via_cloubic(self.provider)
+
         if self.provider == "grok":
             api_key = os.getenv("GROK_API_KEY", "")
-            model = os.getenv("GROK_MODEL", "grok-2")
+            model = os.getenv("GROK_MODEL", "grok-4.20-0309-reasoning")
             base_url = "https://api.x.ai/v1/chat/completions"
         elif self.provider == "deepseek":
             api_key = os.getenv("DEEPSEEK_API_KEY", "")
-            model = os.getenv("DEEPSEEK_MODEL", "deepseek-v3")
+            model = os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner")
             base_url = "https://api.deepseek.com/chat/completions"
         elif self.provider == "kimi":
             api_key = os.getenv("KIMI_API_KEY", "")
-            model = os.getenv("KIMI_MODEL", "kimi-k2-latest")
+            model = os.getenv("KIMI_MODEL", "kimi-k2.5")
             base_url = "https://api.moonshot.cn/v1/chat/completions"
         elif self.provider == "minmax":
             api_key = os.getenv("MINMAX_API_KEY", "")
-            model = os.getenv("MINMAX_MODEL", "MiniMax-M2.5")
+            model = os.getenv("MINMAX_MODEL", "MiniMax-M2.7")
             base_url = os.getenv("MINMAX_BASE_URL", "https://api.minimaxi.com/v1/chat/completions")
         elif self.provider == "glm":
             api_key = os.getenv("GLM_API_KEY", "")
-            model = os.getenv("GLM_MODEL", "glm-4.5")
+            model = os.getenv("GLM_MODEL", "glm-5")
             base_url = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/chat/completions")
         elif self.provider == "doubao":
             api_key = os.getenv("DOUBAO_API_KEY", "")
-            model = os.getenv("DOUBAO_MODEL", "doubao-1.5-pro-32k")
+            model = os.getenv("DOUBAO_MODEL", "doubao-seed-2-0-pro-260215")
             base_url = os.getenv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/chat/completions")
         elif self.provider == "qwen":
             api_key = os.getenv("QWEN_API_KEY", "")
-            model = os.getenv("QWEN_MODEL", "qwen-max-latest")
+            model = os.getenv("QWEN_MODEL", "qwen3.5-plus")
             base_url = os.getenv("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
         elif self.provider == "perplexity":
             api_key = os.getenv("PERPLEXITY_API_KEY", "")
-            model = os.getenv("PERPLEXITY_MODEL", "sonar")
+            model = os.getenv("PERPLEXITY_MODEL", "sonar-pro")
             base_url = os.getenv("PERPLEXITY_BASE_URL", "https://api.perplexity.ai/chat/completions")
+        elif self.provider == "claude":
+            api_key = os.getenv("ANTHROPIC_API_KEY", "")
+            model = os.getenv("ANTHROPIC_MODEL", "claude-opus-4-6")
+            base_url = "https://api.anthropic.com/v1/messages"  # 仅 Cloubic 模式下实际走此分支
         elif self.provider in ("openai", "chatgpt"):
             api_key = os.getenv("OPENAI_API_KEY", "")
             model = os.getenv("OPENAI_MODEL", "gpt-4o")
@@ -309,45 +407,136 @@ class LLMRouter:
             model = os.getenv("OPENAI_MODEL", "gpt-4.1")
             base_url = "https://api.openai.com/v1/chat/completions"
 
+        # Cloubic 覆盖：替换 api_key / base_url / model，支持降级链
+        if via_cloubic:
+            api_key = os.getenv("CLOUBIC_API_KEY", "")
+            base_url = os.getenv("CLOUBIC_BASE_URL", "https://api.cloubic.com/v1/chat/completions")
+            model_chain = _get_cloubic_model_chain(self.provider)
+            if model_chain:
+                model = model_chain[0]  # 首选模型，降级在下方循环处理
+
         if not api_key:
             return None
         messages = [{"role": "user", "content": prompt}]
         if multi_turn:
             sys_msg = self._get_system_message("你是一位专业的中国股市分析员，请基于提供的数据给出客观、可执行的研判。")
             messages = [{"role": "system", "content": sys_msg}] + messages
-        temp = self.temperature
-        _FIXED_TEMP_MODELS = {"kimi-k2.5", "deepseek-reasoner"}
-        if model.lower() in _FIXED_TEMP_MODELS:
-            temp = 1.0
+
+        # 模型降级链：Cloubic 用 Cloubic 链，直连用 FALLBACK_MODEL/FALLBACK_MODEL2
+        if via_cloubic:
+            models_to_try = _get_cloubic_model_chain(self.provider) or [model]
+        else:
+            models_to_try = _get_direct_model_chain(self.provider, model)
+        last_error: Exception | None = None
+
+        has_fallback = len(models_to_try) > 1
+        route_tag = "Cloubic" if via_cloubic else self.provider
+
+        for model_idx, try_model in enumerate(models_to_try):
+            can_retry = model_idx < len(models_to_try) - 1
+            try:
+                temp = self.temperature
+                _FIXED_TEMP_MODELS = {"kimi-k2.5", "deepseek-reasoner"}
+                if try_model.lower() in _FIXED_TEMP_MODELS:
+                    temp = 1.0
+                payload = {
+                    "model": try_model,
+                    "messages": messages,
+                    "temperature": temp,
+                    "max_tokens": self.max_tokens,
+                }
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                proxies = {} if via_cloubic else _get_llm_proxies(self.provider)
+                resp = self._safe_post(base_url, headers=headers, json=payload, timeout=self._timeout(), proxies=proxies)
+                if not resp.ok:
+                    if resp.status_code == 400 and "perplexity" in base_url.lower():
+                        try:
+                            err_body = resp.text[:500] if resp.text else ""
+                            logger.warning("Perplexity API 400 Bad Request. response: %s", err_body)
+                        except Exception:
+                            pass
+                    if can_retry:
+                        logger.warning("[%s] %s model=%s HTTP %d，降级到 %s",
+                                       route_tag, self.provider, try_model, resp.status_code, models_to_try[model_idx + 1])
+                        continue
+                    resp.raise_for_status()
+                data = resp.json()
+                if "choices" in data and data["choices"]:
+                    msg = data["choices"][0].get("message", {})
+                    content = msg.get("content")
+                    if (content is None or content == "") and msg.get("reasoning_content"):
+                        content = msg["reasoning_content"]
+                    if content is None:
+                        if can_retry:
+                            logger.warning("[%s] %s model=%s 返回空内容，降级到 %s",
+                                           route_tag, self.provider, try_model, models_to_try[model_idx + 1])
+                            continue
+                        return None
+                    if isinstance(content, list):
+                        parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+                        content = " ".join(parts) if parts else ""
+                    if not isinstance(content, str):
+                        content = str(content)
+                    if "<think>" in content:
+                        content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                    return content
+                if can_retry:
+                    logger.warning("[%s] %s model=%s 无choices，降级到 %s",
+                                   route_tag, self.provider, try_model, models_to_try[model_idx + 1])
+                    continue
+                return None
+            except Exception as e:
+                last_error = e
+                if can_retry:
+                    logger.warning("[%s] %s model=%s 异常: %s，降级到 %s",
+                                   route_tag, self.provider, try_model, e, models_to_try[model_idx + 1])
+                    continue
+                raise
+        # 所有模型都走完且无返回
+        if last_error:
+            raise last_error
+        return None
+
+    # ── Grok Multi-Agent (/v1/responses) ──
+
+    def chat_multi_agent(self, prompt: str, system_message: str | None = None) -> Optional[str]:
+        """调用 Grok Multi-Agent API (/v1/responses)。
+        内部启动 4-16 个推理线程并行分析同一问题，合成综合回答。
+        effort: low/medium=4agents, high/xhigh=16agents。
+        """
+        api_key = os.getenv("GROK_API_KEY", "")
+        model = os.getenv("GROK_MULTI_AGENT_MODEL", "grok-4.20-multi-agent-0309")
+        effort = os.getenv("GROK_MULTI_AGENT_EFFORT", "high")
+        if not api_key:
+            return None
+        url = "https://api.x.ai/v1/responses"
+        input_messages = []
+        if system_message:
+            input_messages.append({"role": "system", "content": system_message})
+        input_messages.append({"role": "user", "content": prompt})
         payload = {
             "model": model,
-            "messages": messages,
-            "temperature": temp,
-            "max_tokens": self.max_tokens,
+            "input": input_messages,
+            "reasoning": {"effort": effort},
         }
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        resp = self._safe_post(base_url, headers=headers, json=payload, timeout=self._timeout(), proxies=_get_llm_proxies(self.provider))
-        if not resp.ok:
-            if resp.status_code == 400 and "perplexity" in base_url.lower():
-                try:
-                    err_body = resp.text[:500] if resp.text else ""
-                    logger.warning("Perplexity API 400 Bad Request. response: %s", err_body)
-                except Exception:
-                    pass
-            resp.raise_for_status()
+        proxies = _get_llm_proxies("grok")
+        resp = self._safe_post(url, headers=headers, json=payload,
+                               timeout=self._timeout(), proxies=proxies)
+        resp.raise_for_status()
         data = resp.json()
-        if "choices" in data and data["choices"]:
-            content = data["choices"][0].get("message", {}).get("content")
-            if content is None:
-                return None
-            if isinstance(content, list):
-                parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
-                content = " ".join(parts) if parts else ""
-            if not isinstance(content, str):
-                content = str(content)
-            if "<think>" in content:
-                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
-            return content
+        # /v1/responses 返回格式: output[] 数组，取 type=message 的 content
+        output = data.get("output", [])
+        for item in output:
+            if item.get("type") == "message":
+                content_parts = item.get("content", [])
+                texts = [p.get("text", "") for p in content_parts
+                         if isinstance(p, dict) and p.get("type") == "output_text"]
+                if texts:
+                    return "\n".join(texts).strip()
+        # fallback: 直接取 output_text 字段
+        if data.get("output_text"):
+            return data["output_text"].strip()
         return None
 
     def _gemini_model_chain(self) -> list[str]:
@@ -482,10 +671,12 @@ class LLMRouter:
         return content[0].get("text", "")
 
     def _chat_openai_vision(self, prompt: str, image_b64: str, mime_type: str) -> Optional[str]:
-        """OpenAI-兼容 vision API（grok/openai/kimi-vision 等）。"""
+        """OpenAI-兼容 vision API（grok/openai/kimi-vision/claude-via-cloubic 等）。"""
+        via_cloubic = _should_route_via_cloubic(self.provider)
+
         if self.provider == "grok":
             api_key = os.getenv("GROK_API_KEY", "")
-            model = os.getenv("GROK_VISION_MODEL", os.getenv("GROK_MODEL", "grok-2-vision-1212"))
+            model = os.getenv("GROK_VISION_MODEL", os.getenv("GROK_MODEL", "grok-4.20-0309-reasoning"))
             base_url = "https://api.x.ai/v1/chat/completions"
         elif self.provider in ("openai", "chatgpt"):
             api_key = os.getenv("OPENAI_API_KEY", "")
@@ -493,15 +684,15 @@ class LLMRouter:
             base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1/chat/completions")
         elif self.provider == "kimi":
             api_key = os.getenv("KIMI_API_KEY", "")
-            model = os.getenv("KIMI_VISION_MODEL", os.getenv("KIMI_MODEL", "moonshot-v1-8k-vision-preview"))
+            model = os.getenv("KIMI_VISION_MODEL", os.getenv("KIMI_MODEL", "kimi-k2.5"))
             base_url = "https://api.moonshot.cn/v1/chat/completions"
         elif self.provider == "qwen":
             api_key = os.getenv("QWEN_API_KEY", "")
-            model = os.getenv("QWEN_VISION_MODEL", os.getenv("QWEN_MODEL", "qwen-vl-max"))
+            model = os.getenv("QWEN_VISION_MODEL", os.getenv("QWEN_MODEL", "qwen3.5-plus"))
             base_url = os.getenv("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
         elif self.provider == "glm":
             api_key = os.getenv("GLM_API_KEY", "")
-            model = os.getenv("GLM_VISION_MODEL", os.getenv("GLM_MODEL", "glm-4v-plus"))
+            model = os.getenv("GLM_VISION_MODEL", os.getenv("GLM_MODEL", "glm-4.6v"))
             base_url = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/chat/completions")
         elif self.provider == "doubao":
             api_key = os.getenv("DOUBAO_API_KEY", "")
@@ -509,12 +700,29 @@ class LLMRouter:
             base_url = os.getenv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/chat/completions")
         elif self.provider == "minmax":
             api_key = os.getenv("MINMAX_API_KEY", "")
-            model = os.getenv("MINMAX_VISION_MODEL", os.getenv("MINMAX_MODEL", "MiniMax-M2.5"))
+            model = os.getenv("MINMAX_VISION_MODEL", os.getenv("MINMAX_MODEL", "MiniMax-VL-01"))
             base_url = os.getenv("MINMAX_BASE_URL", "https://api.minimaxi.com/v1/chat/completions")
+        elif self.provider == "claude":
+            api_key = os.getenv("ANTHROPIC_API_KEY", "")
+            model = os.getenv("ANTHROPIC_VISION_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-opus-4-6"))
+            base_url = "https://api.anthropic.com/v1/messages"
+        elif self.provider == "gemini":
+            api_key = os.getenv("GEMINI_API_KEY", "")
+            model = os.getenv("GEMINI_VISION_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"))
+            base_url = "https://generativelanguage.googleapis.com/v1beta"
         else:
             api_key = os.getenv("OPENAI_API_KEY", "")
             model = os.getenv("OPENAI_VISION_MODEL", os.getenv("OPENAI_MODEL", "gpt-4o"))
             base_url = "https://api.openai.com/v1/chat/completions"
+
+        # Cloubic 覆盖 + 降级链
+        if via_cloubic:
+            api_key = os.getenv("CLOUBIC_API_KEY", "")
+            base_url = os.getenv("CLOUBIC_BASE_URL", "https://api.cloubic.com/v1/chat/completions")
+            model_chain = _get_cloubic_model_chain(self.provider)
+            if model_chain:
+                model = model_chain[0]
+
         if not api_key:
             return None
         data_url = f"data:{mime_type};base64,{image_b64}"
@@ -526,18 +734,49 @@ class LLMRouter:
                 {"type": "text", "text": prompt},
             ]},
         ]
-        payload = {"model": model, "messages": messages,
-                   "temperature": self.temperature, "max_tokens": self.max_tokens}
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        resp = self._safe_post(base_url, headers=headers, json=payload,
-                              timeout=self._timeout(is_vision=True),
-                              proxies=_get_llm_proxies(self.provider))
-        resp.raise_for_status()
-        data = resp.json()
-        if "choices" in data and data["choices"]:
-            content = data["choices"][0].get("message", {}).get("content", "")
-            if isinstance(content, list):
-                parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
-                content = " ".join(parts)
-            return content if isinstance(content, str) else str(content)
+
+        # Vision 也支持降级链
+        if via_cloubic:
+            models_to_try = _get_cloubic_model_chain(self.provider) or [model]
+        else:
+            models_to_try = [model]  # Vision 不走 FALLBACK（视觉模型与文字模型不同）
+        last_error: Exception | None = None
+        route_tag = "Cloubic Vision" if via_cloubic else f"{self.provider} Vision"
+
+        for model_idx, try_model in enumerate(models_to_try):
+            can_retry = model_idx < len(models_to_try) - 1
+            try:
+                payload = {"model": try_model, "messages": messages,
+                           "temperature": self.temperature, "max_tokens": self.max_tokens}
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                proxies = {} if via_cloubic else _get_llm_proxies(self.provider)
+                resp = self._safe_post(base_url, headers=headers, json=payload,
+                                      timeout=self._timeout(is_vision=True),
+                                      proxies=proxies)
+                if not resp.ok and can_retry:
+                    logger.warning("[%s] %s model=%s HTTP %d，降级到 %s",
+                                   route_tag, self.provider, try_model, resp.status_code, models_to_try[model_idx + 1])
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                if "choices" in data and data["choices"]:
+                    content = data["choices"][0].get("message", {}).get("content", "")
+                    if isinstance(content, list):
+                        parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+                        content = " ".join(parts)
+                    return content if isinstance(content, str) else str(content)
+                if can_retry:
+                    logger.warning("[%s] %s model=%s 无choices，降级到 %s",
+                                   route_tag, self.provider, try_model, models_to_try[model_idx + 1])
+                    continue
+                return None
+            except Exception as e:
+                last_error = e
+                if can_retry:
+                    logger.warning("[%s] %s model=%s 异常: %s，降级到 %s",
+                                   route_tag, self.provider, try_model, e, models_to_try[model_idx + 1])
+                    continue
+                raise
+        if last_error:
+            raise last_error
         return None

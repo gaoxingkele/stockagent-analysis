@@ -1,72 +1,51 @@
 # stockagent-analysis
 
-A 股个股多智能体分析决策系统。29 个专业智能体并行研判，多大模型交叉验证，输出投资者级 PDF 报告。
+A 股个股多智能体分析决策系统。12 个专业智能体并行研判，4+ 大模型交叉验证，结构化辩论仲裁，输出投资者级 PDF 报告。
 
 ## 系统架构
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      CLI (run.py)                           │
-│         python run.py analyze --symbol 300617 ...           │
+│         python run.py analyze --symbol 600388 ...           │
 └──────────────────────────┬──────────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────────┐
 │                   Orchestrator 流水线                        │
-│  数据采集 → 本地分析 → 并行分析 → 合并评分 → 输出报告         │
+│  数据采集 → 本地分析 → 并行分析 → 合并评分 → 结构化辩论 → 报告 │
 └──────┬───────────┬──────────┬──────────┬────────────────────┘
        │           │          │          │
-  DataBackend   29 Agents  ParallelRunner  ReportPDF
-  (数据层)     (智能体层)   (多模型并行)    (报告层)
+  DataBackend   12 Agents  LLMRouter    Debate
+  (数据层)     (智能体层)  (多模型路由)  (辩论仲裁)
 ```
 
 ### 核心设计理念
 
-- **本地公式 + LLM 动态融合评分**：每个智能体根据"可公式化程度"分配不同的 LLM 权重（0.15-0.50），再由跨 Provider 一致性动态调整，量化信号以公式为主、语义判断给 LLM 更多话语权
-- **多模型交叉验证**：默认 3 个 Provider 并行运行，各自独立分配权重，取加权平均作为最终分数
+- **本地公式 + LLM 动态融合评分**：每个智能体根据"可公式化程度"分配不同的 LLM 权重，量化信号以公式为主、语义判断给 LLM 更多话语权
+- **多模型交叉验证**：默认 4 个 Provider 并行运行（minmax/doubao/claude/openai），各自独立评分，取加权平均
+- **Cloubic 桥接 + 直连混合路由**：海外模型通过 Cloubic 国内直连（无需代理），国内模型直连 API
+- **模型降级链**：每个 Provider 配置最优→次优→次次优模型链，自动降级
+- **结构化辩论**：多空团队辩论 → 仲裁 → 风险评估，辩论评分与加权评分 4:6 融合
 - **候选备选池**：默认 Provider 失败时自动切换到候选 Provider 重试
 
 ## 功能特性
 
-### 29 智能体体系
+### 12 智能体体系（v2）
 
-#### 短线参考（5 日内）
-
-| 智能体 | 说明 | 权重 |
-|--------|------|------|
-| TREND | 趋势结构分析（均线/动量/涨幅） | 18% |
-| TECH | 技术指标综合（MACD/RSI/KDJ/布林） | 12% |
-| CAPITAL_FLOW | 资金流向分析 | 15% |
-| SENTIMENT | 新闻舆情情绪 | 5% |
-| KLINE_PATTERN | 15+ 经典 K 线组合形态识别 | 10% |
-| DIVERGENCE | MACD/RSI 顶底背离检测 | 10% |
-| VOLUME_PRICE | 量价信号（放量突破/缩量回踩/OBV） | 8% |
-| SUPPORT_RESISTANCE | 支撑阻力位（前高前低/缺口/整数关口） | 8% |
-| TRENDLINE | 趋势线斜率+突破信号 | 6% |
-| KLINE_1H / KLINE_DAY | 1h/日 K 线视觉分析 | 各 3% |
-| TOP_STRUCTURE | 顶部结构识别（高分=卖出警示） | 3% |
-| BOTTOM_STRUCTURE | 底部结构识别（高分=买入参考） | 3% |
-
-#### 中长期参考（1 月以上）
-
-| 智能体 | 说明 | 权重 |
-|--------|------|------|
-| FUNDAMENTAL | 基本面（PE/PB/ROE/营收增速） | 8% |
-| BETA | Beta 风险系数 | 10% |
-| LIQ | 流动性分析（换手率/成交额） | 5% |
-| SECTOR_POLICY | 行业政策与板块轮动 | 5% |
-| DERIV_MARGIN | 融资融券分析 | 12% |
-| CHANLUN | 缠论（分型→笔→中枢→三类买卖点） | 10% |
-| CHART_PATTERN | 图表形态（三角形/箱体/旗形/杯柄） | 8% |
-| TIMEFRAME_RESONANCE | 日/周/月多周期共振 | 8% |
-| KLINE_WEEK / KLINE_MONTH | 周/月 K 线视觉分析 | 各 3% |
-| QUANT | 量化因子 | — |
-| MACRO | 宏观经济 | — |
-| INDUSTRY | 行业竞争格局 | — |
-| FLOW_DETAIL | 资金细分（北向/主力/散户） | — |
-| MM_BEHAVIOR | 主力行为分析 | — |
-| NLP_SENTIMENT | NLP 情绪深度分析 | — |
-
-> **顶底结构评分语义**：TOP_STRUCTURE 高分 = 顶部信号显著（卖出警示），低分 = 无顶部信号（中性）；BOTTOM_STRUCTURE 高分 = 底部信号显著（买入参考），低分 = 无底部信号（中性）。两者独立评估、交叉印证，并标注信号所在的周期级别（日线/周线/月线）。TOP_STRUCTURE 在最终加权评分中自动反转（100 - score），使顶部信号拉低总分。
+| # | 智能体 | 说明 | 权重 |
+|---|--------|------|------|
+| 1 | 趋势动量综合 | 均线系统 + 动量 + 涨幅 + 趋势线 | 15% |
+| 2 | 资金流动性 | 资金流向 + 换手率 + 成交额 | 12% |
+| 3 | 基本面估值 | PE/PB/ROE + 营收增速 + 行业对比 | 10% |
+| 4 | 技术指标量化 | MACD/RSI/KDJ/布林 + 支撑阻力 | 10% |
+| 5 | 形态综合 | 15+ K 线形态 + 图表形态（三角/箱体/杯柄） | 8% |
+| 6 | 情绪舆情 | Perplexity 实时新闻 + 情感评分 | 8% |
+| 7 | 缠论买卖点 | 分型→笔→中枢→三类买卖点 | 7% |
+| 8 | MACD/RSI 背离 | 多周期顶底背离检测 | 7% |
+| 9 | K 线视觉综合 | 多周期 K 线图表 AI 视觉分析 | 6% |
+| 10 | 多周期共振 | 日/周/月趋势方向一致性 | 6% |
+| 11 | 量价结构 | 放量突破/缩量回踩/OBV/天量滞涨 | 6% |
+| 12 | 融资融券 | 融资余额变化 + 融券卖出 | 5% |
 
 ### 多数据源
 
@@ -76,20 +55,52 @@ A 股个股多智能体分析决策系统。29 个专业智能体并行研判，
 | 2 | Tushare | API 获取行情/财务/资金流向 |
 | 3 | AKShare | 免费备选，自动降级 |
 
-### 多模型并行
+### 多模型并行 + Cloubic 桥接
 
 ```
-默认 Provider (并行线程)          候选备选池 (按需激活)
-┌──────────┐ ┌──────────┐ ┌──────────┐    ┌──────────────────────────┐
-│ deepseek │ │   grok   │ │   glm    │    │ kimi / gemini / doubao / │
-│  Thread  │ │  Thread  │ │  Thread  │    │ minmax (失败时自动切换)   │
-└──────────┘ └──────────┘ └──────────┘    └──────────────────────────┘
+Cloubic 桥接 (国内直连)                     直连 API
+┌──────────┐ ┌──────────┐                 ┌──────────┐ ┌──────────┐
+│  claude  │ │  openai  │                 │  minmax  │ │  doubao  │
+│ cc/opus  │ │ gpt-5.4  │                 │  M2.7    │ │ seed-2.0 │
+└──────────┘ └──────────┘                 └──────────┘ └──────────┘
+         候选备选池: grok / kimi / deepseek / glm / qwen
 ```
 
-- 每个 Provider 独立分配 29 个智能体权重 → 加权评分 → 取平均
-- 单 Agent 超时 300s → 重试 1 次 → 随机候选 Provider 最多 4 次
-- 海外模型 (grok/gemini/claude/openai) 走 `LLM_PROXY`，国内模型直连
+- 每个 Provider 独立运行 12 个智能体 → 加权评分 → 取平均
+- **Cloubic 桥接**：claude/gemini/openai/glm/qwen/deepseek 走国内直连，无需代理
+- **模型降级链**：每个 Provider 最优→次优→次次优自动切换
+- 直连 Provider（grok/kimi/doubao/minmax）同样支持 FALLBACK_MODEL 降级
+- 单 Agent 超时 120s → 重试 → 候选 Provider 最多 4 次
 - 每个 Provider 有两个模型：`{PROVIDER}_MODEL`（推理）+ `{PROVIDER}_VISION_MODEL`（视觉）
+
+### 模型降级链
+
+| Provider | 最优 | 次优 | 次次优 | 路由 |
+|----------|------|------|--------|------|
+| Claude | cc/claude-opus-4-6 | cc/claude-sonnet-4-6 | cc/claude-haiku-4-5 | Cloubic |
+| Gemini | gemini-3.1-pro | gemini-3-pro | gemini-3-flash | Cloubic |
+| OpenAI | gpt-5.4 | gpt-5.2 | gpt-5.1 | Cloubic |
+| GLM | glm-5 | glm-4.7 | — | Cloubic |
+| Qwen | qwen3-max-thinking | qwen3-max | — | Cloubic |
+| DeepSeek | deepseek-v3.2 | glm-5 | qwen3-max | Cloubic 跨模型 |
+| Grok | grok-4.20-reasoning | grok-4-1-fast-reasoning | grok-4-1-fast-non | 代理直连 |
+| Kimi | kimi-k2.5 | kimi-k2-turbo | moonshot-v1-128k | 直连 |
+| Doubao | seed-2.0-pro | seed-1.6 | 1.5-pro-256k | 直连 |
+| MiniMax | M2.7 | M2.5 | M2.0 | 直连 |
+
+### 结构化辩论
+
+```
+Phase 1: 团队汇报 (多空+中立三方)
+    ↓
+Phase 2: 多轮辩论 (bull vs bear 交叉质疑)
+    ↓
+Phase 3: 仲裁决策 (目标价 + 止损 + 盈亏比约束)
+    ↓
+Phase 4: 风险评估 (激进/保守/中立三方)
+    ↓
+融合: 加权评分 × 60% + 辩论评分 × 40%
+```
 
 ### Vision K 线分析
 
@@ -170,11 +181,11 @@ cp .env.example .env
 ### 3. 运行分析
 
 ```bash
-# 单只股票，使用默认 Provider (deepseek, grok, glm)
-python run.py analyze --symbol 300617 --name 安靠智电
+# 单只股票，使用默认 Provider (minmax, doubao, claude, openai)
+python run.py analyze --symbol 600388 --name 龙净环保
 
 # 指定 Provider
-python run.py analyze --symbol 300617 --name 安靠智电 --providers deepseek,grok,glm
+python run.py analyze --symbol 300617 --name 安靠智电 --providers grok,kimi,deepseek
 
 # 从检查点恢复（跳过数据采集）
 python run.py analyze --symbol 300617 --name 安靠智电 --run-dir output/runs/20260308_193446_300617
@@ -201,26 +212,27 @@ stockagent-analysis/
 ├── run.py                          # CLI 入口
 ├── configs/
 │   ├── project.json                # 全局配置
-│   └── agents/                     # 29 个智能体配置
-│       ├── trend_agent.json
+│   ├── agents/                     # 旧版 29 智能体配置
+│   └── agents_v2/                  # v2 精简 12 智能体配置
+│       ├── trend_momentum_agent.json
 │       ├── chanlun_agent.json
-│       ├── kline_day_agent.json
 │       └── ...
 ├── src/stockagent_analysis/
 │   ├── orchestrator.py             # 流水线编排
-│   ├── agents.py                   # 智能体实现（9 个 Agent 类）
-│   ├── parallel_runner.py          # 多 Provider 并行执行
+│   ├── agents.py                   # 智能体实现（12 个 Agent）
+│   ├── debate.py                   # 结构化辩论（多空+仲裁+风险评估）
+│   ├── news_search.py              # Perplexity 新闻搜索
 │   ├── data_backend.py             # 数据采集 + 技术分析引擎
-│   ├── llm_client.py               # LLM 路由 + Vision 支持
+│   ├── llm_client.py               # LLM 业务层（评分/权重/狙击点位）
 │   ├── report_pdf.py               # PDF 报告生成
 │   ├── chart_generator.py          # K 线图表生成
-│   ├── score_history.py             # 评分历史记录与逐日对比
-│   ├── progress_display.py         # 终端进度表格渲染
-│   ├── agent_data_mapping.py       # 智能体-数据映射表
+│   ├── score_history.py            # 评分历史记录与逐日对比
 │   ├── main.py                     # CLI 参数解析
-│   ├── config_loader.py            # 配置加载
-│   ├── io_utils.py                 # I/O 工具
-│   └── doc_converter.py            # 文档转换
+│   └── config_loader.py            # 配置加载
+├── src/core/
+│   ├── router.py                   # LLM 统一路由（Cloubic + 直连 + 降级链）
+│   ├── runner.py                   # 并行执行引擎
+│   └── progress.py                 # 终端进度渲染
 ├── docs/
 │   ├── AGENT_SYSTEM_CN.md          # 智能体架构说明
 │   ├── agents/*.md                 # 智能体定义文档
@@ -228,19 +240,16 @@ stockagent-analysis/
 └── output/runs/                    # 运行输出目录
 ```
 
-## 智能体类继承
+## 智能体类继承（v2）
 
 ```
-AnalystAgent (基类)
-├── KlineVisionAgent          # K 线视觉分析 (4 agents)
+AnalystAgent (基类, 12 个实例)
+├── KlineVisionAgent          # K 线视觉分析
 ├── DivergenceAgent           # MACD/RSI 背离
-├── VolumePriceAgent          # 量价信号
-├── SupportResistanceAgent    # 支撑阻力
+├── VolumePriceAgent          # 量价结构
 ├── TimeframeResonanceAgent   # 多周期共振
-├── TrendlineAgent            # 趋势线
-├── ChartPatternAgent         # 图表形态
-├── ChanlunAgent              # 缠论
-└── KlinePatternAgent         # K 线形态组合
+├── ChanlunAgent              # 缠论买卖点
+└── KlinePatternAgent         # 形态综合
 ```
 
 ## 配置说明
@@ -253,8 +262,10 @@ AnalystAgent (基类)
 | `decision_threshold_sell` | 50 | 卖出阈值 |
 | `debate_rounds` | 2 | 辩论轮次 |
 | `multi_model_weight_mode` | true | 多模型权重模式 |
-| `llm.default_providers` | ["deepseek","grok","glm"] | 默认并行 Provider |
-| `llm.candidate_providers` | ["gemini","kimi","minmax","doubao","glm"] | 候选备选池 |
+| `llm.default_providers` | ["minmax","doubao","claude","openai"] | 默认并行 Provider |
+| `llm.candidate_providers` | ["grok","kimi","deepseek","glm","qwen"] | 候选备选池 |
+| `structured_debate` | true | 启用结构化辩论 |
+| `news_enhance` | true | 启用 Perplexity 新闻增强 |
 | `llm.agent_call_timeout_sec` | 120 | 单 Agent 超时(秒) |
 | `llm.provider_timeout_sec` | 600 | Provider 总超时(秒) |
 | `llm.max_agent_concurrency` | 6 | Provider 内 Agent 并发数 |
@@ -343,23 +354,19 @@ GEMINI_MODEL → GEMINI_FALLBACK_MODEL → GEMINI_FALLBACK_MODEL2
 
 ## 更新日志
 
-### 2026-03-13
+> 完整历史见 [HISTORY.md](HISTORY.md)
 
-- **feat: 逐 Agent 动态 LLM 融合权重** — 按可公式化程度分三档（A=0.20/B=0.35/C=0.45），根据跨 Provider 评分标准差动态调整，量化 Agent 公式主导、语义 Agent LLM 主导
-- **feat: 评分历史记录** — 每次分析自动存储快照，支持逐日对比和趋势追踪
-- **feat: 突破检测 v2** — 真实趋势线构造 + W 底/M 顶颈线突破 + 三角形边界突破 + 统一确认机制
-- **feat: 盘中虚拟日线** — 1h K 线合成当日虚拟日线，支持盘中研判
-- **feat: Gemini 三级模型降级** — 429 限速时自动降级到备用模型
-- **perf: 短线权重优化** — 多周期加权调整为日 0.50/周 0.40/月 0.10，降低宏观/基本面 Agent 权重
-- **fix: 候选 Provider 排序** — GLM 移到候选末位，minmax 提前
+### 2026-03-22 (v2 里程碑)
 
-### 2026-03-09
-
-- **feat: 相对强弱多层对标增强**（vs 行业/龙头 TOP3/行业 ETF）
-- **feat: K 线形态识别增强**，新增 12 种形态 + 位置权重 + 连续性统计
-- **feat: 国产视觉回退链**，无视觉能力 Provider 自动借用国产视觉 API
-- **perf: 网络可靠性优化**，运行耗时从 300s 降至 107s
-- **perf: 研判+评分合并为 1 次 LLM 调用**，Provider 内 Agent 并发执行
+- **refactor: Agent 精简 29→12** — 合并冗余维度，差异化评分公式，权重从 config 直读
+- **feat: 结构化辩论机制** — 多空团队辩论→仲裁→风险评估四阶段，JSON 解析重试+fallback provider
+- **feat: Cloubic 统一桥接** — claude/gemini/openai/glm/qwen/deepseek 走国内直连，逗号分隔模型降级链
+- **feat: 全量模型升级** — glm-5, kimi-k2.5, grok-4.20, gpt-5.4, cc/claude-opus-4-6 等
+- **feat: 新闻/舆情增强** — Perplexity sonar-pro 实时新闻搜索
+- **feat: 数据获取梯次化** — 5 级 K 线降级 + PE 修正 + TDX 信号量 + 盘中虚拟 K 线
+- **feat: 北交所数据源** — TDX .day/.lc5 二进制直接解析
+- **feat: 狙击点位校验** — 盈亏比>=2 + 止损<=10% 后处理硬约束
+- **fix: Cloubic provider 过滤** — ANTHROPIC_API_KEY 映射 + CLOUBIC_API_KEY 认可
 
 ## License
 

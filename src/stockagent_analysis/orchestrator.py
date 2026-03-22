@@ -228,11 +228,26 @@ def run_analysis(
 
     provider = default_providers[0] if default_providers else "kimi"
 
-    # 过滤：只保留有API_KEY的Provider
-    default_providers = [p for p in default_providers if os.getenv(f"{p.upper()}_API_KEY", "").strip()]
+    # 过滤：只保留有API_KEY的Provider（Cloubic桥接的provider用CLOUBIC_API_KEY即可）
+    from core.router import _should_route_via_cloubic
+    cloubic_key = os.getenv("CLOUBIC_API_KEY", "").strip()
+
+    def _has_api_key(p: str) -> bool:
+        """检查provider是否有可用的API Key。"""
+        # Claude 的环境变量是 ANTHROPIC_API_KEY，特殊映射
+        key_map = {"claude": "ANTHROPIC_API_KEY"}
+        env_key = key_map.get(p.lower(), f"{p.upper()}_API_KEY")
+        if os.getenv(env_key, "").strip():
+            return True
+        # Cloubic 桥接的 provider，有 CLOUBIC_API_KEY 即可
+        if _should_route_via_cloubic(p) and cloubic_key:
+            return True
+        return False
+
+    default_providers = [p for p in default_providers if _has_api_key(p)]
     candidate_providers = [
         p for p in candidate_providers_cfg
-        if p not in default_providers and os.getenv(f"{p.upper()}_API_KEY", "").strip()
+        if p not in default_providers and _has_api_key(p)
     ]
 
     # 全部Provider = 默认 + 候选，都启动子任务
@@ -286,8 +301,8 @@ def run_analysis(
     integrity = analysis_context.get("data_integrity", {})
     is_complete = bool(integrity.get("is_complete", False))
     failed_items = integrity.get("failed_items", [])
-    # day/week 必须；month 缺失可降级继续
-    only_optional_missing = set(failed_items) <= {"month"}
+    # day 必须；week/month 缺失可降级继续（新股/北交所数据源不全时）
+    only_optional_missing = set(failed_items) <= {"month", "week"}
     if not is_complete and not only_optional_missing:
         err_msg = f"数据获取失败，缺失项: {', '.join(failed_items) if failed_items else '基础数据'}"
         manager_logger.warning("data_integrity_incomplete=%s; terminate_no_llm_no_report", integrity)
@@ -303,6 +318,35 @@ def run_analysis(
         }
     if not is_complete and only_optional_missing:
         print(f"[警告] 缺失 {', '.join(failed_items)} 数据，月线相关Agent将降级为文本分析模式", flush=True)
+
+    # ── v2: 新闻/舆情增强 (改进计划#5) ──
+    _news_enhance = bool(project_cfg.get("news_enhance", True))
+    if _news_enhance and llm_routers:
+        from .news_search import enrich_news_data
+        _news_router = next(iter(llm_routers.values()), None)
+        if _news_router:
+            print("[新闻增强] 启动LLM新闻分析...", flush=True)
+            _existing_news = analysis_context.get("news", [])
+            try:
+                _news_result = enrich_news_data(
+                    _news_router, symbol, name, _existing_news,
+                    use_perplexity=bool(os.getenv("PERPLEXITY_API_KEY", "").strip()),
+                )
+                # 写入 analysis_context 供 SENTIMENT_FLOW Agent 消费
+                analysis_context["news_analysis"] = _news_result.get("sentiment", {})
+                if _news_result.get("perplexity_used"):
+                    analysis_context["news"] = _news_result.get("news_items", _existing_news)
+                # 更新 features.news_sentiment 为LLM分析的情绪分
+                _llm_sent = _news_result.get("sentiment", {}).get("sentiment_score", 0)
+                if _llm_sent != 0 and "features" in analysis_context:
+                    analysis_context["features"]["news_sentiment"] = float(_llm_sent)
+                    analysis_context["features"]["news_sentiment_source"] = "llm"
+                dump_json(run_dir / "data" / "news_analysis.json", _news_result)
+                print(f"[新闻增强] 完成: 情绪={_llm_sent} 事件={len(_news_result.get('sentiment', {}).get('key_events', []))}个", flush=True)
+            except Exception as e:
+                manager_logger.warning("news_enhance failed: %s", e)
+                print(f"[新闻增强] 失败: {e}, 使用原始新闻数据", flush=True)
+
     analysts = [create_agent(cfg, run_dir, backend, llm_routers=llm_routers) for cfg in analyst_cfg]
 
     # 调用大模型前检查各 Agent 所需数据，列出本地/云端对照
@@ -413,36 +457,89 @@ def run_analysis(
             done += 1
             print(f"[分析] {done}/{total_steps} 完成 {cn} vote={submissions[-1].vote} score={submissions[-1].score_0_100:.1f}", flush=True)
 
+    # ── v2 结构化辩论 (改进计划#3) ──
     debate_bull_bear: dict[str, Any] = {}
-    for r in range(1, debate_rounds + 1):
-        bull = max(submissions, key=lambda x: x.score_0_100)
-        bear = min(submissions, key=lambda x: x.score_0_100)
-        bull_msg = f"Bull观点：{bull.reason}。请反驳并给出风险点。"
-        bear_msg = f"Bear观点：{bear.reason}。请回应并给出触发条件。"
-        write_message(run_dir, bull.agent_id, bear.agent_id, r, bull_msg)
-        write_message(run_dir, bear.agent_id, bull.agent_id, r, bear_msg)
-        judge_msg = (
-            f"Judge仲裁：Bull={bull.score_0_100:.1f}, Bear={bear.score_0_100:.1f}。"
-            f"结论以证据完整性与数据时效优先。"
-        )
-        write_message(run_dir, manager_cfg["agent_id"], "all_agents", r, judge_msg)
-        debate_bull_bear = {
-            "bull_agent_id": bull.agent_id,
-            "bull_role": next((a.role for a in analysts if a.agent_id == bull.agent_id), bull.agent_id),
-            "bull_reason": bull.reason,
-            "bull_score": round(bull.score_0_100, 2),
-            "bear_agent_id": bear.agent_id,
-            "bear_role": next((a.role for a in analysts if a.agent_id == bear.agent_id), bear.agent_id),
-            "bear_reason": bear.reason,
-            "bear_score": round(bear.score_0_100, 2),
-            "judge_msg": judge_msg,
-        }
-        manager_logger.info("debate_round=%s bull=%s bear=%s", r, bull.agent_id, bear.agent_id)
-        done += 1
-        print(
-            f"[辩论] {done}/{total_steps} 第{r}轮 Bull={agent_registry.get(bull.agent_id)}({bull.score_0_100:.1f}) vs Bear={agent_registry.get(bear.agent_id)}({bear.score_0_100:.1f})",
-            flush=True,
-        )
+    debate_result_data: dict[str, Any] = {}
+    _enable_structured_debate = bool(project_cfg.get("structured_debate", True))
+    if _enable_structured_debate and llm_routers and submissions:
+        from .debate import run_structured_debate
+        # 选择辩论用路由器 (优先用 deep_model 配置的 provider)
+        _debate_provider = project_cfg.get("llm", {}).get("debate_provider") or next(iter(llm_routers), None)
+        _debate_router = llm_routers.get(_debate_provider) if _debate_provider else None
+        if _debate_router:
+            _use_multi_agent = bool(project_cfg.get("debate_multi_agent", False))
+            _mode_tag = "multi-agent" if _use_multi_agent else "普通"
+            print(f"[辩论] 启动结构化辩论 (provider={_debate_provider}, 仲裁={_mode_tag})", flush=True)
+            pipeline.advance("结构化辩论")
+            _current_price = float(analysis_context.get("snapshot", {}).get("close", 0) or 0)
+            _debate_subs = [
+                {
+                    "agent_id": r.agent_id, "dim_code": r.dim_code,
+                    "role": next((a.role for a in analysts if a.agent_id == r.agent_id), r.agent_id),
+                    "score": r.score_0_100, "reason": r.reason,
+                }
+                for r in submissions
+            ]
+            # 构建备用router列表: 排除主辩论provider, 优先用gemini/minmax等
+            _fallback_routers = [
+                r for p, r in llm_routers.items()
+                if p != _debate_provider
+            ]
+            try:
+                _dr = run_structured_debate(
+                    _debate_router, _debate_subs, symbol, name,
+                    _current_price, debate_rounds=1,
+                    fallback_routers=_fallback_routers,
+                    use_multi_agent=_use_multi_agent,
+                )
+                debate_result_data = {
+                    "decision": _dr.decision,
+                    "score_override": _dr.score_override,
+                    "target_price": _dr.target_price,
+                    "stop_loss": _dr.stop_loss,
+                    "confidence": _dr.confidence,
+                    "risk_score": _dr.risk_score,
+                    "reasoning": _dr.reasoning,
+                    "team_reports": _dr.team_reports,
+                    "debate_transcript": _dr.debate_transcript,
+                    "risk_assessment": _dr.risk_assessment,
+                }
+                # 辩论结果保存
+                dump_json(run_dir / "data" / "debate_result.json", debate_result_data)
+                print(
+                    f"[辩论] 完成: decision={_dr.decision} score={_dr.score_override} "
+                    f"target={_dr.target_price} stop={_dr.stop_loss}",
+                    flush=True,
+                )
+            except Exception as e:
+                manager_logger.warning("structured debate failed: %s", e)
+                print(f"[辩论] 结构化辩论失败: {e}, 使用加权评分", flush=True)
+    elif debate_rounds > 0:
+        # v1 旧辩论逻辑 (串行模式降级)
+        for r in range(1, debate_rounds + 1):
+            bull = max(submissions, key=lambda x: x.score_0_100)
+            bear = min(submissions, key=lambda x: x.score_0_100)
+            bull_msg = f"Bull观点：{bull.reason}。请反驳并给出风险点。"
+            bear_msg = f"Bear观点：{bear.reason}。请回应并给出触发条件。"
+            write_message(run_dir, bull.agent_id, bear.agent_id, r, bull_msg)
+            write_message(run_dir, bear.agent_id, bull.agent_id, r, bear_msg)
+            judge_msg = (
+                f"Judge仲裁：Bull={bull.score_0_100:.1f}, Bear={bear.score_0_100:.1f}。"
+                f"结论以证据完整性与数据时效优先。"
+            )
+            write_message(run_dir, manager_cfg["agent_id"], "all_agents", r, judge_msg)
+            debate_bull_bear = {
+                "bull_agent_id": bull.agent_id,
+                "bull_role": next((a.role for a in analysts if a.agent_id == bull.agent_id), bull.agent_id),
+                "bull_reason": bull.reason,
+                "bull_score": round(bull.score_0_100, 2),
+                "bear_agent_id": bear.agent_id,
+                "bear_role": next((a.role for a in analysts if a.agent_id == bear.agent_id), bear.agent_id),
+                "bear_reason": bear.reason,
+                "bear_score": round(bear.score_0_100, 2),
+                "judge_msg": judge_msg,
+            }
+            done += 1
 
     detail = []
     for a, result in zip(analysts, submissions):
@@ -462,8 +559,8 @@ def run_analysis(
         )
 
     model_totals: dict[str, float] = {}
-    # TOP_STRUCTURE 评分语义: 高分=顶部信号强(卖出)，在加权时需反转(100-score)使其拉低总分
-    _INVERT_DIMS = {"TOP_STRUCTURE"}
+    # v2: 不再需要 _INVERT_DIMS — PATTERN agent 内部已处理顶底结构反转
+    _INVERT_DIMS: set[str] = set()
 
     # ── 逐Agent动态LLM权重计算 ──
     # 每个Agent有 llm_base_weight (config, 0.20/0.35/0.45)
@@ -505,7 +602,7 @@ def run_analysis(
                     score = local_s * _local_w + llm_s * _llm_w
                 else:
                     score = local_s
-                # TOP_STRUCTURE: 高分=顶部强→反转后拉低总分
+                # v2: PATTERN agent内部已处理顶底反转, 无需外部反转
                 if _dim_map.get(a.agent_id) in _INVERT_DIMS:
                     score = 100.0 - score
                 total += score * w
@@ -526,6 +623,19 @@ def run_analysis(
             for a, r in zip(analysts, submissions)
         )
         final_score = weighted_score / total_weight
+    # ── v2: 辩论评分融合 ──
+    # 如果结构化辩论产出了 score_override, 以 40% 权重融入最终评分
+    _debate_score = debate_result_data.get("score_override")
+    if _debate_score is not None and 0 <= float(_debate_score) <= 100:
+        _debate_w = 0.40
+        _weighted_score_before = final_score
+        final_score = final_score * (1.0 - _debate_w) + float(_debate_score) * _debate_w
+        manager_logger.info(
+            "debate score fusion: weighted=%.2f debate=%.2f → final=%.2f",
+            _weighted_score_before, _debate_score, final_score,
+        )
+        print(f"[辩论融合] 加权评分={_weighted_score_before:.1f} × 60% + 辩论评分={_debate_score} × 40% = {final_score:.1f}", flush=True)
+
     # 基于市场状态动态调整阈值
     _regime = analysis_context.get("features", {}).get("market_regime", {}).get("regime", "unknown")
     if _regime == "bull":
@@ -654,6 +764,7 @@ def run_analysis(
         "short_term_hold": short_term_hold,
         "medium_long_term_hold": medium_long_term_hold,
         "debate_bull_bear": debate_bull_bear if debate_rounds else {},
+        "structured_debate": debate_result_data if debate_result_data else {},
         "scenario_analysis": scenario_analysis,
         "scenarios": scenarios_data,
         "sniper_points": sniper_points,

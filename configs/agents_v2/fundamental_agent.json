@@ -1,0 +1,17 @@
+{
+  "agent_id": "fundamental_agent",
+  "agent_type": "analyst",
+  "dim_code": "FUNDAMENTAL",
+  "name": "基本面估值Agent",
+  "role": "基本面与估值分析师",
+  "enabled": true,
+  "mandatory": true,
+  "weight": 0.10,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tushare", "akshare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["PE/PB/PEG", "ROE/毛利率", "营收净利增速", "资产负债率", "筹码分布"]
+  },
+  "llm_base_weight": 0.45
+}

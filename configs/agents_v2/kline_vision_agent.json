@@ -1,0 +1,19 @@
+{
+  "agent_id": "kline_vision_agent",
+  "agent_type": "kline_vision",
+  "timeframe": "day",
+  "dim_code": "KLINE_VISION",
+  "name": "K线视觉综合Agent",
+  "role": "K线图像技术分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.06,
+  "merged_from": ["kline_1h_agent", "kline_day_agent", "kline_week_agent", "kline_month_agent"],
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tdx", "akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["日线K线图像", "MA5-250", "MACD/RSI/KDJ", "趋势线"]
+  },
+  "llm_base_weight": 0.50
+}

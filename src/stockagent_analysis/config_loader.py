@@ -13,7 +13,10 @@ def load_project_config(root: Path) -> dict[str, Any]:
 
 
 def load_agent_configs(root: Path) -> list[dict[str, Any]]:
-    agent_dir = root / "configs" / "agents"
+    # v2: 优先使用 agents_v2 (12个精简Agent)，不存在时降级到 agents
+    agent_dir = root / "configs" / "agents_v2"
+    if not agent_dir.exists():
+        agent_dir = root / "configs" / "agents"
     return [load_json(p) for p in sorted(agent_dir.glob("*.json"))]
 
 

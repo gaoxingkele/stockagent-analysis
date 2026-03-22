@@ -1,0 +1,18 @@
+{
+  "agent_id": "resonance_agent",
+  "agent_type": "resonance",
+  "dim_code": "RESONANCE",
+  "name": "多周期共振Agent",
+  "role": "多周期共振与相对强弱分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.06,
+  "merged_from": ["timeframe_resonance_agent", "relative_strength_agent"],
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tdx", "akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["日/周/月趋势方向", "相对强弱(vs大盘/行业/龙头)"]
+  },
+  "llm_base_weight": 0.25
+}
