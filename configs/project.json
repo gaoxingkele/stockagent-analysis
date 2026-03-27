@@ -37,9 +37,9 @@
     ],
     "default_providers": [
       "minmax-m2.5",
-      "doubao-seed1.6",
-      "claude-haiku",
-      "openai-5.1"
+      "glm-5",
+      "openai-5.2",
+      "gemini-3.1pro"
     ],
     "candidate_providers": [
       "grok",
