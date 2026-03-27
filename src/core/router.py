@@ -227,6 +227,8 @@ class LLMRouter:
         request_timeout_sec: float = 45.0,
         multi_turn: bool = True,
         system_message: str | None = None,
+        model_override: str | None = None,
+        no_fallback: bool = False,
     ):
         self.provider = (provider or "grok").lower()
         self.temperature = temperature
@@ -234,6 +236,8 @@ class LLMRouter:
         self.request_timeout_sec = request_timeout_sec
         self.multi_turn = multi_turn
         self.system_message = system_message  # None = 使用各方法的默认值
+        self.model_override = model_override  # 别名模式：锁定指定模型
+        self.no_fallback = no_fallback        # 别名模式：禁用降级链
         self._session = self._create_session()
         self._session_lock = threading.Lock()
 
@@ -415,6 +419,10 @@ class LLMRouter:
             if model_chain:
                 model = model_chain[0]  # 首选模型，降级在下方循环处理
 
+        # model_override 覆盖（别名模式）
+        if self.model_override:
+            model = self.model_override
+
         if not api_key:
             return None
         messages = [{"role": "user", "content": prompt}]
@@ -422,8 +430,10 @@ class LLMRouter:
             sys_msg = self._get_system_message("你是一位专业的中国股市分析员，请基于提供的数据给出客观、可执行的研判。")
             messages = [{"role": "system", "content": sys_msg}] + messages
 
-        # 模型降级链：Cloubic 用 Cloubic 链，直连用 FALLBACK_MODEL/FALLBACK_MODEL2
-        if via_cloubic:
+        # 模型降级链：别名模式锁定单模型；否则 Cloubic 用 Cloubic 链，直连用 FALLBACK
+        if self.no_fallback:
+            models_to_try = [model]
+        elif via_cloubic:
             models_to_try = _get_cloubic_model_chain(self.provider) or [model]
         else:
             models_to_try = _get_direct_model_chain(self.provider, model)
@@ -723,6 +733,10 @@ class LLMRouter:
             if model_chain:
                 model = model_chain[0]
 
+        # model_override 覆盖（别名模式）
+        if self.model_override:
+            model = self.model_override
+
         if not api_key:
             return None
         data_url = f"data:{mime_type};base64,{image_b64}"
@@ -735,8 +749,10 @@ class LLMRouter:
             ]},
         ]
 
-        # Vision 也支持降级链
-        if via_cloubic:
+        # Vision 降级链：别名模式锁定单模型
+        if self.no_fallback:
+            models_to_try = [model]
+        elif via_cloubic:
             models_to_try = _get_cloubic_model_chain(self.provider) or [model]
         else:
             models_to_try = [model]  # Vision 不走 FALLBACK（视觉模型与文字模型不同）

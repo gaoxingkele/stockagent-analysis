@@ -609,9 +609,14 @@ def run_providers_parallel(
     stop_event = threading.Event()
 
     progresses = {
-        p: ProviderProgress(provider=p, start_time=time.time())
+        p: ProviderProgress(provider=p, display_name=p if p != llm_routers.get(p, None) and llm_routers.get(p) and llm_routers[p].model_override else "", start_time=time.time())
         for p in pending_providers
     }
+    # 别名模式：设置 display_name 为 key（可能是别名如 "claude-opus"）
+    for p in pending_providers:
+        router = llm_routers.get(p)
+        if router and router.model_override:
+            progresses[p].display_name = p  # key 本身就是别名
 
     # 新进度显示器（表格化：Provider列 × Agent行，仅默认Provider）
     agent_order = list(base_results.keys())

@@ -266,7 +266,7 @@ def run_arbitration(
         f"【投资辩论】\n{debate_block}\n\n"
         f"请输出JSON格式的投资计划:\n"
         f'{{"decision": "buy/hold/sell",'
-        f' "score": 0到100的整数,'
+        f' "score": 0到100的投资价值分(越高越看好,70+买入,50以下卖出,与decision方向一致),'
         f' "target_price": 目标价格,'
         f' "stop_loss": 止损价格,'
         f' "confidence": 0到1的置信度,'
@@ -327,7 +327,7 @@ def run_risk_assessment(
         f"【保守派意见】\n{conservative}\n\n"
         f"请输出JSON格式:\n"
         f'{{"decision": "buy/hold/sell",'
-        f' "score": 0到100的整数(风险调整后),'
+        f' "score": 0到100的投资价值分(越高越看好,70+买入,50以下卖出,与decision方向一致),'
         f' "risk_score": 0到1(越高风险越大),'
         f' "target_price": 风险调整后目标价,'
         f' "stop_loss": 风险调整后止损价,'

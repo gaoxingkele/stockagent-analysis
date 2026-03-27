@@ -36,10 +36,10 @@
       "gemini"
     ],
     "default_providers": [
-      "minmax",
-      "doubao",
-      "claude",
-      "openai"
+      "minmax-m2.5",
+      "doubao-seed1.6",
+      "claude-haiku",
+      "openai-5.1"
     ],
     "candidate_providers": [
       "grok",

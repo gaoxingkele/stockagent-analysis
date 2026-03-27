@@ -35,6 +35,81 @@ def _build_agent_task_summary(analyst_cfg: list[dict[str, Any]]) -> str:
     return "【多智能体任务分工综述】\n" + "\n".join(lines)
 
 
+# ── Provider 别名自动识别 ──────────────────────────────
+
+_KNOWN_PROVIDERS = [
+    "doubao", "minmax", "claude", "openai", "grok", "kimi",
+    "deepseek", "glm", "qwen", "gemini", "perplexity",
+]
+
+
+def _collect_known_models(provider: str) -> list[str]:
+    """收集某 provider 的所有已知模型名（env vars + Cloubic chain）。"""
+    from core.router import _get_cloubic_model_chain, _get_direct_model_chain
+    models: list[str] = []
+
+    # 直连模型链
+    p_upper = provider.upper()
+    key_map = {"claude": "ANTHROPIC"}
+    env_prefix = key_map.get(provider.lower(), p_upper)
+    primary = os.getenv(f"{env_prefix}_MODEL", "").strip()
+    if primary:
+        models.extend(_get_direct_model_chain(provider, primary))
+
+    # Cloubic 模型链
+    models.extend(_get_cloubic_model_chain(provider))
+
+    # 去重保序
+    seen: set[str] = set()
+    return [m for m in models if m and not (m.lower() in seen or seen.add(m.lower()))]  # type: ignore[func-returns-value]
+
+
+def _normalize(s: str) -> str:
+    """去除 -_. 并小写，用于模糊匹配。"""
+    import re
+    return re.sub(r"[-_.\s]", "", s).lower()
+
+
+def _find_model_by_hint(provider: str, hint: str) -> str | None:
+    """在 provider 的已知模型列表中，用 hint 模糊匹配。"""
+    models = _collect_known_models(provider)
+    hint_n = _normalize(hint)
+    if not hint_n:
+        return None
+    # 精确子串匹配（归一化后）
+    for m in models:
+        if hint_n in _normalize(m):
+            return m
+    return None
+
+
+def _resolve_provider_arg(arg: str) -> tuple[str, str | None, str | None, bool]:
+    """解析 --providers 中的单个参数。
+
+    Returns: (provider, model_override_or_None, display_name_or_None, no_fallback)
+
+    - "doubao"          → ("doubao", None, None, False)         # 默认模式
+    - "doubao-seed1.6"  → ("doubao", "doubao-seed-1-6-251015", "doubao-seed1.6", True)
+    """
+    arg_lower = arg.strip().lower()
+    # 精确匹配已知 provider → 默认模式
+    if arg_lower in _KNOWN_PROVIDERS:
+        return (arg_lower, None, None, False)
+
+    # 前缀匹配：按长度倒序避免 "glm" 截断 "glm-xxx"
+    for p in sorted(_KNOWN_PROVIDERS, key=len, reverse=True):
+        if arg_lower.startswith(p + "-"):
+            hint = arg[len(p) + 1:]  # 保留原始大小写
+            model = _find_model_by_hint(p, hint)
+            if model:
+                return (p, model, arg.strip(), True)
+            # hint 无法匹配到已知模型 → 当作精确模型名使用
+            return (p, hint, arg.strip(), True)
+
+    # 无法解析 → 当普通 provider 传入
+    return (arg, None, None, False)
+
+
 def _verify_data_readiness(
     analysis_context: dict[str, Any],
     analyst_cfg: list[dict[str, Any]],
@@ -218,15 +293,28 @@ def run_analysis(
     default_providers_cfg = llm_cfg.get("default_providers", [])
     candidate_providers_cfg = llm_cfg.get("candidate_providers", [])
 
+    # ── 解析 --providers 参数（支持别名模式） ──
+    # alias_map: key(显示名) → (provider, model_override, no_fallback)
+    alias_map: dict[str, tuple[str, str | None, bool]] = {}
+
     if multi_eval_providers_override:
-        # --providers 显式指定默认Provider
-        default_providers = [p.strip().lower() for p in multi_eval_providers_override.split(",") if p.strip()]
+        raw_args = [p.strip() for p in multi_eval_providers_override.split(",") if p.strip()]
+        default_providers = []
+        for arg in raw_args:
+            prov, model_ov, disp_name, no_fb = _resolve_provider_arg(arg)
+            key = disp_name or prov  # 别名模式用 display_name 做 key
+            default_providers.append(key)
+            if model_ov:
+                alias_map[key] = (prov, model_ov, no_fb)
     elif llm_provider_override:
         default_providers = [llm_provider_override.lower()]
     else:
         default_providers = list(default_providers_cfg) if default_providers_cfg else llm_cfg.get("multi_eval_providers", ["kimi"])
 
     provider = default_providers[0] if default_providers else "kimi"
+    # 别名 key → 实际 provider 名（用于 API key 检查）
+    def _real_provider(key: str) -> str:
+        return alias_map[key][0] if key in alias_map else key
 
     # 过滤：只保留有API_KEY的Provider（Cloubic桥接的provider用CLOUBIC_API_KEY即可）
     from core.router import _should_route_via_cloubic
@@ -234,13 +322,14 @@ def run_analysis(
 
     def _has_api_key(p: str) -> bool:
         """检查provider是否有可用的API Key。"""
+        real_p = _real_provider(p)
         # Claude 的环境变量是 ANTHROPIC_API_KEY，特殊映射
         key_map = {"claude": "ANTHROPIC_API_KEY"}
-        env_key = key_map.get(p.lower(), f"{p.upper()}_API_KEY")
+        env_key = key_map.get(real_p.lower(), f"{real_p.upper()}_API_KEY")
         if os.getenv(env_key, "").strip():
             return True
         # Cloubic 桥接的 provider，有 CLOUBIC_API_KEY 即可
-        if _should_route_via_cloubic(p) and cloubic_key:
+        if _should_route_via_cloubic(real_p) and cloubic_key:
             return True
         return False
 
@@ -255,14 +344,26 @@ def run_analysis(
 
     llm_routers: dict[str, LLMRouter] = {}
     if llm_enabled:
-        for p in all_providers:
-            llm_routers[p] = LLMRouter(
-                provider=p,
-                temperature=float(llm_cfg.get("temperature", 0.3)),
-                max_tokens=int(llm_cfg.get("max_tokens", 600)),
-                request_timeout_sec=float(llm_cfg.get("request_timeout_sec", 45.0)),
-                multi_turn=multi_turn,
-            )
+        for key in all_providers:
+            if key in alias_map:
+                real_p, model_ov, no_fb = alias_map[key]
+                llm_routers[key] = LLMRouter(
+                    provider=real_p,
+                    temperature=float(llm_cfg.get("temperature", 0.3)),
+                    max_tokens=int(llm_cfg.get("max_tokens", 600)),
+                    request_timeout_sec=float(llm_cfg.get("request_timeout_sec", 45.0)),
+                    multi_turn=multi_turn,
+                    model_override=model_ov,
+                    no_fallback=no_fb,
+                )
+            else:
+                llm_routers[key] = LLMRouter(
+                    provider=key,
+                    temperature=float(llm_cfg.get("temperature", 0.3)),
+                    max_tokens=int(llm_cfg.get("max_tokens", 600)),
+                    request_timeout_sec=float(llm_cfg.get("request_timeout_sec", 45.0)),
+                    multi_turn=multi_turn,
+                )
     manager_logger = get_agent_logger(run_dir, manager_cfg["agent_id"])
 
     manager_logger.info("start symbol=%s name=%s analysts=%s", symbol, name, [a["agent_id"] for a in analyst_cfg])

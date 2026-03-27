@@ -263,7 +263,12 @@ class ProviderProgressDisplay:
         header = " " * NW + " " + _pad_to_width("智能体", AW)
         prev_p = None
         for p in providers:
-            header += self._col_sep(prev_p, p) + _center_in_width(p, CW)
+            # 别名模式：优先显示 display_name
+            disp = p
+            prog = self._progresses.get(p)
+            if prog and prog.display_name:
+                disp = prog.display_name
+            header += self._col_sep(prev_p, p) + _center_in_width(disp, CW)
             prev_p = p
         lines.append(header)
 

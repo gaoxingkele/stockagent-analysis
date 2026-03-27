@@ -87,6 +87,7 @@ def _create_fallback_router(
 class ProviderProgress:
     """每个 Provider 线程的进度状态。"""
     provider: str
+    display_name: str = ""  # 别名模式下的显示名（空=用provider）
     weight_done: bool = False
     enrich_done: int = 0
     enrich_total: int = 0
