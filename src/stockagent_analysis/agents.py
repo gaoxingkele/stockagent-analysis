@@ -452,7 +452,19 @@ class AnalystAgent:
         elif abs(bias_ma5) > 5: bias_pen = -15
         elif abs(bias_ma5) > 3: bias_pen = -5
 
-        score = 50 + ma_score + slope_score + tl_bonus + 0.3 * mom + bias_pen
+        # (e) ADX 趋势强度修正: >25趋势市放大信号, <20震荡市压缩信号
+        adx = day.get("adx") if isinstance(day, dict) else None
+        adx_adj = 0.0
+        if adx is not None:
+            adx = float(adx)
+            if adx > 40:
+                adx_adj = 8.0 if (ma_score + slope_score) > 0 else -8.0  # 强趋势放大方向
+            elif adx > 25:
+                adx_adj = 4.0 if (ma_score + slope_score) > 0 else -4.0
+            elif adx < 15:
+                adx_adj = 0.0  # 极弱趋势不加分，但也不强制减分
+
+        score = 50 + ma_score + slope_score + tl_bonus + 0.3 * mom + bias_pen + adx_adj
         if bias_ma5 > 8:
             score = min(score, 35)
         return score
@@ -484,7 +496,20 @@ class AnalystAgent:
         # 量比
         vr_score = max(-10.0, min(10.0, (vr - 1.0) * 12))
 
-        return 50 + rsi_score + macd_score + kdj_score + vr_score + 0.3 * mom - 0.2 * vol
+        # ATR 波动率修正: ATR/价格 > 5% 高波动扣分, < 2% 低波动小幅加分
+        atr_val = day.get("atr") if isinstance(day, dict) else None
+        close_val = day.get("close") if isinstance(day, dict) else None
+        atr_adj = 0.0
+        if atr_val and close_val and float(close_val) > 0:
+            atr_pct = float(atr_val) / float(close_val) * 100
+            if atr_pct > 5:
+                atr_adj = -5.0  # 高波动扣分
+            elif atr_pct > 3:
+                atr_adj = -2.0
+            elif atr_pct < 1.5:
+                atr_adj = 2.0   # 低波动稳定加分
+
+        return 50 + rsi_score + macd_score + kdj_score + vr_score + 0.3 * mom - 0.2 * vol + atr_adj
 
     # ---------- 3. CAPITAL_LIQUIDITY: OBV+量比+换手+量价信号 ----------
     def _score_capital_liquidity(self, pct, mom, vr, turn, kli) -> float:

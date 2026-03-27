@@ -586,12 +586,19 @@ def run_analysis(
                 r for p, r in llm_routers.items()
                 if p != _debate_provider
             ]
+            # 提取日线斐波那契和ATR供仲裁参考
+            _kli = analysis_context.get("features", {}).get("kline_indicators", {})
+            _day_kli = _kli.get("day", {}) if isinstance(_kli, dict) else {}
+            _fib = _day_kli.get("fibonacci") if isinstance(_day_kli, dict) else None
+            _atr = _day_kli.get("atr") if isinstance(_day_kli, dict) else None
             try:
                 _dr = run_structured_debate(
                     _debate_router, _debate_subs, symbol, name,
                     _current_price, debate_rounds=1,
                     fallback_routers=_fallback_routers,
                     use_multi_agent=_use_multi_agent,
+                    fibonacci=_fib,
+                    atr=float(_atr) if _atr else None,
                 )
                 debate_result_data = {
                     "decision": _dr.decision,
@@ -601,6 +608,7 @@ def run_analysis(
                     "confidence": _dr.confidence,
                     "risk_score": _dr.risk_score,
                     "reasoning": _dr.reasoning,
+                    "plans": _dr.plans,
                     "team_reports": _dr.team_reports,
                     "debate_transcript": _dr.debate_transcript,
                     "risk_assessment": _dr.risk_assessment,
@@ -845,6 +853,10 @@ def run_analysis(
                         parts.append(f"{k}: {s['reason']} (概率{s.get('probability', '?')}%)")
                 scenario_analysis = "；".join(parts) if parts else ""
 
+    # 提取斐波那契和入场方案供报告使用
+    _kli_day_fib = kli.get("day", {}).get("fibonacci") if isinstance(kli, dict) else None
+    _entry_plans = debate_result_data.get("plans", []) if debate_result_data else []
+
     output = {
         "symbol": symbol,
         "name": name,
@@ -883,6 +895,8 @@ def run_analysis(
         "position_strategy": position_strategy,
         "position_advice": position_advice,
         "warnings": [w for w in [bias_warning] if w],
+        "fibonacci": _kli_day_fib,
+        "entry_plans": _entry_plans,
     }
     # ── 阶段5: 输出报告 ──
     pipeline.advance("输出报告")

@@ -39,6 +39,7 @@ class DebateResult:
     risk_score: float = 0.5            # 0-1, 越高风险越大
     score_override: float | None = None  # 如果辩论产出评分, 可覆盖加权平均
     reasoning: str = ""
+    plans: list[dict] = field(default_factory=list)  # A/B/C 三入场方案
     team_reports: dict[str, str] = field(default_factory=dict)
     debate_transcript: list[str] = field(default_factory=list)
     risk_assessment: str = ""
@@ -249,6 +250,8 @@ def run_arbitration(
     symbol: str,
     name: str,
     current_price: float,
+    fibonacci: dict | None = None,
+    atr: float | None = None,
     fallback_routers: list[LLMRouter] | None = None,
     use_multi_agent: bool = False,
 ) -> dict:
@@ -259,19 +262,44 @@ def run_arbitration(
     )
     debate_block = "\n\n".join(debate_transcript)
 
+    # 斐波那契锚定参考
+    fib_block = ""
+    if fibonacci and fibonacci.get("ok"):
+        direction = "上涨回调" if fibonacci.get("uptrend") else "下跌反弹"
+        fib_block = (
+            f"\n【斐波那契参考（{direction}）】\n"
+            f"近期高点: {fibonacci.get('swing_high')}  低点: {fibonacci.get('swing_low')}\n"
+            f"回调位: 23.6%={fibonacci.get('retrace_236')} | 38.2%={fibonacci.get('retrace_382')} | "
+            f"50%={fibonacci.get('retrace_500')} | 61.8%={fibonacci.get('retrace_618')}\n"
+            f"延伸位: 127.2%={fibonacci.get('extend_1272')} | 161.8%={fibonacci.get('extend_1618')}\n"
+        )
+
+    # ATR 动态止损参考
+    atr_block = ""
+    if atr and current_price:
+        atr_stop = round(current_price - 2 * atr, 2)
+        atr_pct = round(2 * atr / current_price * 100, 1)
+        atr_block = f"\n【ATR动态止损参考】ATR={atr:.2f}, 2倍ATR止损={atr_stop}（距当前价-{atr_pct}%）\n"
+
     prompt = (
         f"你是{symbol} {name}的投资委员会主席。综合以下分析报告和辩论内容，做出最终投资决策。\n\n"
         f"当前价格: {current_price}\n\n"
         f"【团队分析报告】\n{reports_block}\n\n"
-        f"【投资辩论】\n{debate_block}\n\n"
-        f"请输出JSON格式的投资计划:\n"
+        f"【投资辩论】\n{debate_block}\n"
+        f"{fib_block}{atr_block}\n"
+        f"请输出JSON格式的投资计划（含3种入场方案）:\n"
         f'{{"decision": "buy/hold/sell",'
         f' "score": 0到100的投资价值分(越高越看好,70+买入,50以下卖出,与decision方向一致),'
         f' "target_price": 目标价格,'
         f' "stop_loss": 止损价格,'
         f' "confidence": 0到1的置信度,'
-        f' "reasoning": "2-3句核心理由"}}\n\n'
-        f"必须给出具体的 target_price 和 stop_loss 数值。\n"
+        f' "reasoning": "2-3句核心理由",'
+        f' "plans": ['
+        f'  {{"name": "追涨", "entry": 入场价, "target": 目标价, "stop": 止损价, "rr": 风险收益比数值}},'
+        f'  {{"name": "回踩", "entry": 回踩买入价, "target": 目标价, "stop": 止损价, "rr": 风险收益比数值}},'
+        f'  {{"name": "确认", "entry": 确认突破后买入价, "target": 目标价, "stop": 止损价, "rr": 风险收益比数值}}'
+        f' ]}}\n\n'
+        f"必须给出具体的 target_price 和 stop_loss 数值。plans中每个方案的止损价可参考ATR或斐波那契位。\n"
         f"【盈亏比硬约束】(target_price - 当前价) >= 2 * (当前价 - stop_loss)，止损距当前价不超过10%。\n"
         f"注意：只输出JSON，不要添加其他内容。"
     )
@@ -360,6 +388,8 @@ def run_structured_debate(
     debate_rounds: int = 1,
     fallback_routers: list[LLMRouter] | None = None,
     use_multi_agent: bool = False,
+    fibonacci: dict | None = None,
+    atr: float | None = None,
 ) -> DebateResult:
     """运行完整结构化辩论流程。
 
@@ -395,6 +425,7 @@ def run_structured_debate(
     logger.info("[辩论] Phase 3: 仲裁 (模式=%s)", _mode)
     arb_result = run_arbitration(
         router, team_reports, transcript, symbol, name, current_price,
+        fibonacci=fibonacci, atr=atr,
         fallback_routers=fallback_routers,
         use_multi_agent=use_multi_agent,
     )
@@ -415,6 +446,7 @@ def run_structured_debate(
     result.confidence = float(risk_result.get("confidence", arb_result.get("confidence", 0.5)))
     result.risk_score = float(risk_result.get("risk_score", 0.5))
     result.reasoning = risk_result.get("reasoning", arb_result.get("reasoning", ""))
+    result.plans = arb_result.get("plans", [])
     result.risk_assessment = (
         f"激进派: {risk_result.get('_aggressive', '')[:150]}\n"
         f"保守派: {risk_result.get('_conservative', '')[:150]}"

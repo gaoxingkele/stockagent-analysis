@@ -1899,6 +1899,13 @@ class DataBackend:
             # 长期趋势线（20周期线性回归斜率%/根）
             trend_slope = self._calc_trend_slope(close, 20) if n >= 20 else None
 
+            # ATR(14) — 真实波幅，用于动态止损
+            atr_val = self._calc_atr(high, low, close, 14) if n >= 15 else None
+            # ADX(14) — 趋势强度，>25为趋势市 <20为震荡市
+            adx_val = self._calc_adx(high, low, close, 14) if n >= 28 else None
+            # 斐波那契回调/延伸位（基于近60根K线高低点）
+            fib_levels = self._calc_fibonacci_levels(close, high, low, n)
+
             # 均线系统 MA5/MA10/MA20/MA60/MA120/MA250
             curr_price = float(close.iloc[-1])
             ma_system: dict[str, dict] = {}
@@ -1969,6 +1976,9 @@ class DataBackend:
                 "chanlun": chanlun,
                 "chart_patterns": chart_patterns,
                 "trendlines": trendlines,
+                "atr": _r(atr_val, 4) if atr_val is not None else None,
+                "adx": _r(adx_val, 2) if adx_val is not None else None,
+                "fibonacci": fib_levels,
             }
         return out
 
@@ -2554,6 +2564,101 @@ class DataBackend:
         slope = np.polyfit(x, y, 1)[0]
         mean_price = float(y.mean())
         return (slope / mean_price * 100) if mean_price else None
+
+    @staticmethod
+    def _calc_atr(high, low, close, period: int = 14) -> float | None:
+        """ATR (Average True Range)，用于动态止损计算。"""
+        import pandas as pd
+        if len(close) < period + 1:
+            return None
+        prev_close = close.shift(1)
+        tr = pd.concat([
+            high - low,
+            (high - prev_close).abs(),
+            (low - prev_close).abs(),
+        ], axis=1).max(axis=1)
+        atr = float(tr.rolling(period).mean().iloc[-1])
+        return atr if atr > 0 else None
+
+    @staticmethod
+    def _calc_adx(high, low, close, period: int = 14) -> float | None:
+        """ADX (Average Directional Index)，>25 趋势市，<20 震荡市。"""
+        import pandas as pd
+        n = len(close)
+        if n < period * 2:
+            return None
+        prev_high = high.shift(1)
+        prev_low = low.shift(1)
+        prev_close = close.shift(1)
+        # True Range
+        tr = pd.concat([
+            high - low,
+            (high - prev_close).abs(),
+            (low - prev_close).abs(),
+        ], axis=1).max(axis=1)
+        # Directional Movement
+        plus_dm = (high - prev_high).clip(lower=0)
+        minus_dm = (prev_low - low).clip(lower=0)
+        # 互斥：只保留较大方向
+        mask_plus = plus_dm > minus_dm
+        plus_dm = plus_dm.where(mask_plus, 0)
+        minus_dm = minus_dm.where(~mask_plus, 0)
+        # Smoothed averages (Wilder's)
+        atr_s = tr.rolling(period).mean()
+        plus_di = 100 * (plus_dm.rolling(period).mean() / atr_s.replace(0, 1e-8))
+        minus_di = 100 * (minus_dm.rolling(period).mean() / atr_s.replace(0, 1e-8))
+        dx = (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, 1e-8) * 100
+        adx = float(dx.rolling(period).mean().iloc[-1])
+        return adx if 0 <= adx <= 100 else None
+
+    @staticmethod
+    def _calc_fibonacci_levels(close, high, low, n: int) -> dict[str, Any]:
+        """计算斐波那契回调/延伸位（基于近60根K线高低点）。"""
+        lookback = min(n, 60)
+        seg_high = float(high.tail(lookback).max())
+        seg_low = float(low.tail(lookback).min())
+        curr = float(close.iloc[-1])
+        diff = seg_high - seg_low
+        if diff < 1e-6:
+            return {"ok": False}
+        # 判断趋势方向：当前价在区间上半段→上涨中回调，下半段→下跌中反弹
+        uptrend = curr > (seg_low + seg_high) / 2
+        if uptrend:
+            # 上涨回调位（从高点回撤）
+            retrace = {
+                "retrace_236": round(seg_high - diff * 0.236, 4),
+                "retrace_382": round(seg_high - diff * 0.382, 4),
+                "retrace_500": round(seg_high - diff * 0.500, 4),
+                "retrace_618": round(seg_high - diff * 0.618, 4),
+            }
+            # 上涨延伸位（从低点向上延伸）
+            extend = {
+                "extend_1272": round(seg_low + diff * 1.272, 4),
+                "extend_1618": round(seg_low + diff * 1.618, 4),
+                "extend_2000": round(seg_low + diff * 2.000, 4),
+            }
+        else:
+            # 下跌反弹位（从低点反弹）
+            retrace = {
+                "retrace_236": round(seg_low + diff * 0.236, 4),
+                "retrace_382": round(seg_low + diff * 0.382, 4),
+                "retrace_500": round(seg_low + diff * 0.500, 4),
+                "retrace_618": round(seg_low + diff * 0.618, 4),
+            }
+            # 下跌延伸位（从高点向下延伸）
+            extend = {
+                "extend_1272": round(seg_high - diff * 1.272, 4),
+                "extend_1618": round(seg_high - diff * 1.618, 4),
+                "extend_2000": round(seg_high - diff * 2.000, 4),
+            }
+        return {
+            "ok": True,
+            "uptrend": uptrend,
+            "swing_high": round(seg_high, 4),
+            "swing_low": round(seg_low, 4),
+            **retrace,
+            **extend,
+        }
 
     # ── 突破检测公共模块 (v2) ──
 

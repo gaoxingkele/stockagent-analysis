@@ -1059,6 +1059,104 @@ def _add_scenario_table(
     flow.append(Spacer(1, 6))
 
 
+def _add_entry_plans_table(
+    flow: list,
+    result: dict[str, Any],
+    st_h: Any,
+    st_body: Any,
+    body_font: str,
+    bold_font: str,
+) -> None:
+    """A/B/C三种入场方案对比表 + 斐波那契关键位。"""
+    plans = result.get("entry_plans") or []
+    fib = result.get("fibonacci") or {}
+    feats = result.get("analysis_features") or {}
+    cp = feats.get("close") or feats.get("kline_indicators", {}).get("day", {}).get("close")
+    if not cp:
+        return
+    cp = float(cp)
+
+    # 斐波那契关键位
+    if fib and fib.get("ok"):
+        direction = "上涨回调" if fib.get("uptrend") else "下跌反弹"
+        flow.append(Paragraph(f"斐波那契关键位（{direction}）", st_h))
+        fib_rows = [_cells(["类型", "价格", "距当前价"], bold_font, 9, True)]
+        fib_fields = [
+            ("swing_high", "近期高点"), ("swing_low", "近期低点"),
+            ("retrace_236", "23.6%回调"), ("retrace_382", "38.2%回调"),
+            ("retrace_500", "50%回调"), ("retrace_618", "61.8%回调"),
+            ("extend_1272", "127.2%延伸"), ("extend_1618", "161.8%延伸"),
+        ]
+        for key, label in fib_fields:
+            val = fib.get(key)
+            if val is not None:
+                try:
+                    val = float(val)
+                    diff_pct = (val - cp) / cp * 100
+                    fib_rows.append(_cells([label, f"{val:.2f}", f"{diff_pct:+.1f}%"], body_font, 9))
+                except (ValueError, TypeError):
+                    pass
+        if len(fib_rows) > 1:
+            tbl = Table(fib_rows, colWidths=[36 * mm, 30 * mm, 30 * mm])
+            tbl.setStyle(TableStyle([
+                ("FONTNAME", (0, 0), (-1, -1), body_font),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF2FF")),
+                ("FONTNAME", (0, 0), (-1, 0), bold_font),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D0D7DE")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            flow.append(tbl)
+            flow.append(Spacer(1, 4))
+
+    # 三方案入场对比表
+    if plans and isinstance(plans, list) and len(plans) > 0:
+        flow.append(Paragraph("入场方案对比（AI生成）", st_h))
+        plan_rows = [_cells(["方案", "入场价", "目标价", "止损价", "RR比", "距当前"], bold_font, 9, True)]
+        for p in plans:
+            if not isinstance(p, dict):
+                continue
+            try:
+                entry = float(p.get("entry", 0))
+                target = float(p.get("target", 0))
+                stop = float(p.get("stop", 0))
+                rr = p.get("rr", "")
+                if isinstance(rr, (int, float)):
+                    rr_str = f"1:{rr:.1f}"
+                else:
+                    rr_str = str(rr)
+                entry_diff = (entry - cp) / cp * 100 if cp > 0 else 0
+                plan_rows.append(_cells([
+                    str(p.get("name", "")),
+                    f"{entry:.2f}",
+                    f"{target:.2f}",
+                    f"{stop:.2f}",
+                    rr_str,
+                    f"{entry_diff:+.1f}%",
+                ], body_font, 9))
+            except (ValueError, TypeError):
+                continue
+        if len(plan_rows) > 1:
+            tbl = Table(plan_rows, colWidths=[20 * mm, 24 * mm, 24 * mm, 24 * mm, 20 * mm, 22 * mm])
+            _bg_colors = [
+                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#FFF0F0")),  # 追涨-红
+                ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#F0FFF0")),  # 回踩-绿
+                ("BACKGROUND", (0, 3), (-1, 3), colors.HexColor("#F0F8FF")),  # 确认-蓝
+            ]
+            tbl.setStyle(TableStyle([
+                ("FONTNAME", (0, 0), (-1, -1), body_font),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF2FF")),
+                ("FONTNAME", (0, 0), (-1, 0), bold_font),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D0D7DE")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ] + _bg_colors[:len(plan_rows) - 1]))
+            flow.append(tbl)
+            flow.append(Spacer(1, 4))
+
+
 def _add_sniper_points_table(
     flow: list,
     result: dict[str, Any],
@@ -1784,6 +1882,9 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
     # ── 情景分析与策略 ──
     _add_scenario_table(flow, result, st_h, st_body, body_font, bold_font,
                         final_score, decision_level_cn)
+
+    # ── 斐波那契 + 入场方案 ──
+    _add_entry_plans_table(flow, result, st_h, st_body, body_font, bold_font)
 
     # ── 狙击点位 ──
     _add_sniper_points_table(flow, result, st_h, st_body, body_font, bold_font)
