@@ -752,7 +752,7 @@ def run_analysis(
         elif _debate_decision == "buy":
             _debate_score_aligned = _ds           # buy+80 → 80（看多）
         else:
-            _debate_score_aligned = 50.0          # hold → 中性
+            _debate_score_aligned = _ds            # hold → 用辩论原始分
         _debate_w = 0.40
         _weighted_score_before = final_score
         final_score = final_score * (1.0 - _debate_w) + _debate_score_aligned * _debate_w
