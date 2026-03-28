@@ -297,19 +297,25 @@ def run_analysis(
     # alias_map: key(显示名) → (provider, model_override, no_fallback)
     alias_map: dict[str, tuple[str, str | None, bool]] = {}
 
-    if multi_eval_providers_override:
-        raw_args = [p.strip() for p in multi_eval_providers_override.split(",") if p.strip()]
-        default_providers = []
+    def _parse_provider_list(raw_args: list[str]) -> list[str]:
+        """解析 provider 列表，支持别名模式，填充 alias_map。"""
+        result = []
         for arg in raw_args:
             prov, model_ov, disp_name, no_fb = _resolve_provider_arg(arg)
-            key = disp_name or prov  # 别名模式用 display_name 做 key
-            default_providers.append(key)
+            key = disp_name or prov
+            result.append(key)
             if model_ov:
                 alias_map[key] = (prov, model_ov, no_fb)
+        return result
+
+    if multi_eval_providers_override:
+        raw_args = [p.strip() for p in multi_eval_providers_override.split(",") if p.strip()]
+        default_providers = _parse_provider_list(raw_args)
     elif llm_provider_override:
-        default_providers = [llm_provider_override.lower()]
+        default_providers = _parse_provider_list([llm_provider_override])
     else:
-        default_providers = list(default_providers_cfg) if default_providers_cfg else llm_cfg.get("multi_eval_providers", ["kimi"])
+        raw_cfg = list(default_providers_cfg) if default_providers_cfg else llm_cfg.get("multi_eval_providers", ["kimi"])
+        default_providers = _parse_provider_list(raw_cfg)
 
     provider = default_providers[0] if default_providers else "kimi"
     # 别名 key → 实际 provider 名（用于 API key 检查）
