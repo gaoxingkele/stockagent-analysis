@@ -36,7 +36,7 @@
       "gemini"
     ],
     "default_providers": [
-      "minmax-m2.5",
+      "minmax-m2.7",
       "glm-5",
       "openai-5.2",
       "grok-fast-reasoning",
