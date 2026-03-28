@@ -39,7 +39,7 @@
       "minmax-m2.5",
       "glm-5",
       "openai-5.2",
-      "gemini-3.1pro",
+      "grok-fast-reasoning",
       "doubao-seed2.0"
     ],
     "candidate_providers": [
