@@ -27,6 +27,27 @@ CHECKPOINT_FILE = ROOT / "batch_checkpoint.json"
 from stockagent_analysis.io_utils import build_run_dir
 from stockagent_analysis.orchestrator import run_analysis
 
+# ── 全局状态容器（供信号处理器访问）────────────────────
+class _BatchState:
+    completed: list = []
+    results: list = []
+    total: int = 0
+
+_batch = _BatchState()
+
+def _signal_handler(signum, frame):
+    if _batch.completed:
+        print("\n\n[Batch] ⚠️ 收到中断信号，正在保存 checkpoint...")
+        _save_checkpoint(_batch.completed, _batch.results)
+        print(f"[Batch] checkpoint已保存 ({len(_batch.completed)}/{_batch.total} 完成)")
+        print("[Batch] 下次运行会自动从断点继续。")
+    sys.exit(0)
+
+import signal
+signal.signal(signal.SIGINT, _signal_handler)
+if hasattr(signal, 'SIGTERM'):
+    signal.signal(signal.SIGTERM, _signal_handler)
+
 # ── 待分析列表 ──────────────────────────────────────────
 STOCKS = [
     ("000591", "太阳能"),
@@ -265,22 +286,42 @@ def _save_checkpoint(completed: list[str], results: list[dict]) -> None:
     )
 
 
+def _is_completed(symbol: str, name: str, checkpoint_completed: list[str]) -> bool:
+    """判断股票是否已完成（有final_decision.json或已在checkpoint中成功标记）。"""
+    if symbol in checkpoint_completed:
+        return True
+    # 同时检查output目录中是否已有PDF（崩溃恢复兜底）
+    import glob
+    pattern = f"output/runs/*_{symbol}/final_decision.json"
+    return len(glob.glob(pattern)) > 0
+
+
 def main():
     from datetime import datetime as _dt
 
     checkpoint = _load_checkpoint()
-    completed = checkpoint.get("completed", [])
-    results = checkpoint.get("results", [])
+    _batch.completed = checkpoint.get("completed", [])
+    _batch.results = checkpoint.get("results", [])
+    _batch.total = len(STOCKS)
 
-    total = len(STOCKS)
+    total = _batch.total
     skipped = 0
 
-    print(f"[Batch] 共 {total} 只, 已完成 {len(completed)} 只, 断点续传中...\n")
+    print(f"[Batch] 共 {total} 只, 已完成 {len(_batch.completed)} 只, 断点续传中...\n")
 
     for idx, (symbol, name) in enumerate(STOCKS, 1):
-        if symbol in completed:
+        if _is_completed(symbol, name, _batch.completed):
             skipped += 1
             print(f"[{idx}/{total}] ⏭️ 跳过已完成: {symbol} {name}")
+            # results已在checkpoint加载，只需确保未重复
+            if not any(r.get("symbol") == symbol for r in _batch.results):
+                run_dir_candidates = sorted(ROOT.glob(f"output/runs/*_{symbol}"))
+                if run_dir_candidates:
+                    data = _load_result(run_dir_candidates[-1])
+                    data["symbol"] = symbol
+                    data["name"] = name
+                    data["run_dir"] = str(run_dir_candidates[-1])
+                    _batch.results.append(data)
             continue
 
         t0 = _dt.now()
@@ -302,7 +343,7 @@ def main():
             data["name"] = name
             data["run_dir"] = str(run_dir)
             data["error"] = result.get("error")
-            results.append(data)
+            _batch.results.append(data)
             score = result.get("final_score", "?")
             decision = result.get("final_decision", "?")
             pdf = result.get("final_pdf_path", "")
@@ -310,23 +351,25 @@ def main():
             print(f"\n✅ [{idx}/{total}] {symbol} {name}: {decision} (score={score}) [{elapsed:.0f}s]")
             if pdf:
                 print(f"   PDF: {pdf}")
+            # 仅成功才标记已完成
+            _batch.completed.append(symbol)
         except Exception as e:
             elapsed = (_dt.now() - t0).total_seconds()
             print(f"\n❌ [{idx}/{total}] {symbol} {name}: 分析失败 [{elapsed:.0f}s] — {e}")
-            results.append({"symbol": symbol, "name": name, "fd": {}, "feat": {}, "error": str(e)})
+            _batch.results.append({"symbol": symbol, "name": name, "fd": {}, "feat": {}, "error": str(e)})
+            # 失败不标记，后续可重试
 
-        # 每只完成后保存checkpoint
-        completed.append(symbol)
-        _save_checkpoint(completed, results)
-        print(f"[Checkpoint] 已保存 ({len(completed)}/{total})")
+        # 每只完成后保存checkpoint（崩溃恢复兜底）
+        _save_checkpoint(_batch.completed, _batch.results)
+        print(f"[Checkpoint] 已保存 ({len(_batch.completed)}/{total})")
 
-    # 汇总表格
-    _print_summary(results)
+    # 汇总表格（包含所有已完成的，包括重启后加载的）
+    _print_summary(_batch.results)
 
     # 全部完成后清除checkpoint
     if CHECKPOINT_FILE.exists():
         CHECKPOINT_FILE.unlink()
-        print("[Batch] 全部完成，checkpoint已清除。")
+        print(f"[Batch] 全部完成，checkpoint已清除。")
 
 
 if __name__ == "__main__":
