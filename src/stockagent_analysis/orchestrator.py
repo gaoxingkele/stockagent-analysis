@@ -943,4 +943,13 @@ def run_analysis(
     except Exception:
         pass
 
+    # ── BM25 记忆存入 ─────────────────────────────────────
+    try:
+        from .memory import BM25Memory
+        _feat = analysis_context.get("features", {})
+        _mem = BM25Memory.get_instance()
+        _mem.add_decision(output, _feat, _feat)
+    except Exception:
+        pass
+
     return output

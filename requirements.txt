@@ -6,3 +6,4 @@ reportlab>=4.2.0
 mplfinance>=0.12.9
 pandas-ta>=0.3.14b
 matplotlib>=3.7.0
+rank-bm25>=0.2.2
