@@ -316,62 +316,112 @@ def run_arbitration(
 # Phase 4: 风险评估 (三方辩论)
 # ────────────────────────────────────────────────
 
-def run_risk_assessment(
+def run_risk_debate(
     router: LLMRouter,
     arbitration_result: dict,
     team_reports: dict[str, str],
     symbol: str,
     name: str,
+    current_price: float,
+    rounds: int = 1,
     fallback_routers: list[LLMRouter] | None = None,
     use_multi_agent: bool = False,
 ) -> dict:
-    """Phase 4: 激进/保守/中立三方风险评估 → 风险经理最终决策。JSON解析失败时重试+切换provider。"""
+    """Phase 4: 三层风险辩论 (Aggressive / Conservative / Neutral) → 风险经理最终决策。
+
+    类似 Bull/Bear 辩论的三方轮询机制：
+    1. Aggressive 激进派立论（强调机会和回报）
+    2. Conservative 保守派反驳（强调风险和回撤）
+    3. Neutral 中立派提供平衡视角
+    4. 风险经理综合三方输出最终 JSON
+    """
     arb_block = json.dumps(arbitration_result, ensure_ascii=False, indent=2)
     reports_block = "\n".join(
-        f"【{TEAM_NAMES[k][0]}】{v[:150]}" for k, v in team_reports.items()
+        f"【{TEAM_NAMES[k][0]}报告】{v[:200]}" for k, v in team_reports.items()
     )
 
-    # 激进派
-    aggressive_prompt = (
-        f"你是激进投资分析师。以下是{symbol} {name}的投资计划:\n{arb_block}\n\n"
-        f"请从激进角度评估: 目标价是否过于保守？是否有上行空间被忽略？"
-        f"给出你的调整建议(2-3句)。"
-    )
-    aggressive = _safe_chat(router, aggressive_prompt, "激进派")
+    risk_transcript = []
 
-    # 保守派
-    conservative_prompt = (
-        f"你是保守投资分析师。以下是{symbol} {name}的投资计划:\n{arb_block}\n\n"
-        f"请从保守角度评估: 止损位是否合理？风险是否被低估？"
-        f"给出你的调整建议(2-3句)。"
-    )
-    conservative = _safe_chat(router, conservative_prompt, "保守派")
+    # ── Round 1 ──────────────────────────────────────────
 
-    # 风险经理仲裁 — 使用重试+切换provider
+    # Aggressive 立论
+    agg_prompt = (
+        f"你是{symbol} {name}的激进派风险分析师。\n"
+        f"当前价格: {current_price}\n"
+        f"投资计划摘要:\n{arb_block}\n\n"
+        f"团队分析报告:\n{reports_block}\n\n"
+        f"请从激进角度分析：目标价是否过于保守？上行空间被低估了吗？"
+        f"建议的仓位比例和止损位是什么？（2-3句，直接输出）"
+    )
+    agg_arg = _safe_chat(router, agg_prompt, "激进立论")
+    risk_transcript.append(f"【激进派立论】\n{agg_arg}")
+
+    # Conservative 反驳
+    cons_prompt = (
+        f"你是{symbol} {name}的保守派风险分析师。\n"
+        f"激进派观点:\n{agg_arg}\n\n"
+        f"投资计划:\n{arb_block}\n\n"
+        f"请从保守角度反驳：哪些风险被低估了？回撤可能有多大？"
+        f"你认为最合理的仓位和止损位是多少？（2-3句，直接输出）"
+    )
+    cons_arg = _safe_chat(router, cons_prompt, "保守反驳")
+    risk_transcript.append(f"【保守派反驳】\n{cons_arg}")
+
+    # Neutral 平衡视角
+    neut_prompt = (
+        f"你是{symbol} {name}的中立派风险分析师。\n"
+        f"激进派观点:\n{agg_arg}\n\n"
+        f"保守派观点:\n{cons_arg}\n\n"
+        f"投资计划:\n{arb_block}\n\n"
+        f"请提供平衡观点：双方各有什么道理？综合来看最合理的风险管理方案是什么？（2-3句）"
+    )
+    neut_arg = _safe_chat(router, neut_prompt, "中立派观点")
+    risk_transcript.append(f"【中立派观点】\n{neut_arg}")
+
+    # ── 额外轮次 ────────────────────────────────────────
+    _agg, _cons = agg_arg, cons_arg
+    for r in range(1, rounds):
+        agg_rebut = _safe_chat(router,
+            f"你是激进派。保守派的反驳如下:\n{_cons}\n\n中立派观点:\n{neut_arg}\n\n"
+            f"请回应质疑，强化你的激进立场。（1-2句）",
+            f"激进反驳R{r+1}")
+        risk_transcript.append(f"【激进派反驳 Round{r+1}】\n{agg_rebut}")
+
+        cons_rebut = _safe_chat(router,
+            f"你是保守派。激进派的回应如下:\n{agg_rebut}\n\n中立派观点:\n{neut_arg}\n\n"
+            f"请继续指出风险，不要被轻易说服。（1-2句）",
+            f"保守反驳R{r+1}")
+        risk_transcript.append(f"【保守派反驳 Round{r+1}】\n{cons_rebut}")
+        _agg, _cons = agg_rebut, cons_rebut
+
+    # ── 风险经理综合 ────────────────────────────────────
     risk_prompt = (
-        f"你是{symbol} {name}的风险经理。综合以下三方意见做出最终风险评估:\n\n"
-        f"【投资计划】\n{arb_block}\n\n"
-        f"【激进派意见】\n{aggressive}\n\n"
-        f"【保守派意见】\n{conservative}\n\n"
-        f"请输出JSON格式:\n"
+        f"你是{symbol} {name}的风险经理。以下是三方辩论记录:\n\n"
+        + "\n".join(risk_transcript)
+        + f"\n\n投资计划:\n{arb_block}\n\n"
+        f"当前价格: {current_price}\n\n"
+        f"请综合三方意见，输出最终风险评估JSON:\n"
         f'{{"decision": "buy/hold/sell",'
-        f' "score": 0到100的投资价值分(越高越看好,70+买入,50以下卖出,与decision方向一致),'
-        f' "risk_score": 0到1(越高风险越大),'
-        f' "target_price": 风险调整后目标价,'
-        f' "stop_loss": 风险调整后止损价,'
-        f' "reasoning": "2-3句核心理由"}}\n'
-        f"【盈亏比硬约束】(target_price - 当前价) >= 2 * (当前价 - stop_loss)，止损距当前价不超过10%。\n"
-        f"注意：只输出JSON，不要添加其他内容。"
+        f' "score": 0-100评分,'
+        f' "risk_score": 0-1风险系数(越高越危险),'
+        f' "target_price": 目标价,'
+        f' "stop_loss": 止损价,'
+        f' "position_ratio": "建议仓位如50%",'
+        f' "reasoning": "核心逻辑2-3句"}}\n'
+        f"【约束】盈亏比>=2，止损距当前价不超过10%。只输出JSON。"
     )
     routers = [router] + (fallback_routers or [])
     result = _chat_for_json(routers, risk_prompt, "风险经理", use_multi_agent=use_multi_agent)
     if not result:
         result = arbitration_result.copy()
         result["risk_score"] = 0.5
-        logger.warning("[辩论] 风险评估所有provider均解析失败, 继承仲裁结果")
-    result["_aggressive"] = aggressive
-    result["_conservative"] = conservative
-    logger.info("[辩论] 风险评估完成: decision=%s risk=%s", result.get("decision"), result.get("risk_score"))
+        logger.warning("[辩论] 风险辩论所有provider均失败，继承仲裁结果")
+
+    result["_aggressive"] = agg_arg
+    result["_conservative"] = cons_arg
+    result["_neutral"] = neut_arg
+    result["_risk_transcript"] = risk_transcript
+    logger.info("[辩论] 风险辩论完成: decision=%s risk=%s", result.get("decision"), result.get("risk_score"))
     return result
 
 
@@ -431,9 +481,10 @@ def run_structured_debate(
     )
 
     # Phase 4: 风险评估 (multi-agent 或 普通模式)
-    logger.info("[辩论] Phase 4: 风险评估 (模式=%s)", _mode)
-    risk_result = run_risk_assessment(
-        router, arb_result, team_reports, symbol, name,
+    logger.info("[辩论] Phase 4: 三层风险辩论 (轮次=%d, 模式=%s)", debate_rounds, _mode)
+    risk_result = run_risk_debate(
+        router, arb_result, team_reports, symbol, name, current_price,
+        rounds=debate_rounds,
         fallback_routers=fallback_routers,
         use_multi_agent=use_multi_agent,
     )
@@ -449,7 +500,8 @@ def run_structured_debate(
     result.plans = arb_result.get("plans", [])
     result.risk_assessment = (
         f"激进派: {risk_result.get('_aggressive', '')[:150]}\n"
-        f"保守派: {risk_result.get('_conservative', '')[:150]}"
+        f"保守派: {risk_result.get('_conservative', '')[:150]}\n"
+        f"中立派: {risk_result.get('_neutral', '')[:150]}"
     )
 
     logger.info(
