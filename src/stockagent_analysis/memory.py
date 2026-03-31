@@ -178,8 +178,69 @@ class BM25Memory:
             return ""
         lines = ["\n【相似历史情境参考】"]
         for m in memories:
+            actual = ""
+            if m.get("actual_return_5d") is not None:
+                actual = f" | 实际5日收益{m['actual_return_5d']:+.1f}%"
             lines.append(
-                f"- [{m['symbol']} {m['name']} @{m['date']}] "
-                f"情境:{m['situation']} → 决策:{m['recommendation']}"
+                f"- [{m['symbol']} {m['name']} @{m['date']}]"
+                f"{actual}"
+                f" 情境:{m['situation']} → 决策:{m['recommendation']}"
             )
         return "\n".join(lines)
+
+    def update_with_result(
+        self,
+        symbol: str,
+        date: str,
+        actual_return_5d: float | None = None,
+        actual_return_10d: float | None = None,
+        actual_return_20d: float | None = None,
+        notes: str = "",
+    ) -> bool:
+        """复盘时更新历史决策的实际收益。
+
+        找到 {symbol} + {date} 的记忆条目，填入实际收益。
+        后续召回时会显示实际vs预测对比，供模型学习改进。
+
+        返回: 是否找到并更新了条目
+        """
+        for entry in self.situations:
+            if entry.get("symbol") == symbol and entry.get("date") == date:
+                if actual_return_5d is not None:
+                    entry["actual_return_5d"] = actual_return_5d
+                if actual_return_10d is not None:
+                    entry["actual_return_10d"] = actual_return_10d
+                if actual_return_20d is not None:
+                    entry["actual_return_20d"] = actual_return_20d
+                if notes:
+                    entry["review_notes"] = notes
+                # 评估预测质量
+                predicted_decision = entry.get("final_decision", "")
+                if actual_return_5d is not None:
+                    if predicted_decision == "buy" and actual_return_5d > 0:
+                        entry["review_verdict"] = "correct"
+                    elif predicted_decision == "sell" and actual_return_5d < 0:
+                        entry["review_verdict"] = "correct"
+                    elif predicted_decision == "hold":
+                        entry["review_verdict"] = "neutral"
+                    else:
+                        entry["review_verdict"] = "wrong"
+                self._save()
+                return True
+        return False
+
+    def get_review_stats(self) -> dict:
+        """返回复盘统计：正确/错误/中性次数。"""
+        reviewed = [e for e in self.situations if "review_verdict" in e]
+        if not reviewed:
+            return {"total": 0, "correct": 0, "wrong": 0, "neutral": 0, "accuracy": None}
+        correct = sum(1 for e in reviewed if e["review_verdict"] == "correct")
+        wrong = sum(1 for e in reviewed if e["review_verdict"] == "wrong")
+        neutral = sum(1 for e in reviewed if e["review_verdict"] == "neutral")
+        return {
+            "total": len(reviewed),
+            "correct": correct,
+            "wrong": wrong,
+            "neutral": neutral,
+            "accuracy": round(correct / (correct + wrong), 3) if (correct + wrong) > 0 else None,
+        }
