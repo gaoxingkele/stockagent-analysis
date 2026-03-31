@@ -338,6 +338,7 @@ def generate_scenario_and_position(
     decision_level_cn: str,
     key_levels_summary: str = "",
     current_price: float | None = None,
+    memory_context: str = "",
 ) -> dict:
     """生成结构化情景分析、狙击点位、建仓策略、持仓建议、决策摘要。
 
@@ -348,10 +349,11 @@ def generate_scenario_and_position(
     """
     price_info = f"当前价: {current_price:.2f}\n" if current_price else ""
     kl_info = f"关键价位：{key_levels_summary}\n" if key_levels_summary else ""
+    mem_info = f"{memory_context}\n" if memory_context else ""
     prompt = (
         f"你是中国股市策略分析师。标的：{symbol} {name}。\n"
         f"综合评分={final_score:.1f}，决策等级：{decision_level_cn}。\n"
-        f"{price_info}{kl_info}\n"
+        f"{price_info}{kl_info}{mem_info}"
         f"请仅输出一个JSON对象，包含以下字段：\n"
         f'{{"scenarios": {{"optimistic": {{"probability": 35, "target": 价格数字, "reason": "一句话触发条件"}},'
         f' "neutral": {{"probability": 45, "target": 价格数字, "reason": "一句话"}},'

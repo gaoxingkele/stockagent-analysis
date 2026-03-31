@@ -846,6 +846,29 @@ def run_analysis(
         first_router = next(iter(llm_routers.values()), None)
         if first_router:
             print("[情景] 生成情景分析与建仓/止损建议", flush=True)
+            # BM25 记忆召回（注入 prompt 参考相似历史情境）
+            _mem_context = ""
+            try:
+                from .memory import BM25Memory
+                _mem = BM25Memory.get_instance()
+                # 构建当前情境描述（与 memory.add_decision 相同的字段）
+                _feat = analysis_context.get("features", {}) or {}
+                _af = analysis_context.get("features", {}) or {}
+                _day_ma = _af.get("kline_indicators", {}).get("day", {}).get("ma_system", {}) or {}
+                _ma5_pct = float(_day_ma.get("ma5", {}).get("pct_above", 0) or 0)
+                _ma5_v = float(_day_ma.get("ma5", {}).get("value", 0) or 0)
+                _ma20_v = float(_day_ma.get("ma20", {}).get("value", 0) or 0)
+                _kl = _af.get("key_levels") or {}
+                _trend = float(_feat.get("trend_strength", 0) or 0)
+                _mom = float(_feat.get("momentum_20", 0) or 0)
+                _sit_text = (
+                    f"{final_score:.1f}分{final_decision} {decision_level} "
+                    f"MA5乖离{_ma5_pct:+.1f}% MA5={_ma5_v:.2f} MA20={_ma20_v:.2f} "
+                    f"趋势{_trend:.2f} 动量{_mom:.2f}"
+                )
+                _mem_context = _mem.get_context_for_prompt(_sit_text, n=3)
+            except Exception:
+                pass
             # 情景分析响应较长，临时增大 max_tokens
             _orig_max_tokens = first_router.max_tokens
             first_router.max_tokens = 32768
@@ -853,6 +876,7 @@ def run_analysis(
                 _sr = generate_scenario_and_position(
                     first_router, symbol, name, final_score, decision_level_cn, kl_summary,
                     current_price=_current_price,
+                    memory_context=_mem_context,
                 )
             finally:
                 first_router.max_tokens = _orig_max_tokens
