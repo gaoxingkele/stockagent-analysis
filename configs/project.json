@@ -37,7 +37,7 @@
     ],
     "default_providers": [
       "minmax-m2.7",
-      "glm-5",
+      "gemini",
       "openai-5.2",
       "grok-fast-reasoning",
       "doubao-seed2.0"
