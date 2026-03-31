@@ -847,21 +847,29 @@ class DataBackend:
             start_date = (datetime.now() - timedelta(days=lookback_days)).strftime("%Y%m%d")
             raw = None
             try:
-                raw = ak.stock_zh_a_hist(
-                    symbol=symbol, period=period, start_date=start_date, end_date=end_date, adjust=""
-                )
+                from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+                def _call_day():
+                    return ak.stock_zh_a_hist(symbol=symbol, period=period, start_date=start_date, end_date=end_date, adjust="")
+                with ThreadPoolExecutor(max_workers=1) as ex:
+                    future = ex.submit(_call_day)
+                    raw = future.result(timeout=25)
             except Exception:
                 pass
             # 东财失败时尝试腾讯数据源（gu.qq.com，可规避代理对东财的拦截）
             if raw is None or raw.empty:
                 try:
-                    if symbol.startswith(("0", "3")):
-                        ts_symbol = f"sz{symbol}"
-                    elif symbol.startswith(("8", "4", "9")):
-                        ts_symbol = f"bj{symbol}"
-                    else:
-                        ts_symbol = f"sh{symbol}"
-                    raw = ak.stock_zh_a_hist_tx(symbol=ts_symbol, adjust="")
+                    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+                    def _call_tx():
+                        if symbol.startswith(("0", "3")):
+                            ts_symbol = f"sz{symbol}"
+                        elif symbol.startswith(("8", "4", "9")):
+                            ts_symbol = f"bj{symbol}"
+                        else:
+                            ts_symbol = f"sh{symbol}"
+                        return ak.stock_zh_a_hist_tx(symbol=ts_symbol, adjust="")
+                    with ThreadPoolExecutor(max_workers=1) as ex:
+                        future = ex.submit(_call_tx)
+                        raw = future.result(timeout=25)
                     if raw is not None and not raw.empty and timeframe in {"week", "month"}:
                         raw = raw.copy()
                         raw["date"] = pd.to_datetime(raw["date"])
@@ -881,33 +889,47 @@ class DataBackend:
             return self._normalize_kline_df(raw).tail(limit)
         period = "60" if timeframe in {"1h", "2h"} else "30"
         raw = None
-        # 东财分钟线：重试+延迟，避免限频导致 RemoteDisconnected
+        _AKSHARE_TIMEOUT_SEC = 20  # akshare 分钟线网络超时（避免无限等待）
+
+        def _call_em():
+            return ak.stock_zh_a_hist_min_em(
+                symbol=symbol, period=period,
+                start_date=(datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d 09:30:00"),
+                end_date=datetime.now().strftime("%Y-%m-%d 15:00:00"),
+                adjust=""
+            )
+
+        def _call_sina():
+            if symbol.startswith(("0", "3")):
+                sina_symbol = f"sz{symbol}"
+            elif symbol.startswith(("8", "4", "9")):
+                sina_symbol = f"bj{symbol}"
+            else:
+                sina_symbol = f"sh{symbol}"
+            return ak.stock_zh_a_minute(symbol=sina_symbol, period=period, adjust="")
+
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+        # 东财分钟线：重试+延迟+超时，避免限频/网络问题导致无限阻塞
         for attempt in range(3):
             if attempt > 0:
                 time.sleep(2 + attempt)
             try:
-                end_dt = datetime.now().strftime("%Y-%m-%d 15:00:00")
-                start_dt = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d 09:30:00")
-                raw = ak.stock_zh_a_hist_min_em(
-                    symbol=symbol, period=period, start_date=start_dt, end_date=end_dt, adjust=""
-                )
+                with ThreadPoolExecutor(max_workers=1) as ex:
+                    future = ex.submit(_call_em)
+                    raw = future.result(timeout=_AKSHARE_TIMEOUT_SEC)
                 if raw is not None and not raw.empty:
                     break
-            except Exception:
+            except (FuturesTimeoutError, Exception):
                 pass
         # 东财失败时尝试新浪备选（finance.sina.com.cn，不同数据源）
         if raw is None or raw.empty:
             try:
-                if symbol.startswith(("0", "3")):
-                    sina_symbol = f"sz{symbol}"
-                elif symbol.startswith(("8", "4", "9")):
-                    sina_symbol = f"bj{symbol}"
-                else:
-                    sina_symbol = f"sh{symbol}"
-                raw = ak.stock_zh_a_minute(symbol=sina_symbol, period=period, adjust="")
+                with ThreadPoolExecutor(max_workers=1) as ex:
+                    future = ex.submit(_call_sina)
+                    raw = future.result(timeout=_AKSHARE_TIMEOUT_SEC)
                 if raw is not None and not raw.empty:
                     raw["day"] = raw["day"].astype(str)
-            except Exception:
+            except (FuturesTimeoutError, Exception):
                 pass
         if raw is None or raw.empty:
             raise RuntimeError(f"akshare_{timeframe}_empty")

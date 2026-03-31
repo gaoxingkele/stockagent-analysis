@@ -18,6 +18,43 @@ os.environ["HTTPS_PROXY"] = ""
 os.environ["ALL_PROXY"] = ""
 
 ROOT = Path(__file__).resolve().parent
+
+
+class _Tee:
+    """同时输出到终端和文件，带重试机制（解决Windows文件锁定问题）。"""
+    def __init__(self, path: Path):
+        self.path = path
+        self.locked = False
+
+    def write(self, text: str):
+        sys.stdout.write(text)
+        sys.stdout.flush()
+        if not text.endswith("\n"):
+            return
+        for attempt in range(3):
+            try:
+                with open(self.path, "a", encoding="utf-8") as f:
+                    f.write(text)
+                self.locked = False
+                break
+            except PermissionError:
+                self.locked = True
+                import time
+                time.sleep(0.5)
+            except OSError:
+                break
+
+    def flush(self):
+        sys.stdout.flush()
+
+
+_log = _Tee(ROOT / "batch_run.log")
+
+
+def _log_print(*args, **kwargs):
+    """打印到终端+文件。"""
+    text = " ".join(str(a) for a in args) + "\n"
+    _log.write(text)
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
@@ -37,10 +74,11 @@ _batch = _BatchState()
 
 def _signal_handler(signum, frame):
     if _batch.completed:
-        print("\n\n[Batch] ⚠️ 收到中断信号，正在保存 checkpoint...")
+        _log_print()
+        _log_print(f"[Batch] 收到中断信号，正在保存 checkpoint...")
         _save_checkpoint(_batch.completed, _batch.results)
-        print(f"[Batch] checkpoint已保存 ({len(_batch.completed)}/{_batch.total} 完成)")
-        print("[Batch] 下次运行会自动从断点继续。")
+        _log_print(f"[Batch] checkpoint已保存 ({len(_batch.completed)}/{_batch.total} 完成)")
+        _log_print("[Batch] 下次运行会自动从断点继续。")
     sys.exit(0)
 
 import signal
@@ -50,24 +88,31 @@ if hasattr(signal, 'SIGTERM'):
 
 # ── 待分析列表 ──────────────────────────────────────────
 STOCKS = [
-    ("000591", "太阳能"),
-    ("000731", "四川美丰"),
-    ("000007", "全新好"),
-    ("001309", "德明利"),
-    ("000601", "韶能股份"),
-    ("000090", "天健集团"),
-    ("000912", "泸天化"),
-    ("002470", "金正大"),
-    ("002449", "国星光电"),
-    ("001369", "双欣材料"),
-    ("000498", "山东路桥"),
-    ("000949", "新乡化纤"),
-    ("000623", "吉林敖东"),
-    ("002859", "洁美科技"),
-    ("000690", "宝新能源"),
-    ("000677", "恒天海龙"),
-    ("000534", "万泽股份"),
-    ("000695", "滨海能源"),
+    ("603806", "福斯特"),
+    ("000792", "盐湖股份"),
+    ("002460", "赣锋锂业"),
+    ("300769", "德方纳米"),
+    ("603026", "石大胜华"),
+    ("002422", "科伦药业"),
+    ("002773", "康弘药业"),
+    ("301292", "海科新源"),
+    ("603538", "美诺华"),
+    ("002466", "天齐锂业"),
+    ("603906", "龙蟠科技"),
+    ("300390", "天华新能"),
+    ("603799", "华友钴业"),
+    ("300683", "海特生物"),
+    ("600513", "联环药业"),
+    ("600773", "西藏城投"),
+    ("002192", "融捷股份"),
+    ("688799", "华纳药厂"),
+    ("002203", "海亮股份"),
+    ("002082", "万邦德"),
+    ("000155", "川能动力"),
+    ("000546", "金圆股份"),
+    ("688266", "泽璟制药-U"),
+    ("002497", "雅化集团"),
+    ("688513", "苑东生物"),
 ]
 
 PROVIDERS = None  # 使用 project.json 默认 providers
@@ -307,12 +352,12 @@ def main():
     total = _batch.total
     skipped = 0
 
-    print(f"[Batch] 共 {total} 只, 已完成 {len(_batch.completed)} 只, 断点续传中...\n")
+    _log_print(f"[Batch] 共 {total} 只, 已完成 {len(_batch.completed)} 只, 断点续传中...\n")
 
     for idx, (symbol, name) in enumerate(STOCKS, 1):
         if _is_completed(symbol, name, _batch.completed):
             skipped += 1
-            print(f"[{idx}/{total}] ⏭️ 跳过已完成: {symbol} {name}")
+            _log_print(f"[{idx}/{total}] ⏭️ 跳过已完成: {symbol} {name}")
             # results已在checkpoint加载，只需确保未重复
             if not any(r.get("symbol") == symbol for r in _batch.results):
                 run_dir_candidates = sorted(ROOT.glob(f"output/runs/*_{symbol}"))
@@ -325,9 +370,10 @@ def main():
             continue
 
         t0 = _dt.now()
-        print(f"\n{'=' * 60}")
-        print(f"[{idx}/{total}] 🚀 开始分析: {symbol} {name}  ({t0.strftime('%H:%M:%S')})")
-        print(f"{'=' * 60}\n")
+        _log_print()
+        _log_print(f"{'=' * 60}")
+        _log_print(f"[{idx}/{total}] 开始: {symbol} {name}  ({t0.strftime('%H:%M:%S')})")
+        _log_print(f"{'=' * 60}")
         run_dir = build_run_dir(ROOT, symbol)
         try:
             result = run_analysis(
@@ -348,20 +394,20 @@ def main():
             decision = result.get("final_decision", "?")
             pdf = result.get("final_pdf_path", "")
             elapsed = (_dt.now() - t0).total_seconds()
-            print(f"\n✅ [{idx}/{total}] {symbol} {name}: {decision} (score={score}) [{elapsed:.0f}s]")
+            _log_print(f"✅ [{idx}/{total}] {symbol} {name}: {decision} (score={score}) [{elapsed:.0f}s]")
             if pdf:
-                print(f"   PDF: {pdf}")
+                _log_print(f"   PDF: {pdf}")
             # 仅成功才标记已完成
             _batch.completed.append(symbol)
         except Exception as e:
             elapsed = (_dt.now() - t0).total_seconds()
-            print(f"\n❌ [{idx}/{total}] {symbol} {name}: 分析失败 [{elapsed:.0f}s] — {e}")
+            _log_print(f"❌ [{idx}/{total}] {symbol} {name}: 失败 [{elapsed:.0f}s] — {e}")
             _batch.results.append({"symbol": symbol, "name": name, "fd": {}, "feat": {}, "error": str(e)})
             # 失败不标记，后续可重试
 
         # 每只完成后保存checkpoint（崩溃恢复兜底）
         _save_checkpoint(_batch.completed, _batch.results)
-        print(f"[Checkpoint] 已保存 ({len(_batch.completed)}/{total})")
+        _log_print(f"[Checkpoint] ({len(_batch.completed)}/{total})")
 
     # 汇总表格（包含所有已完成的，包括重启后加载的）
     _print_summary(_batch.results)

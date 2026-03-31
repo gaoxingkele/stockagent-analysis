@@ -32,3 +32,5 @@ add_doubao_provider.py
 
 # Claude Code
 .claude/
+Reference/
+logs_*.txt

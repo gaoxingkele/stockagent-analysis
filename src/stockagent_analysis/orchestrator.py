@@ -846,10 +846,16 @@ def run_analysis(
         first_router = next(iter(llm_routers.values()), None)
         if first_router:
             print("[情景] 生成情景分析与建仓/止损建议", flush=True)
-            scenarios_data, sniper_points, position_strategy, position_advice = generate_scenario_and_position(
-                first_router, symbol, name, final_score, decision_level_cn, kl_summary,
-                current_price=_current_price,
-            )
+            # 情景分析响应较长，临时增大 max_tokens
+            _orig_max_tokens = first_router.max_tokens
+            first_router.max_tokens = 32768
+            try:
+                scenarios_data, sniper_points, position_strategy, position_advice = generate_scenario_and_position(
+                    first_router, symbol, name, final_score, decision_level_cn, kl_summary,
+                    current_price=_current_price,
+                )
+            finally:
+                first_router.max_tokens = _orig_max_tokens
             # 兼容旧格式scenario_analysis
             if scenarios_data:
                 parts = []

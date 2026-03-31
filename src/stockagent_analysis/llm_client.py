@@ -368,12 +368,19 @@ def generate_scenario_and_position(
         if not text:
             return {}, {}, "", {}
         text = text.strip()
-        # 尝试JSON解析
+        # 尝试JSON解析（markdown代码块 或 裸JSON）
         json_text = text
-        m = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text)
+        # 1) 尝试markdown代码块（贪婪匹配，防止嵌套JSON截断）
+        m = re.search(r"```(?:json)?\s*(\{[\s\S]*\})\s*```", text)
         if m:
-            json_text = m.group(1)
-        elif "{" in text:
+            candidate = m.group(1)
+            try:
+                json.loads(candidate)
+                json_text = candidate
+            except json.JSONDecodeError:
+                pass  # 解析失败，交给下面 brace-matching
+        # 2) 裸JSON：找最外层 { ... }（brace-depth匹配）
+        if json_text is text and "{" in text:
             start = text.find("{")
             depth, end = 0, -1
             for i, c in enumerate(text[start:], start):
