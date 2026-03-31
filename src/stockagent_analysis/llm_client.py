@@ -338,10 +338,13 @@ def generate_scenario_and_position(
     decision_level_cn: str,
     key_levels_summary: str = "",
     current_price: float | None = None,
-) -> tuple[dict, dict, str, dict]:
-    """生成结构化情景分析、狙击点位、建仓策略、持仓建议。
+) -> dict:
+    """生成结构化情景分析、狙击点位、建仓策略、持仓建议、决策摘要。
 
-    返回: (scenarios, sniper_points, position_strategy, position_advice)
+    返回: dict {
+        scenarios, sniper_points, position_strategy, position_advice,
+        rating, executive_summary, investment_thesis
+    }
     """
     price_info = f"当前价: {current_price:.2f}\n" if current_price else ""
     kl_info = f"关键价位：{key_levels_summary}\n" if key_levels_summary else ""
@@ -366,7 +369,7 @@ def generate_scenario_and_position(
     try:
         text = router._chat(prompt, multi_turn=True)
         if not text:
-            return {}, {}, "", {}
+            return _empty_scenario_result()
         text = text.strip()
         # 尝试JSON解析（markdown代码块 或 裸JSON）
         json_text = text
@@ -401,26 +404,36 @@ def generate_scenario_and_position(
                 sniper_points = _fix_sniper_points(sniper_points, current_price)
                 position_strategy = str(obj.get("position_strategy", ""))
                 position_advice = obj.get("position_advice", {})
-                return scenarios, sniper_points, position_strategy, position_advice
+                return {
+                "scenarios": scenarios,
+                "sniper_points": sniper_points,
+                "position_strategy": position_strategy,
+                "position_advice": position_advice,
+                "rating": str(obj.get("rating", decision_level_cn)),
+                "executive_summary": str(obj.get("executive_summary", "")),
+                "investment_thesis": str(obj.get("investment_thesis", "")),
+            }
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
         # 回退: 自由文本解析
-        return _parse_freetext_scenario(text)
+        return _parse_freetext_scenario_v2(decision_level_cn)
     except Exception:
         return {}, {}, "", {}
 
 
-def _parse_freetext_scenario(text: str) -> tuple[dict, dict, str, dict]:
-    """从自由文本中解析情景和策略（回退逻辑）。"""
-    scenario, position = "", ""
-    if "情景：" in text:
-        parts = text.split("策略：", 1)
-        scenario = parts[0].replace("情景：", "").strip()[:300]
-        position = parts[1].strip()[:300] if len(parts) > 1 else ""
-    elif "策略：" in text:
-        parts = text.split("策略：", 1)
-        scenario = parts[0].strip()[:300]
-        position = parts[1].strip()[:300] if len(parts) > 1 else ""
-    else:
-        scenario = text[:300]
-    return {}, {}, position or scenario, {}
+def _empty_scenario_result() -> dict:
+    """返回空的结构化结果（失败时使用）。"""
+    return {
+        "scenarios": {}, "sniper_points": {}, "position_strategy": "",
+        "position_advice": {}, "rating": "", "executive_summary": "", "investment_thesis": "",
+    }
+
+def _parse_freetext_scenario_v2(decision_level_cn: str = "") -> dict:
+    """从自由文本中解析情景和策略（回退逻辑），返回新格式 dict。"""
+    return {
+        "scenarios": {}, "sniper_points": {}, "position_strategy": "",
+        "position_advice": {}, "rating": decision_level_cn,
+        "executive_summary": "", "investment_thesis": "",
+    }
+
+

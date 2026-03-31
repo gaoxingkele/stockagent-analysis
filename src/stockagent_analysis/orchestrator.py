@@ -850,12 +850,20 @@ def run_analysis(
             _orig_max_tokens = first_router.max_tokens
             first_router.max_tokens = 32768
             try:
-                scenarios_data, sniper_points, position_strategy, position_advice = generate_scenario_and_position(
+                _sr = generate_scenario_and_position(
                     first_router, symbol, name, final_score, decision_level_cn, kl_summary,
                     current_price=_current_price,
                 )
             finally:
                 first_router.max_tokens = _orig_max_tokens
+            scenarios_data = _sr.get("scenarios", {})
+            sniper_points = _sr.get("sniper_points", {})
+            position_strategy = _sr.get("position_strategy", "")
+            position_advice = _sr.get("position_advice", {})
+            # 新增结构化字段
+            rating = _sr.get("rating", "")
+            executive_summary = _sr.get("executive_summary", "")
+            investment_thesis = _sr.get("investment_thesis", "")
             # 兼容旧格式scenario_analysis
             if scenarios_data:
                 parts = []
@@ -906,6 +914,9 @@ def run_analysis(
         "sniper_points": sniper_points,
         "position_strategy": position_strategy,
         "position_advice": position_advice,
+        "rating": rating,
+        "executive_summary": executive_summary,
+        "investment_thesis": investment_thesis,
         "warnings": [w for w in [bias_warning] if w],
         "fibonacci": _kli_day_fib,
         "entry_plans": _entry_plans,
