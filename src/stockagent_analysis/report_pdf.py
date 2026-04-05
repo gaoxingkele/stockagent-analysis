@@ -1692,11 +1692,6 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
     decision_color = level_color_map.get(decision_level_cn, "#222222")
 
     votes = result.get("agent_votes", [])
-    top_items = sorted(
-        votes,
-        key=lambda x: (abs(float(x.get("score_0_100", 50)) - 50) * float(x.get("weight", 0))),
-        reverse=True,
-    )[:5]
 
     flow = []
 
@@ -1785,66 +1780,23 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
     # ── 技术指标完整读数（三周期）──
     _add_tech_indicators_table(flow, result, st_h, st_body, body_font)
 
-    # ── 各 Agent 简要研判 ──
-    TECH_STRUCTURE_DIMS = {"TREND", "TECH", "TOP_STRUCTURE", "BOTTOM_STRUCTURE", "LIQ",
-                           "CAPITAL_FLOW", "QUANT", "BETA", "DERIV_MARGIN"}
-    flow.append(Paragraph("各 Agent 简要研判分析", st_h))
-    for v in votes:
-        role = v.get("role", "")
-        dim_code = v.get("dim_code", "")
-        score = float(v.get("score_0_100", 50))
-        level_cn = _score_to_decision_level_cn(score)
-        reason = str(v.get("reason", ""))
-        one_line = (reason[:90] + "…") if len(reason) > 90 else reason
-        level_tag = "〔日/周/月线〕" if dim_code in TECH_STRUCTURE_DIMS else ""
-        lc = level_color_map.get(level_cn, "#222222")
-        flow.append(
-            Paragraph(
-                f"• <font name='{bold_font}'>{_esc(role)}</font>：评分 <b>{score:.1f}</b>，"
-                f"建议 <b><font color='{lc}'>{level_cn}</font></b>。{_esc(one_line)} {level_tag}",
-                st_body,
-            )
-        )
-    flow.append(Spacer(1, 8))
+    # （各Agent评分已在"多智能体加权评分体系"表格中展示，不再重复列出）
 
-    # ── 关键依据（Top5）──
-    flow.append(Paragraph("关键依据（Top5 高权重智能体）", st_h))
-    for item in top_items:
-        role = item.get("role", "")
-        score = float(item.get("score_0_100", 50))
-        level_cn = _score_to_decision_level_cn(score)
-        conf = float(item.get("confidence_0_1", 0.5))
-        reason = str(item.get("reason", ""))
-        reason_display = reason[:200] if reason else ""
-        lc = level_color_map.get(level_cn, "#222222")
-        flow.append(
-            Paragraph(
-                f"• <font name='{bold_font}'>{_esc(role)}</font>：建议 <b><font color='{lc}'>{level_cn}</font></b>，"
-                f"评分 <b>{score:.1f}</b>，置信度 {conf:.2f}。{_esc(reason_display)}",
-                st_body,
-            )
-        )
-    flow.append(Spacer(1, 8))
-
-    # ── Bull vs Bear 辩论 ──
+    # ── Bull vs Bear 辩论（仅结论） ──
     debate = result.get("debate_bull_bear") or {}
     if debate and (debate.get("bull_reason") or debate.get("bear_reason")):
         flow.append(Paragraph("Bull vs Bear 辩论", st_h))
         bull_role = debate.get("bull_role", debate.get("bull_agent_id", "看多"))
         bear_role = debate.get("bear_role", debate.get("bear_agent_id", "看空"))
-        bull_r = str(debate.get("bull_reason", ""))
-        bear_r = str(debate.get("bear_reason", ""))
         flow.append(Paragraph(
-            f"<b>看多（Bull）</b> — {_esc(bull_role)} 评分 {debate.get('bull_score', 0)}："
-            f"{_esc(bull_r[:220])}{'…' if len(bull_r) > 220 else ''}",
+            f"<b>看多</b>（{_esc(bull_role)}）评分 {debate.get('bull_score', 0)}　｜　"
+            f"<b>看空</b>（{_esc(bear_role)}）评分 {debate.get('bear_score', 0)}",
             st_body,
         ))
-        flow.append(Paragraph(
-            f"<b>看空（Bear）</b> — {_esc(bear_role)} 评分 {debate.get('bear_score', 0)}："
-            f"{_esc(bear_r[:220])}{'…' if len(bear_r) > 220 else ''}",
-            st_body,
-        ))
-        flow.append(Paragraph(f"<b>Judge 仲裁：</b>{_esc(debate.get('judge_msg', ''))}", st_body))
+        judge_msg = str(debate.get("judge_msg", ""))
+        if judge_msg:
+            short_judge = (judge_msg[:80] + "…") if len(judge_msg) > 80 else judge_msg
+            flow.append(Paragraph(f"<b>仲裁：</b>{_esc(short_judge)}", st_body))
         flow.append(Spacer(1, 6))
 
     # ── 财务健康度与成长性 ──
@@ -1891,39 +1843,6 @@ def build_investor_pdf(run_dir: Path, result: dict[str, Any]) -> Path:
 
     # ── 空仓/持仓建议 ──
     _add_position_advice_table(flow, result, st_h, st_body, body_font, bold_font)
-
-    # ── 结果摘要 ──
-    flow.append(Paragraph("结果摘要", st_h))
-    summary_data = [_cells(["指标", "结果"], bold_font, 11, True)]
-    summary_data.append(_cells(["股票", f"{symbol}  {name}"], body_font, 11))
-    summary_data.append([
-        _cell("最终建议（五级）", body_font, 11),
-        _cell(decision_level_cn, bold_font, 11, True, decision_color),
-    ])
-    summary_data.append(_cells(["综合评分", f"{final_score:.2f}"], body_font, 11))
-    if short_hold or medium_hold:
-        summary_data.append(_cells(["短线建议", short_hold], body_font, 11))
-        summary_data.append(_cells(["中长线建议", medium_hold], body_font, 11))
-    summary_data.append(_cells(["辩论轮次", str(result.get("debate_rounds", 0))], body_font, 11))
-    summary_data.append(_cells(["智能体数量", str(len(votes))], body_font, 11))
-    summary_table = Table(summary_data, colWidths=[38 * mm, 120 * mm])
-    summary_table.setStyle(
-        TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), body_font),
-            ("FONTSIZE", (0, 0), (-1, -1), 11),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF2FF")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0D3B66")),
-            ("FONTNAME", (0, 0), (-1, 0), bold_font),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D0D7DE")),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-            ("TOPPADDING", (0, 0), (-1, -1), 5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ])
-    )
-    flow.append(summary_table)
-    flow.append(Spacer(1, 10))
 
     # ── 报告总结卡片 ──
     _add_summary_card(flow, result, st_h, st_body, body_font, bold_font)

@@ -543,59 +543,24 @@ class AnalystAgent:
 
         return 50 + obv_score + vr_score + turn_score + vp_score + 0.2 * pct
 
-    # ---------- 4. FUNDAMENTAL: PE/PB+PEG+F-Score+筹码 ----------
+    # ---------- 4. FUNDAMENTAL: PE高估惩罚(PE>50扣分, <=50中性不占权重) ----------
     def _score_fundamental(self, mom, pe, pb, f) -> float:
-        # PE分级
-        pe_bias = 0.0
-        if pe is not None:
-            pe_f = float(pe)
-            if pe_f < 0: pe_bias = -10
-            elif pe_f < 15: pe_bias = 12
-            elif pe_f < 25: pe_bias = 5
-            elif pe_f > 100: pe_bias = -10
-            elif pe_f > 60: pe_bias = -8
-            elif pe_f > 40: pe_bias = -4
-
-        # PB分级
-        pb_bias = 0.0
-        if pb is not None:
-            pb_f = float(pb)
-            if pb_f < 1: pb_bias = 8
-            elif pb_f < 2: pb_bias = 4
-            elif pb_f > 50: pb_bias = -8
-            elif pb_f > 15: pb_bias = -5
-            elif pb_f > 8: pb_bias = -3
-
-        # PEG估值 (PE / 净利增速)
-        peg_bias = 0.0
-        np_yoy = f.get("netprofit_yoy")
-        if pe is not None and np_yoy is not None:
-            pe_f = float(pe)
-            np_f = float(np_yoy)
-            if pe_f > 0 and np_f > 5:
-                peg = pe_f / np_f
-                if peg < 0.5: peg_bias = 8
-                elif peg < 1.0: peg_bias = 4
-                elif peg > 3.0: peg_bias = -6
-                elif peg > 2.0: peg_bias = -3
-
-        # F-Score简化 (ROE+成长+负债)
-        f_extra = self._calc_fundamental_extra(f)
-
-        # 筹码分布
-        chip = f.get("chip_distribution", {})
-        chip_bias = 0.0
-        if chip:
-            profit_r = float(chip.get("profit_ratio", 50))
-            trapped_r = float(chip.get("trapped_ratio", 50))
-            health = float(chip.get("health_score", 50))
-            if profit_r > 80: chip_bias += 6
-            elif profit_r > 60: chip_bias += 3
-            elif profit_r < 30: chip_bias -= 6
-            if trapped_r > 60: chip_bias -= 5
-            chip_bias += (health - 50) * 0.08
-
-        return 50 + pe_bias + pb_bias + peg_bias + f_extra + chip_bias + 0.1 * mom
+        if pe is None:
+            return 50.0  # 无PE数据，中性
+        pe_f = float(pe)
+        if pe_f < 0:
+            return 40.0  # 亏损，轻度扣分
+        if pe_f <= 50:
+            return 50.0  # PE正常范围，中性不干扰
+        # PE > 50: 高估惩罚，越高扣越多
+        if pe_f > 200:
+            return 20.0
+        elif pe_f > 100:
+            return 30.0
+        elif pe_f > 75:
+            return 38.0
+        else:  # 50 < PE <= 75
+            return 44.0
 
     # ---------- 5. SENTIMENT_FLOW: 新闻+行业+主力行为+量比异动 ----------
     def _score_sentiment_flow(self, pct, mom, vol, vr, news_c, f) -> float:
@@ -1359,6 +1324,146 @@ class ResonanceAgent(AnalystAgent):
         return "\n".join(parts)
 
 
+class ChannelReversalAgent(AnalystAgent):
+    """动态通道反弹/反转Agent — 基于平滑Donchian通道的阶段状态机评分。"""
+
+    def _load_day_kline(self) -> "pd.DataFrame | None":
+        """从 run_dir 加载日线CSV。"""
+        import pandas as pd
+        csv_path = self.run_dir / "data" / "kline" / "day.csv"
+        if not csv_path.exists():
+            return None
+        df = pd.read_csv(csv_path)
+        col_map = {
+            "收盘": "close", "开盘": "open", "最高": "high",
+            "最低": "low", "成交量": "volume", "日期": "date",
+        }
+        df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+        for col in ("open", "high", "low", "close", "volume"):
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df
+
+    def _simple_policy(self, snap, ctx):
+        """本地策略：运行通道反转状态机，返回最新评分。"""
+        try:
+            from .channel_reversal import compute_channel, detect_phases
+            df = self._load_day_kline()
+            if df is None or len(df) < 160:
+                return "hold", 50.0, 0.3, "日线数据不足，无法计算通道指标"
+            df = compute_channel(df)
+            df = detect_phases(df)
+            last = df.iloc[-1]
+            phase = last.get("phase", "0D")
+            score = float(last.get("cr_score", 50))
+            days = int(last.get("phase_days", 0))
+            rsi = last.get("rsi")
+            vol_r = last.get("vol_ratio")
+            import math
+            rsi_str = f"{rsi:.1f}" if rsi is not None and not math.isnan(rsi) else "N/A"
+            vol_str = f"{vol_r:.2f}" if vol_r is not None and not math.isnan(vol_r) else "N/A"
+
+            phase_labels = {
+                "0U": "上半区(多头)", "0D": "下半区(空头)",
+                "1": "破下轨(超卖)", "2": "回到轨道(反弹启动)",
+                "3A": "弱反弹(大概率破新低)", "3B": "过中轨(看多确认)",
+                "4A": "有效反转(突破上轨)", "4B": "上轨整理(蓄力)",
+            }
+            label = phase_labels.get(phase, phase)
+
+            if score >= 70:
+                vote = "buy"
+            elif score <= 30:
+                vote = "sell"
+            else:
+                vote = "hold"
+
+            confidence = 0.6
+            if phase in ("4A", "3A"):
+                confidence = 0.8
+            elif phase in ("3B", "1"):
+                confidence = 0.7
+
+            reason = (
+                f"通道阶段: {label}(持续{days}日) | "
+                f"RSI={rsi_str} | 量比={vol_str} | 通道评分={score:.0f}"
+            )
+            return vote, score, confidence, reason
+        except Exception as e:
+            self.logger.warning("channel_reversal local policy failed: %s", e)
+            return "hold", 50.0, 0.3, f"通道计算异常: {e}"
+
+    def _build_data_context(self, ctx: dict[str, Any]) -> str:
+        """为LLM构建通道反转数据摘要。"""
+        parts: list[str] = []
+        snap = ctx.get("snapshot", {})
+        if snap:
+            parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
+
+        try:
+            from .channel_reversal import compute_channel, detect_phases
+            df = self._load_day_kline()
+            if df is not None and len(df) >= 160:
+                df = compute_channel(df)
+                df = detect_phases(df)
+                tail = df.tail(20)
+                last = df.iloc[-1]
+
+                phase_labels = {
+                    "0U": "上半区(多头)", "0D": "下半区(空头)",
+                    "1": "破下轨(超卖)", "2": "回到轨道(反弹启动)",
+                    "3A": "���反弹(大概率破新低)", "3B": "过中轨(看多确认)",
+                    "4A": "有效反转(突破上轨)", "4B": "上轨整理(蓄力)",
+                }
+
+                parts.append(f"\n[动态通道指标]")
+                parts.append(
+                    f"上轨={last['ch_upper']:.2f} | 中轨={last['ch_middle']:.2f} | "
+                    f"下轨={last['ch_lower']:.2f}"
+                )
+                parts.append(
+                    f"当前阶段: {phase_labels.get(last['phase'], last['phase'])} "
+                    f"(持续{int(last['phase_days'])}日)"
+                )
+                parts.append(f"通道评分: {last['cr_score']:.0f}")
+
+                # 最近20根K线的阶段变化
+                phase_changes = []
+                prev_p = None
+                for _, row in tail.iterrows():
+                    p = row.get("phase")
+                    if p != prev_p and p is not None:
+                        phase_changes.append(f"{phase_labels.get(p, p)}({int(row['phase_days'])}日)")
+                        prev_p = p
+                if phase_changes:
+                    parts.append(f"近期阶段变化: {'→'.join(phase_changes)}")
+
+                # 价格与轨道的距离
+                close = last["close"]
+                upper = last["ch_upper"]
+                lower = last["ch_lower"]
+                mid = last["ch_middle"]
+                if upper > lower:
+                    pos_pct = (close - lower) / (upper - lower) * 100
+                    parts.append(f"价格在通道中的位置: {pos_pct:.1f}% (0%=下轨, 100%=上轨)")
+                    parts.append(f"距上轨: {(close/upper-1)*100:+.2f}% | 距中轨: {(close/mid-1)*100:+.2f}% | ��下轨: {(close/lower-1)*100:+.2f}%")
+
+            else:
+                parts.append("[动态通道] 日线数据不足160根，无法计算")
+        except Exception as e:
+            parts.append(f"[动��通道] 计算异常: {e}")
+
+        parts.append(
+            "\n分析要求：\n"
+            "1.当前通道阶段的含义和后续走势概率\n"
+            "2.反弹强度判断（弱反弹/过中轨/有效突破）\n"
+            "3.结合RSI和量能确认反弹有效��\n"
+            "4.操作建议和风险提示\n\n"
+            "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判���：[2-3句分析]"
+        )
+        return "\n".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # Agent 工厂
 # ---------------------------------------------------------------------------
@@ -1388,4 +1493,6 @@ def create_agent(
         return SentimentFlowAgent(cfg, run_dir, backend, llm_routers=llm_routers)
     if agent_type == "resonance":
         return ResonanceAgent(cfg, run_dir, backend, llm_routers=llm_routers)
+    if agent_type == "channel_reversal":
+        return ChannelReversalAgent(cfg, run_dir, backend, llm_routers=llm_routers)
     return AnalystAgent(cfg, run_dir, backend, llm_routers=llm_routers)

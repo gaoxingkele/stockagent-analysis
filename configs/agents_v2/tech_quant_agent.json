@@ -4,7 +4,7 @@
   "dim_code": "TECH_QUANT",
   "name": "技术指标量化Agent",
   "role": "技术指标与量化因子分析师",
-  "enabled": true,
+  "enabled": false,
   "mandatory": true,
   "weight": 0.10,
   "merged_from": ["tech_indicator_agent", "quant_agent"],

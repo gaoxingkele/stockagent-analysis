@@ -6,7 +6,7 @@
   "role": "技术背离分析师",
   "enabled": true,
   "mandatory": false,
-  "weight": 0.07,
+  "weight": 0.15,
   "data_sources": {
     "mode": "combined",
     "primary": ["tdx", "akshare", "tushare"],

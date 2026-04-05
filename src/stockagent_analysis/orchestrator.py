@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -674,8 +675,9 @@ def run_analysis(
         )
 
     model_totals: dict[str, float] = {}
-    # v2: 不再需要 _INVERT_DIMS — PATTERN agent 内部已处理顶底结构反转
-    _INVERT_DIMS: set[str] = set()
+    # v2: PATTERN agent 内部已处理顶底结构反转
+    # trend_momentum IC=-0.253（反向指标），高分=趋势末端即将回调 → 反转使用
+    _INVERT_DIMS: set[str] = {"TREND_MOMENTUM"}
 
     # ── 逐Agent动态LLM权重计算 ──
     # 每个Agent有 llm_base_weight (config, 0.20/0.35/0.45)
@@ -721,9 +723,39 @@ def run_analysis(
                 if _dim_map.get(a.agent_id) in _INVERT_DIMS:
                     score = 100.0 - score
                 total += score * w
+            # ── 2b: 关键维度主导 — 高IC维度极端分时额外拉力突破加权束缚 ──
+            _KEY_DIMS = {
+                "chanlun_agent": 0.15,           # IC最高，拉力最大
+                "channel_reversal_agent": 0.12,  # 独立计算引擎，信号清晰
+                "divergence_agent": 0.10,
+                "fundamental_agent": 0.08,
+            }
+            _key_bonus = 0.0
+            for _kid, _pull in _KEY_DIMS.items():
+                _ks = model_scores.get(p, {}).get(_kid)
+                if _ks is not None:
+                    if _ks > 75:
+                        _key_bonus += (_ks - 75) * _pull
+                    elif _ks < 25:
+                        _key_bonus -= (25 - _ks) * _pull
+            total += _key_bonus
             model_totals[p] = round(total, 4)
         if model_totals:
-            final_score = sum(model_totals.values()) / len(model_totals)
+            # ── 2a: 加权中位数 + 离群加成（替代简单均值，保留极端信号） ──
+            import statistics as _stats
+            _mt_vals = list(model_totals.values())
+            _median = _stats.median(_mt_vals)
+            _outlier_bonus = 0.0
+            for _s in _mt_vals:
+                _diff = _s - _median
+                if abs(_diff) > 12:  # 离群阈值
+                    _outlier_bonus += _diff * 0.25  # 25%拉力
+            _outlier_bonus /= len(_mt_vals)
+            final_score = _median + _outlier_bonus
+            manager_logger.info(
+                "model aggregation: median=%.2f outlier_bonus=%.2f final=%.2f (was mean=%.2f)",
+                _median, _outlier_bonus, final_score, sum(_mt_vals) / len(_mt_vals),
+            )
         else:
             total_weight = sum(a.weight for a in analysts) or 1.0
             weighted_score = sum(
@@ -753,7 +785,13 @@ def run_analysis(
             _debate_score_aligned = _ds           # buy+80 → 80（看多）
         else:
             _debate_score_aligned = _ds            # hold → 用辩论原始分
-        _debate_w = 0.40
+        # ── 2c: 辩论权重动态化 — 强信号放大，犹豫时降低干扰 ──
+        if _debate_decision in ("buy", "sell") and _ds > 75:
+            _debate_w = 0.50  # 强信号时辩论权重提升
+        elif _debate_decision == "hold":
+            _debate_w = 0.25  # 犹豫时降低辩论干扰
+        else:
+            _debate_w = 0.40  # 默认
         _weighted_score_before = final_score
         final_score = final_score * (1.0 - _debate_w) + _debate_score_aligned * _debate_w
         manager_logger.info(
@@ -975,6 +1013,15 @@ def run_analysis(
     try:
         from .score_history import save_score_snapshot
         save_score_snapshot(run_dir, output)
+    except Exception:
+        pass
+
+    # ── 记录到追踪系统（用于后续校准） ──
+    try:
+        from .tracking import record_evaluation
+        output["data_date"] = analysis_context.get("features", {}).get("data_date",
+            datetime.now().strftime("%Y-%m-%d"))
+        record_evaluation(output, run_dir=run_dir)
     except Exception:
         pass
 

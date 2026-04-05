@@ -1,0 +1,17 @@
+{
+  "agent_id": "channel_reversal_agent",
+  "agent_type": "channel_reversal",
+  "dim_code": "CHANNEL_REVERSAL",
+  "name": "动态通道反弹Agent",
+  "role": "通道反弹反转分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.20,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tdx", "akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["日K线OHLCV(≥200根)", "通道上/中/下轨", "阶段状态", "RSI", "量比"]
+  },
+  "llm_base_weight": 0.25
+}

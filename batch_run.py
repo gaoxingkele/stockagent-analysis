@@ -88,31 +88,10 @@ if hasattr(signal, 'SIGTERM'):
 
 # ── 待分析列表 ──────────────────────────────────────────
 STOCKS = [
-    ("603806", "福斯特"),
-    ("000792", "盐湖股份"),
-    ("002460", "赣锋锂业"),
-    ("300769", "德方纳米"),
-    ("603026", "石大胜华"),
-    ("002422", "科伦药业"),
-    ("002773", "康弘药业"),
-    ("301292", "海科新源"),
-    ("603538", "美诺华"),
-    ("002466", "天齐锂业"),
-    ("603906", "龙蟠科技"),
-    ("300390", "天华新能"),
-    ("603799", "华友钴业"),
-    ("300683", "海特生物"),
-    ("600513", "联环药业"),
-    ("600773", "西藏城投"),
-    ("002192", "融捷股份"),
-    ("688799", "华纳药厂"),
-    ("002203", "海亮股份"),
-    ("002082", "万邦德"),
-    ("000155", "川能动力"),
-    ("000546", "金圆股份"),
-    ("688266", "泽璟制药-U"),
-    ("002497", "雅化集团"),
-    ("688513", "苑东生物"),
+    ("002294", "信立泰"),
+    ("603288", "海天味业"),
+    ("002437", "誉衡药业"),
+    ("002730", "电光科技"),
 ]
 
 PROVIDERS = None  # 使用 project.json 默认 providers
@@ -120,22 +99,22 @@ PROVIDERS = None  # 使用 project.json 默认 providers
 
 def _decision_label(score: float) -> str:
     if score >= 70:
-        return "🔴**买入**"
+        return "BUY"
     if score >= 60:
-        return "🔴弱买入"
+        return "WEAK_BUY"
     if score >= 50:
-        return "⚪观望"
+        return "HOLD"
     if score >= 40:
-        return "🟢弱卖出"
-    return "🟢**卖出**"
+        return "WEAK_SELL"
+    return "SELL"
 
 
 def _bias_icon(pct: float) -> str:
     if abs(pct) > 8:
-        return "🔴"
+        return "[!]"
     if abs(pct) > 5:
-        return "⚠️"
-    return "✅"
+        return "[~]"
+    return "[ok]"
 
 
 def _safe_float(v) -> float:
@@ -167,59 +146,84 @@ def _load_result(run_dir: Path) -> dict:
     return {"fd": fd, "feat": feat, "close": close}
 
 
+def _get_analysis_note(fd: dict) -> str:
+    """提取多空分析理由或标注数据缺失。"""
+    # 优先用 structured_debate 的 reasoning
+    sd = fd.get("structured_debate", {})
+    if isinstance(sd, dict) and sd.get("reasoning"):
+        return sd["reasoning"][:80]
+    # 其次用 investment_thesis
+    thesis = fd.get("investment_thesis", "")
+    if thesis:
+        return thesis[:80]
+    # 检查是否有 scenario_analysis
+    sa = fd.get("scenario_analysis", "")
+    if sa:
+        return sa[:80]
+    # 检查 sniper_points 是否为空（数据不完整）
+    sp = fd.get("sniper_points", {})
+    if not sp or all(_safe_float(v) == 0 for v in sp.values() if v):
+        return "[!] sniper_points为空，情景分析未完成"
+    return ""
+
+
 def _print_summary(results: list[dict]) -> None:
-    """终端打印5张汇总表格。"""
-    # ── Table 1: 综合评分排行 ──
-    # 收集所有 provider 名称
+    """终端打印汇总表格（按分数降序，含多空理由）。"""
+
+    # ── 主表: 综合评分排行 ──────────────────────────────
     all_providers = []
     for r in results:
         for p in r.get("fd", {}).get("model_totals", {}).keys():
             if p not in all_providers:
                 all_providers.append(p)
 
-    print("\n" + "=" * 80)
-    print("📊 Table 1: 综合评分排行")
-    print("=" * 80)
-    header = f"{'#':>2} | {'代码':>6} | {'名称':<8}"
-    for p in all_providers:
-        header += f" | {p:>8}"
-    header += f" | {'均分':>5} | {'MA5乖离':>8} | {'决策':<12}"
-    print(header)
-    print("-" * len(header))
+    # 按 final_score 降序
+    sorted_results = sorted(results, key=lambda r: _safe_float(r.get("fd", {}).get("final_score", 0)), reverse=True)
 
-    buy_cnt = sell_cnt = hold_cnt = 0
-    for i, r in enumerate(results, 1):
+    print("\n" + "=" * 140)
+    print("TABLE 1: 综合评分排行（按分数降序）")
+    print("=" * 140)
+    hdr = "  # |   代码   |     名称    "
+    for p in all_providers:
+        hdr += " | " + p.center(10)
+    hdr += " |  均分  | MA5乖离 | 决策 | 多空分析摘要"
+    print(hdr)
+    print("-" * 140)
+
+    buy = hold = sell = 0
+    for i, r in enumerate(sorted_results, 1):
         fd = r.get("fd", {})
         feat = r.get("feat", {})
         score = _safe_float(fd.get("final_score"))
         mt = fd.get("model_totals", {})
-        # MA5 bias
         ma_sys = feat.get("kline_indicators", {}).get("day", {}).get("ma_system", {}).get("ma5", {})
         bias = _safe_float(ma_sys.get("pct_above", 0))
-        decision = _decision_label(score)
+        dec = _decision_label(score)
         if score >= 60:
-            buy_cnt += 1
+            buy += 1
         elif score < 50:
-            sell_cnt += 1
+            sell += 1
         else:
-            hold_cnt += 1
+            hold += 1
 
-        row = f"{i:>2} | {r['symbol']:>6} | {r['name']:<8}"
+        row = "{:>3} | {:>7} | {:>10}".format(i, r["symbol"], r["name"])
         for p in all_providers:
             ps = _safe_float(mt.get(p, {}).get("total") if isinstance(mt.get(p), dict) else mt.get(p))
-            row += f" | {ps:>8.1f}"
-        row += f" | {score:>5.1f} | {_bias_icon(bias)}{bias:>+6.1f}% | {decision}"
+            row += " | " + "{:>10.1f}".format(ps)
+        bi = "!!" if abs(bias) > 8 else ("~" if abs(bias) > 5 else "ok")
+        note = _get_analysis_note(fd)
+        row += " | {:>5.1f} | {}{:>+5.1f}% | {} | {}".format(score, bi, bias, dec, note[:40])
         print(row)
 
-    print(f"\n  买入区: {buy_cnt}只 | 观望区: {hold_cnt}只 | 卖出区: {sell_cnt}只")
+    print(f"\n  买入: {buy}只 | 观望: {hold}只 | 卖出: {sell}只 | 总计: {len(sorted_results)}")
 
-    # ── Table 2: 狙击点位 ──
-    print("\n" + "=" * 80)
-    print("🎯 Table 2: 狙击点位")
-    print("=" * 80)
-    print(f"{'#':>2} | {'代码':>6} | {'名称':<8} | {'现价':>7} | {'🟢理想买点':>10} | {'🟢次选买点':>10} | {'🔴止损':>10} | {'🟡止盈1':>10} | {'🟡止盈2':>10} | {'仓位':>5}")
-    print("-" * 110)
-    for i, r in enumerate(results, 1):
+    # ── Table 2: 狙击点位 ─────────────────────────────────
+    print("\n" + "=" * 130)
+    print("TABLE 2: 狙击点位")
+    print("=" * 130)
+    print("  # |   代码   |     名称    |   现价   | 理想买点 | 次选买点 |   止损   |  止盈1   |  止盈2   |  仓位")
+    print("-" * 130)
+    for i, r in enumerate(sorted_results, 1):
         fd = r.get("fd", {})
         sp = fd.get("sniper_points", {})
         price = r.get("close", 0.0)
@@ -231,22 +235,17 @@ def _print_summary(results: list[dict]) -> None:
         pa = fd.get("position_advice", {})
         if isinstance(pa, str):
             pa = {}
-        pos = pa.get("position_ratio", pa.get("ratio", ""))
+        pos = pa.get("position_ratio", pa.get("ratio", "-"))
+        print("{:>3} | {:>7} | {:>10} | {:>7.2f} | {:>7.2f} | {:>7.2f} | {:>7.2f} | {:>7.2f} | {:>7.2f} | {}".format(
+            i, r["symbol"], r["name"], price, ideal, sec, sl, tp1, tp2, pos))
 
-        def _diff(target):
-            if price > 0 and target > 0:
-                return f"`{(target/price-1)*100:+.1f}%`"
-            return ""
-
-        print(f"{i:>2} | {r['symbol']:>6} | {r['name']:<8} | {price:>7.2f} | {ideal:>7.2f} {_diff(ideal):>6} | {sec:>7.2f} {_diff(sec):>6} | {sl:>7.2f} {_diff(sl):>6} | {tp1:>7.2f} {_diff(tp1):>6} | {tp2:>7.2f} {_diff(tp2):>6} | {pos}")
-
-    # ── Table 3: 均线体系 ──
-    print("\n" + "=" * 80)
-    print("📈 Table 3: 多周期均线支撑/阻力")
-    print("=" * 80)
-    print(f"{'#':>2} | {'代码':>6} | {'名称':<8} | {'现价':>7} | {'MA5':>7} | {'MA10':>7} | {'MA20':>7} | {'MA60':>7} | {'周MA5':>7} | {'周MA20':>7} | {'评估'}")
-    print("-" * 105)
-    for i, r in enumerate(results, 1):
+    # ── Table 3: 均线体系 ───────────────────────────────────
+    print("\n" + "=" * 110)
+    print("TABLE 3: 多周期均线支撑/阻力")
+    print("=" * 110)
+    print("  # |   代码   |     名称    |   现价   |   MA5   |  MA10   |  MA20   |  MA60   |  周MA5  |  周MA20 | 评估")
+    print("-" * 110)
+    for i, r in enumerate(sorted_results, 1):
         fd = r.get("fd", {})
         feat = r.get("feat", {})
         price = r.get("close", 0.0)
@@ -262,18 +261,18 @@ def _print_summary(results: list[dict]) -> None:
         ma60 = _ma(day_ma, "ma60")
         wma5 = _ma(week_ma, "ma5")
         wma20 = _ma(week_ma, "ma20")
-
         bias5 = _safe_float(day_ma.get("ma5", {}).get("pct_above", 0))
-        assess = "🔴超买" if bias5 > 8 else ("⚠️偏高" if bias5 > 5 else "✅正常")
-        print(f"{i:>2} | {r['symbol']:>6} | {r['name']:<8} | {price:>7.2f} | {ma5:>7.2f} | {ma10:>7.2f} | {ma20:>7.2f} | {ma60:>7.2f} | {wma5:>7.2f} | {wma20:>7.2f} | {assess}")
+        assess = "超买" if bias5 > 8 else ("偏高" if bias5 > 5 else "正常")
+        print("{:>3} | {:>7} | {:>10} | {:>7.2f} | {:>7.2f} | {:>7.2f} | {:>7.2f} | {:>7.2f} | {:>7.2f} | {:>7.2f} | {}".format(
+            i, r["symbol"], r["name"], price, ma5, ma10, ma20, ma60, wma5, wma20, assess))
 
-    # ── Table 4: 操作策略 ──
-    print("\n" + "=" * 80)
-    print("📋 Table 4: 操作策略建议")
-    print("=" * 80)
-    print(f"{'#':>2} | {'代码':>6} | {'名称':<8} | {'📭 空仓建议':<30} | {'📬 持仓建议':<30}")
-    print("-" * 95)
-    for i, r in enumerate(results, 1):
+    # ── Table 4: 操作策略 ───────────────────────────────────
+    print("\n" + "=" * 110)
+    print("TABLE 4: 操作策略建议")
+    print("=" * 110)
+    print("  # |   代码   |     名称    | 空仓建议（60字）                           | 持仓建议（60字）                           ")
+    print("-" * 110)
+    for i, r in enumerate(sorted_results, 1):
         fd = r.get("fd", {})
         pa = fd.get("position_advice", {})
         no_pos = pa.get("no_position", "—")
@@ -282,33 +281,34 @@ def _print_summary(results: list[dict]) -> None:
             no_pos = no_pos.get("summary", str(no_pos))
         if isinstance(has_pos, dict):
             has_pos = has_pos.get("summary", str(has_pos))
-        # 截断过长文本
-        no_pos = str(no_pos)[:28]
-        has_pos = str(has_pos)[:28]
-        print(f"{i:>2} | {r['symbol']:>6} | {r['name']:<8} | {no_pos:<30} | {has_pos:<30}")
+        no_pos = str(no_pos)[:58]
+        has_pos = str(has_pos)[:58]
+        print("{:>3} | {:>7} | {:>10} | {:<60} | {:<60}".format(
+            i, r["symbol"], r["name"], no_pos, has_pos))
 
-    # ── Table 5: 乖离预警 ──
+    # ── Table 5: 乖离预警 ───────────────────────────────────
     alerts = []
-    for r in results:
+    for r in sorted_results:
         feat = r.get("feat", {})
         ma_sys = feat.get("kline_indicators", {}).get("day", {}).get("ma_system", {})
         bias = _safe_float(ma_sys.get("ma5", {}).get("pct_above", 0))
         if abs(bias) > 8:
             alerts.append((r["symbol"], r["name"], bias, _safe_float(ma_sys.get("ma5", {}).get("value"))))
     if alerts:
-        print("\n" + "=" * 80)
-        print("⚠️ Table 5: 乖离预警区")
-        print("=" * 80)
-        print(f"{'预警':>4} | {'代码':>6} | {'名称':<8} | {'MA5乖离':>8} | {'现价 vs MA5':<20} | {'风险提示'}")
-        print("-" * 80)
+        print("\n" + "=" * 90)
+        print("TABLE 5: 乖离预警区（MA5乖离率 > 8%）")
+        print("=" * 90)
+        print(" 预警 |   代码   |     名称    | MA5乖离  |  现价vsMA5  | 风险提示")
+        print("-" * 90)
         for sym, name, bias, ma5v in alerts:
-            level = "🔴高" if abs(bias) > 12 else "⚠️中"
+            level = "高" if abs(bias) > 12 else "中"
             note = "短线获利回吐压力大" if bias > 0 else "超跌反弹可能"
-            print(f"{level:>4} | {sym:>6} | {name:<8} | {bias:>+7.1f}% | MA5={ma5v:.2f} | {note}")
+            print("  {}   | {:>7} | {:>10} | {:>+7.1f}%  | MA5={:.2f}  | {}".format(
+                level, sym, name, bias, ma5v, note))
     else:
-        print("\n✅ 无乖离预警（所有标的 MA5 乖离率均在 ±8% 以内）")
+        print("\n  无乖离预警（所有标的 MA5 乖离率均在 +/-8% 以内）")
 
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 140)
 
 
 def _load_checkpoint() -> dict:

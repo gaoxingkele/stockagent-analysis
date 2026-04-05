@@ -420,7 +420,7 @@ def generate_scenario_and_position(
         # 回退: 自由文本解析
         return _parse_freetext_scenario_v2(decision_level_cn)
     except Exception:
-        return {}, {}, "", {}
+        return _empty_scenario_result()
 
 
 def _empty_scenario_result() -> dict:

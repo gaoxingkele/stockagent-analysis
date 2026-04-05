@@ -6,7 +6,7 @@
   "role": "基本面与估值分析师",
   "enabled": true,
   "mandatory": true,
-  "weight": 0.10,
+  "weight": 0.05,
   "data_sources": {
     "mode": "combined",
     "primary": ["tushare", "akshare"],

@@ -380,7 +380,7 @@ class LLMRouter:
             base_url = "https://api.moonshot.cn/v1/chat/completions"
         elif self.provider == "minmax":
             api_key = os.getenv("MINMAX_API_KEY", "")
-            model = os.getenv("MINMAX_MODEL", "MiniMax-M2.7")
+            model = os.getenv("MINMAX_MODEL", "MiniMax-M2.5")
             base_url = os.getenv("MINMAX_BASE_URL", "https://api.minimaxi.com/v1/chat/completions")
         elif self.provider == "glm":
             api_key = os.getenv("GLM_API_KEY", "")
