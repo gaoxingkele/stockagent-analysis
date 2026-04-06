@@ -6,7 +6,7 @@
   "role": "多周期共振与相对强弱分析师",
   "enabled": true,
   "mandatory": false,
-  "weight": 0.06,
+  "weight": 0.05,
   "merged_from": ["timeframe_resonance_agent", "relative_strength_agent"],
   "data_sources": {
     "mode": "combined",

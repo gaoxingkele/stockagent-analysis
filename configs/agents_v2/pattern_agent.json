@@ -6,7 +6,7 @@
   "role": "K线形态与图形分析师",
   "enabled": true,
   "mandatory": false,
-  "weight": 0.08,
+  "weight": 0.05,
   "merged_from": ["kline_pattern_agent", "chart_pattern_agent", "top_structure_agent", "bottom_structure_agent"],
   "data_sources": {
     "mode": "combined",

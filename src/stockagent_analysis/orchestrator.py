@@ -725,10 +725,10 @@ def run_analysis(
                 total += score * w
             # ── 2b: 关键维度主导 — 高IC维度极端分时额外拉力突破加权束缚 ──
             _KEY_DIMS = {
-                "chanlun_agent": 0.15,           # IC最高，拉力最大
-                "channel_reversal_agent": 0.12,  # 独立计算引擎，信号清晰
-                "divergence_agent": 0.10,
-                "fundamental_agent": 0.08,
+                "chanlun_agent": 0.15,              # IC最高，拉力最大
+                "channel_reversal_agent": 0.12,     # 独立计算引擎，信号清晰
+                "divergence_agent": 0.10,           # IC(20d)=+0.066，全Agent最强
+                "capital_liquidity_agent": 0.08,    # IC(20d)=+0.031，fundamental替换(fundamental永远=50)
             }
             _key_bonus = 0.0
             for _kid, _pull in _KEY_DIMS.items():

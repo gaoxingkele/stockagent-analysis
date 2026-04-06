@@ -6,7 +6,7 @@
   "role": "资金流向与流动性分析师",
   "enabled": true,
   "mandatory": true,
-  "weight": 0.12,
+  "weight": 0.10,
   "merged_from": ["capital_flow_agent", "flow_detail_agent", "liquidity_agent"],
   "data_sources": {
     "mode": "combined",

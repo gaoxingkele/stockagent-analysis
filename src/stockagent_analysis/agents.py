@@ -389,7 +389,7 @@ class AnalystAgent:
         if dim == "DERIV_MARGIN":
             return 50 + self._calc_margin_hsgt_bias(f) + 0.3 * pct - 0.15 * vol
         if dim == "DIVERGENCE":
-            return self._score_multi_tf(kli, "divergence", "divergence_score", 0.8)
+            return self._score_divergence(kli)
         if dim == "CHANLUN":
             return self._score_multi_tf(kli, "chanlun", "chanlun_score", 1.0)
         if dim == "PATTERN":
@@ -520,7 +520,7 @@ class AnalystAgent:
 
         # OBV趋势
         obv_trend = vp.get("obv_trend", "flat")
-        obv_score = 8.0 if obv_trend == "up" else (-8.0 if obv_trend == "down" else 0.0)
+        obv_score = 12.0 if obv_trend == "up" else (-12.0 if obv_trend == "down" else 0.0)
 
         # 量比趋势
         vr_score = max(-15.0, min(15.0, (vr - 1.0) * 18))
@@ -536,8 +536,8 @@ class AnalystAgent:
 
         # 量价信号
         vp_score = 0.0
-        if vp.get("volume_breakout"): vp_score += 8
-        if vp.get("shrink_pullback"): vp_score += 6
+        if vp.get("volume_breakout"): vp_score += 12
+        if vp.get("shrink_pullback"): vp_score += 8
         if vp.get("climax_volume"): vp_score -= 8
         if vp.get("volume_anomaly"): vp_score += 4
 
@@ -583,7 +583,27 @@ class AnalystAgent:
 
         return 50 + news_score + mm_score + margin_sent + 0.2 * mom + 0.15 * pct
 
-    # ---------- 6. 多周期加权评分通用 (DIVERGENCE, CHANLUN) ----------
+    # ---------- 6a. DIVERGENCE: 背离检测 + 无背离时RSI/MACD辅助 ----------
+    def _score_divergence(self, kli) -> float:
+        # 先用多周期背离检测
+        has_signal = False
+        score = 50.0
+        total_w = 0.0
+        for _tf, _w in (("day", 0.50), ("week", 0.35), ("month", 0.15)):
+            td = kli.get(_tf, {}) if isinstance(kli, dict) else {}
+            sub = td.get("divergence", {}) if isinstance(td, dict) else {}
+            ds = float(sub.get("divergence_score") or 0) if isinstance(sub, dict) else 0
+            if ds != 0:
+                score += ds * _w * 1.0
+                total_w += _w
+                has_signal = True
+        if has_signal and total_w > 0:
+            score = 50.0 + (score - 50.0) / total_w
+            return max(10.0, min(90.0, score))
+        # 无背离 — 中性基调，背离agent职责是检测背离而非判多空
+        return 50.0
+
+    # ---------- 6b. 多周期加权评分通用 (CHANLUN) ----------
     def _score_multi_tf(self, kli, data_key: str, score_key: str, scale: float) -> float:
         score = 50.0
         total_w = 0.0
@@ -1022,32 +1042,110 @@ class KlineVisionAgent(AnalystAgent):
 class DivergenceAgent(AnalystAgent):
     """MACD/RSI背离检测Agent。"""
 
+    _SYSTEM_PROMPT_CACHE: "str | None" = None
+
+    @classmethod
+    def _load_system_prompt(cls) -> str:
+        if cls._SYSTEM_PROMPT_CACHE is None:
+            prompt_path = (
+                Path(__file__).resolve().parent.parent.parent
+                / "configs" / "prompts" / "divergence_system.txt"
+            )
+            cls._SYSTEM_PROMPT_CACHE = prompt_path.read_text(encoding="utf-8") if prompt_path.exists() else ""
+        return cls._SYSTEM_PROMPT_CACHE
+
+    def _simple_policy(self, snap, ctx) -> tuple[str, float, float, str]:
+        """本地策略：基于多周期背离评分给出投票和置信度。"""
+        kli = ctx.get("features", {}).get("kline_indicators", {})
+        score = self._score_divergence(kli)
+
+        # 统计各周期背离情况
+        bull_tfs, bear_tfs = [], []
+        for tf in ("day", "week", "month"):
+            td = kli.get(tf, {}) if isinstance(kli, dict) else {}
+            dv = td.get("divergence", {}) if isinstance(td, dict) else {}
+            if not isinstance(dv, dict):
+                continue
+            if dv.get("macd_bot_div") or dv.get("rsi_bot_div"):
+                bull_tfs.append(tf)
+            if dv.get("macd_top_div") or dv.get("rsi_top_div"):
+                bear_tfs.append(tf)
+
+        # 置信度：多周期共振时更高，无背离时极低（让权重自动缩小）
+        if len(bull_tfs) >= 2 or len(bear_tfs) >= 2:
+            confidence = 0.80
+        elif bull_tfs or bear_tfs:
+            confidence = 0.60
+        else:
+            confidence = 0.20
+
+        tf_label = {"day": "日", "week": "周", "month": "月"}
+        if bull_tfs:
+            signal = "+".join(tf_label[t] for t in bull_tfs) + "线底背离"
+        elif bear_tfs:
+            signal = "+".join(tf_label[t] for t in bear_tfs) + "线顶背离"
+        else:
+            signal = "无背离"
+
+        reason = f"背离信号: {signal} | 本地评分={score:.0f}"
+        if score >= 70:
+            return "buy", score, confidence, reason
+        if score <= 30:
+            return "sell", score, confidence, reason
+        return "hold", score, confidence, reason
+
     def _build_data_context(self, ctx: dict[str, Any]) -> str:
         parts: list[str] = []
+
+        sys_prompt = self._load_system_prompt()
+        if sys_prompt:
+            parts.append(sys_prompt)
+            parts.append("")
+            parts.append("======== 六、当前股票实时背离数据 ========")
+            parts.append("")
+
         snap = ctx.get("snapshot", {})
         if snap:
             parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
+
         kli = ctx.get("features", {}).get("kline_indicators", {})
+        has_any_signal = False
         for tf, label in (("day", "日线"), ("week", "周线"), ("month", "月线")):
             td = kli.get(tf, {}) if isinstance(kli, dict) else {}
             if not isinstance(td, dict) or not td.get("ok"):
                 continue
-            dv = td.get("divergence", {})
-            lines = [f"[{label}] RSI={td.get('rsi', 'N/A')} | MACD DIF={td.get('macd_dif', 'N/A')} | 动量={td.get('momentum_10') or 0:.1f}%"]
-            if dv:
-                if dv.get("macd_top_div"): lines.append(f"  !! {dv.get('macd_div_desc', 'MACD顶背离')}")
-                if dv.get("macd_bot_div"): lines.append(f"  !! {dv.get('macd_div_desc', 'MACD底背离')}")
-                if dv.get("rsi_top_div"): lines.append(f"  !! {dv.get('rsi_div_desc', 'RSI顶背离')}")
-                if dv.get("rsi_bot_div"): lines.append(f"  !! {dv.get('rsi_div_desc', 'RSI底背离')}")
-                if not any(dv.get(k) for k in ("macd_top_div", "macd_bot_div", "rsi_top_div", "rsi_bot_div")):
+            dv = td.get("divergence", {}) if isinstance(td, dict) else {}
+            rsi = td.get("rsi")
+            macd = td.get("macd", {}) if isinstance(td, dict) else {}
+            dif = macd.get("dif") if isinstance(macd, dict) else td.get("macd_dif")
+            mom = td.get("momentum_10") or 0
+
+            rsi_str = f"{float(rsi):.1f}" if rsi is not None else "N/A"
+            dif_str = f"{float(dif):.4f}" if dif is not None else "N/A"
+            lines = [f"[{label}] RSI={rsi_str} | MACD DIF={dif_str} | 动量={float(mom):.1f}%"]
+
+            if isinstance(dv, dict):
+                ds = dv.get("divergence_score", 0)
+                has_bull = dv.get("macd_bot_div") or dv.get("rsi_bot_div")
+                has_bear = dv.get("macd_top_div") or dv.get("rsi_top_div")
+                if has_bull or has_bear:
+                    has_any_signal = True
+                if dv.get("macd_top_div"):
+                    lines.append(f"  !! {dv.get('macd_div_desc', 'MACD顶背离')} (看空)")
+                if dv.get("macd_bot_div"):
+                    lines.append(f"  !! {dv.get('macd_div_desc', 'MACD底背离')} (看多)")
+                if dv.get("rsi_top_div"):
+                    lines.append(f"  !! {dv.get('rsi_div_desc', 'RSI顶背离')} (看空)")
+                if dv.get("rsi_bot_div"):
+                    lines.append(f"  !! {dv.get('rsi_div_desc', 'RSI底背离')} (看多)")
+                if not (has_bull or has_bear):
                     lines.append("  无背离信号")
-                lines.append(f"  背离综合分={dv.get('divergence_score', 0)}")
+                lines.append(f"  背离综合分={ds} ({'底背离强度' if ds > 0 else '顶背离强度' if ds < 0 else '无'})")
             parts.append("\n".join(lines))
-        parts.append(
-            "\n分析要求：\n1.背离信号可靠性评估\n2.多周期背离是否共振\n"
-            "3.结合RSI超买超卖判断有效性\n4.操作建议和风险提示\n\n"
-            "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
-        )
+
+        local_score = self._score_divergence(kli)
+        parts.append(f"\n[本地综合评分] {local_score:.0f}/100 ({'有背离信号' if has_any_signal else '无背离，空头基调'})")
+
         return "\n".join(parts)
 
 
@@ -1394,74 +1492,9 @@ class ChannelReversalAgent(AnalystAgent):
             return "hold", 50.0, 0.3, f"通道计算异常: {e}"
 
     def _build_data_context(self, ctx: dict[str, Any]) -> str:
-        """为LLM构建通道反转数据摘要。"""
-        parts: list[str] = []
-        snap = ctx.get("snapshot", {})
-        if snap:
-            parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
-
-        try:
-            from .channel_reversal import compute_channel, detect_phases
-            df = self._load_day_kline()
-            if df is not None and len(df) >= 160:
-                df = compute_channel(df)
-                df = detect_phases(df)
-                tail = df.tail(20)
-                last = df.iloc[-1]
-
-                phase_labels = {
-                    "0U": "上半区(多头)", "0D": "下半区(空头)",
-                    "1": "破下轨(超卖)", "2": "回到轨道(反弹启动)",
-                    "3A": "���反弹(大概率破新低)", "3B": "过中轨(看多确认)",
-                    "4A": "有效反转(突破上轨)", "4B": "上轨整理(蓄力)",
-                }
-
-                parts.append(f"\n[动态通道指标]")
-                parts.append(
-                    f"上轨={last['ch_upper']:.2f} | 中轨={last['ch_middle']:.2f} | "
-                    f"下轨={last['ch_lower']:.2f}"
-                )
-                parts.append(
-                    f"当前阶段: {phase_labels.get(last['phase'], last['phase'])} "
-                    f"(持续{int(last['phase_days'])}日)"
-                )
-                parts.append(f"通道评分: {last['cr_score']:.0f}")
-
-                # 最近20根K线的阶段变化
-                phase_changes = []
-                prev_p = None
-                for _, row in tail.iterrows():
-                    p = row.get("phase")
-                    if p != prev_p and p is not None:
-                        phase_changes.append(f"{phase_labels.get(p, p)}({int(row['phase_days'])}日)")
-                        prev_p = p
-                if phase_changes:
-                    parts.append(f"近期阶段变化: {'→'.join(phase_changes)}")
-
-                # 价格与轨道的距离
-                close = last["close"]
-                upper = last["ch_upper"]
-                lower = last["ch_lower"]
-                mid = last["ch_middle"]
-                if upper > lower:
-                    pos_pct = (close - lower) / (upper - lower) * 100
-                    parts.append(f"价格在通道中的位置: {pos_pct:.1f}% (0%=下轨, 100%=上轨)")
-                    parts.append(f"距上轨: {(close/upper-1)*100:+.2f}% | 距中轨: {(close/mid-1)*100:+.2f}% | ��下轨: {(close/lower-1)*100:+.2f}%")
-
-            else:
-                parts.append("[动态通道] 日线数据不足160根，无法计算")
-        except Exception as e:
-            parts.append(f"[动��通道] 计算异常: {e}")
-
-        parts.append(
-            "\n分析要求：\n"
-            "1.当前通道阶段的含义和后续走势概率\n"
-            "2.反弹强度判断（弱反弹/过中轨/有效突破）\n"
-            "3.结合RSI和量能确认反弹有效��\n"
-            "4.操作建议和风险提示\n\n"
-            "请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判���：[2-3句分析]"
-        )
-        return "\n".join(parts)
+        """为LLM构建通道反转完整分析上下文（系统提示词+实时数据）。"""
+        from ._cr_data_context import build_data_context as _bdc
+        return _bdc(self, ctx)
 
 
 # ---------------------------------------------------------------------------

@@ -2972,6 +2972,9 @@ class DataBackend:
             "rsi_top_div": False, "rsi_bot_div": False,
             "macd_div_desc": "", "rsi_div_desc": "",
             "divergence_score": 0,  # -100~+100, 正=看涨背离, 负=看跌背离
+            "macd_div_magnitude": 0.0,  # 0~1, MACD背离强度(指标偏离幅度)
+            "rsi_div_magnitude": 0.0,   # 0~1, RSI背离强度
+            "div_bars_ago": 999,        # 最近背离极值点距当前bar数
         }
         if n < 40:
             return result
@@ -3002,23 +3005,31 @@ class DataBackend:
         rsi = 100 - 100 / (1 + rs)
 
         # --- 查找局部极值点（前后 window 根内的最高/最低）---
-        window = max(5, n // 20)  # 自适应窗口
-        lookback = min(n, 120)  # 最多回看120根
+        window = max(3, n // 30)  # 更小窗口，捕捉更多摆动点
+        lookback = min(n, 200)  # 回看加深到200根
         start = max(0, n - lookback)
 
         def find_peaks(arr, start_idx, win):
             peaks = []
-            for i in range(start_idx + win, len(arr) - 1):
-                seg = arr[max(start_idx, i - win): min(len(arr), i + win + 1)]
-                if len(seg) > 0 and arr[i] == seg.max() and arr[i] > arr[i-1] and arr[i] >= arr[min(i+1, len(arr)-1)]:
+            # 包含最后一根bar（用单侧判断）
+            for i in range(start_idx + win, len(arr)):
+                left = arr[max(start_idx, i - win): i]
+                right = arr[i + 1: min(len(arr), i + win + 1)]
+                if len(left) == 0:
+                    continue
+                # 最后几根bar只需高于左侧即可
+                if arr[i] >= left.max() and (len(right) == 0 or arr[i] >= right.max()):
                     peaks.append(i)
             return peaks
 
         def find_troughs(arr, start_idx, win):
             troughs = []
-            for i in range(start_idx + win, len(arr) - 1):
-                seg = arr[max(start_idx, i - win): min(len(arr), i + win + 1)]
-                if len(seg) > 0 and arr[i] == seg.min() and arr[i] < arr[i-1] and arr[i] <= arr[min(i+1, len(arr)-1)]:
+            for i in range(start_idx + win, len(arr)):
+                left = arr[max(start_idx, i - win): i]
+                right = arr[i + 1: min(len(arr), i + win + 1)]
+                if len(left) == 0:
+                    continue
+                if arr[i] <= left.min() and (len(right) == 0 or arr[i] <= right.min()):
                     troughs.append(i)
             return troughs
 
@@ -3033,14 +3044,25 @@ class DataBackend:
             if high_arr[p2] > high_arr[p1] and dif[p2] < dif[p1]:
                 result["macd_top_div"] = True
                 result["macd_div_desc"] = f"MACD顶背离: 价格新高{high_arr[p2]:.2f}>{high_arr[p1]:.2f}, DIF走低{dif[p2]:.4f}<{dif[p1]:.4f}"
-                div_score -= 30
+                # 连续强度: DIF偏离幅度归一化
+                dif_drop = abs(dif[p1] - dif[p2])
+                dif_scale = max(abs(dif[p1]), abs(dif[p2]), 1e-6)
+                mag = min(1.0, dif_drop / dif_scale)
+                result["macd_div_magnitude"] = max(result["macd_div_magnitude"], mag)
+                result["div_bars_ago"] = min(result["div_bars_ago"], n - 1 - p2)
+                div_score -= 15 + int(mag * 15)  # 15~30 (原固定30)
 
         if len(price_troughs) >= 2:
             t1, t2 = price_troughs[-2], price_troughs[-1]
             if low_arr[t2] < low_arr[t1] and dif[t2] > dif[t1]:
                 result["macd_bot_div"] = True
                 result["macd_div_desc"] = f"MACD底背离: 价格新低{low_arr[t2]:.2f}<{low_arr[t1]:.2f}, DIF走高{dif[t2]:.4f}>{dif[t1]:.4f}"
-                div_score += 30
+                dif_rise = abs(dif[t2] - dif[t1])
+                dif_scale = max(abs(dif[t1]), abs(dif[t2]), 1e-6)
+                mag = min(1.0, dif_rise / dif_scale)
+                result["macd_div_magnitude"] = max(result["macd_div_magnitude"], mag)
+                result["div_bars_ago"] = min(result["div_bars_ago"], n - 1 - t2)
+                div_score += 15 + int(mag * 15)  # 15~30 (原固定30)
 
         # --- RSI 背离检测 ---
         if len(price_peaks) >= 2:
@@ -3048,14 +3070,22 @@ class DataBackend:
             if high_arr[p2] > high_arr[p1] and rsi[p2] < rsi[p1] - 2:
                 result["rsi_top_div"] = True
                 result["rsi_div_desc"] = f"RSI顶背离: 价格新高, RSI走低{rsi[p2]:.1f}<{rsi[p1]:.1f}"
-                div_score -= 25
+                rsi_diff = abs(rsi[p1] - rsi[p2])
+                mag = min(1.0, rsi_diff / 25)  # 25点RSI差=满强度
+                result["rsi_div_magnitude"] = max(result["rsi_div_magnitude"], mag)
+                result["div_bars_ago"] = min(result["div_bars_ago"], n - 1 - p2)
+                div_score -= 12 + int(mag * 13)  # 12~25 (原固定25)
 
         if len(price_troughs) >= 2:
             t1, t2 = price_troughs[-2], price_troughs[-1]
             if low_arr[t2] < low_arr[t1] and rsi[t2] > rsi[t1] + 2:
                 result["rsi_bot_div"] = True
                 result["rsi_div_desc"] = f"RSI底背离: 价格新低, RSI走高{rsi[t2]:.1f}>{rsi[t1]:.1f}"
-                div_score += 25
+                rsi_diff = abs(rsi[t2] - rsi[t1])
+                mag = min(1.0, rsi_diff / 25)
+                result["rsi_div_magnitude"] = max(result["rsi_div_magnitude"], mag)
+                result["div_bars_ago"] = min(result["div_bars_ago"], n - 1 - t2)
+                div_score += 12 + int(mag * 13)  # 12~25 (原固定25)
 
         # 双重背离加强信号
         if result["macd_top_div"] and result["rsi_top_div"]:
