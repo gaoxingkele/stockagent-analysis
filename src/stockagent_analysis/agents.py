@@ -445,28 +445,17 @@ class AnalystAgent:
                 else:
                     tl_bonus -= 5
 
-        # (d) 乖离率惩罚
-        bias_ma5 = float(ma_sys.get("ma5", {}).get("pct_above", 0) if isinstance(ma_sys.get("ma5"), dict) else 0)
-        bias_pen = 0.0
-        if abs(bias_ma5) > 8: bias_pen = -25
-        elif abs(bias_ma5) > 5: bias_pen = -15
-        elif abs(bias_ma5) > 3: bias_pen = -5
-
-        # (e) ADX 趋势强度修正: >25趋势市放大信号, <20震荡市压缩信号
+        # (d) ADX 趋势强度修正: >25趋势市放大信号
         adx = day.get("adx") if isinstance(day, dict) else None
         adx_adj = 0.0
         if adx is not None:
             adx = float(adx)
             if adx > 40:
-                adx_adj = 8.0 if (ma_score + slope_score) > 0 else -8.0  # 强趋势放大方向
+                adx_adj = 8.0 if (ma_score + slope_score) > 0 else -8.0
             elif adx > 25:
                 adx_adj = 4.0 if (ma_score + slope_score) > 0 else -4.0
-            elif adx < 15:
-                adx_adj = 0.0  # 极弱趋势不加分，但也不强制减分
 
-        score = 50 + ma_score + slope_score + tl_bonus + 0.3 * mom + bias_pen + adx_adj
-        if bias_ma5 > 8:
-            score = min(score, 35)
+        score = 50 + ma_score + slope_score + tl_bonus + 0.3 * mom + adx_adj
         return score
 
     # ---------- 2. TECH_QUANT: RSI+MACD+布林+量比+动量 ----------
@@ -475,23 +464,19 @@ class AnalystAgent:
         if not isinstance(day, dict):
             day = {}
 
-        # RSI位置评分
+        # RSI方向性评分: 50-70=健康多头, 30-50=弱势, 极端位置温和逆势
         rsi = float(day.get("rsi") or 50)
-        rsi_score = 0.0
-        if rsi > 80: rsi_score = -12
-        elif rsi > 70: rsi_score = -6
-        elif rsi < 20: rsi_score = 12
-        elif rsi < 30: rsi_score = 6
+        rsi_score = (rsi - 50) * 0.2  # 方向性基础: RSI60→+2, RSI40→-2
+        if rsi > 80: rsi_score = min(rsi_score, 2.0)   # 极端超买温和压制
+        elif rsi < 20: rsi_score = max(rsi_score, -2.0)  # 极端超卖温和托底
 
         # MACD柱状图方向
         macd_hist = float(day.get("macd_hist") or 0)
-        macd_score = max(-10.0, min(10.0, macd_hist * 5))
+        macd_score = max(-12.0, min(12.0, macd_hist * 6))
 
-        # KDJ超买超卖
+        # KDJ方向性: 跟随趋势，极端位置不做强逆势
         kdj_k = float(day.get("kdj_k") or 50)
-        kdj_score = 0.0
-        if kdj_k > 80: kdj_score = -5
-        elif kdj_k < 20: kdj_score = 5
+        kdj_score = (kdj_k - 50) * 0.1  # 方向性: KDJ70→+2, KDJ30→-2
 
         # 量比
         vr_score = max(-10.0, min(10.0, (vr - 1.0) * 12))

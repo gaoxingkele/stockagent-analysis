@@ -249,12 +249,6 @@ def score_trend_momentum(r) -> float:
     if r.get("tl_up_confirmed"): tl_bonus -= 12
     elif r.get("tl_up_broken"): tl_bonus -= 5
 
-    bias_ma5 = r.get("ma5_pct", 0)
-    bias_pen = 0
-    if abs(bias_ma5) > 8: bias_pen = -25
-    elif abs(bias_ma5) > 5: bias_pen = -15
-    elif abs(bias_ma5) > 3: bias_pen = -5
-
     adx = r.get("adx")
     adx_adj = 0
     if adx is not None:
@@ -262,9 +256,8 @@ def score_trend_momentum(r) -> float:
         elif adx > 25: adx_adj = 4.0 if (ma_score + slope_score) > 0 else -4.0
 
     mom = r.get("momentum_20", 0)
-    score = 50 + ma_score + slope_score + tl_bonus + 0.3 * mom + bias_pen + adx_adj
-    if bias_ma5 > 8: score = min(score, 35)
-    # 反转 (INVERT)
+    score = 50 + ma_score + slope_score + tl_bonus + 0.3 * mom + adx_adj
+    # 反转: A股趋势动量为反向指标(强趋势后回调概率高)
     score = 100 - score
     return max(0, min(100, score))
 
