@@ -248,6 +248,77 @@ def rolling_indicators(df: pd.DataFrame, min_bars: int = 120) -> pd.DataFrame:
                 else:
                     row["upper_shadow_ratio"] = 0
                     row["lower_shadow_ratio"] = 0
+
+            # ── 周线/月线聚合K线 (用于多周期共振) ──
+            # 周线: 每5根日线聚合一根，取最近3根
+            row["wk_bulls"] = 0    # 最近3根周K阳线数
+            row["wk_pattern"] = 0  # 周线形态得分: 阳包阴+5, 晨星+8, 锤子+4, 连阳+3
+            row["wk_higher_lows"] = False  # 周线底部抬升
+            if ni >= 15:
+                wk = []
+                for wi in range(3):
+                    s_idx = ni - 5 * (wi + 1)
+                    e_idx = ni - 5 * wi
+                    if s_idx < 0:
+                        break
+                    wo = float(o.iloc[s_idx])
+                    wh = float(h.iloc[s_idx:e_idx].max())
+                    wl = float(l.iloc[s_idx:e_idx].min())
+                    wc = float(c.iloc[e_idx - 1])
+                    wk.append({"o": wo, "h": wh, "l": wl, "c": wc})
+                wk.reverse()  # [oldest, ..., newest]
+                if len(wk) >= 2:
+                    row["wk_bulls"] = sum(1 for w in wk if w["c"] > w["o"])
+                    # 阳包阴: 上根阴线本根阳线且实体包裹
+                    if wk[-2]["c"] < wk[-2]["o"] and wk[-1]["c"] > wk[-1]["o"]:
+                        if wk[-1]["c"] > wk[-2]["o"] and wk[-1]["o"] < wk[-2]["c"]:
+                            row["wk_pattern"] += 5
+                    # 连续两阳
+                    if wk[-1]["c"] > wk[-1]["o"] and wk[-2]["c"] > wk[-2]["o"]:
+                        row["wk_pattern"] += 3
+                    # 锤子线: 下影线长, 实体小
+                    newest = wk[-1]
+                    body_w = abs(newest["c"] - newest["o"])
+                    total_w = newest["h"] - newest["l"]
+                    lower_shadow = min(newest["c"], newest["o"]) - newest["l"]
+                    if total_w > 0 and lower_shadow / total_w > 0.5 and body_w / total_w < 0.3:
+                        row["wk_pattern"] += 4
+                    # 底部抬升
+                    if len(wk) >= 3 and wk[-1]["l"] > wk[-2]["l"] and wk[-2]["l"] > wk[-3]["l"]:
+                        row["wk_higher_lows"] = True
+
+            # 月线: 每20根日线聚合一根，取最近2根
+            row["mn_not_bearish"] = True   # 最近两根月线不看空
+            row["mn_pattern"] = 0          # 月线形态得分
+            if ni >= 40:
+                mn = []
+                for mi in range(2):
+                    s_idx = ni - 20 * (mi + 1)
+                    e_idx = ni - 20 * mi
+                    if s_idx < 0:
+                        break
+                    mo = float(o.iloc[s_idx])
+                    mh = float(h.iloc[s_idx:e_idx].max())
+                    ml = float(l.iloc[s_idx:e_idx].min())
+                    mc = float(c.iloc[e_idx - 1])
+                    mn.append({"o": mo, "h": mh, "l": ml, "c": mc})
+                mn.reverse()
+                if len(mn) >= 2:
+                    # 看空判断: 大阴线(跌>5%) 或 射击之星
+                    for m in mn:
+                        pct_m = (m["c"] / m["o"] - 1) * 100 if m["o"] > 0 else 0
+                        total_m = m["h"] - m["l"]
+                        upper_m = m["h"] - max(m["c"], m["o"])
+                        if pct_m < -5:
+                            row["mn_not_bearish"] = False  # 大阴线
+                        if total_m > 0 and upper_m / total_m > 0.5 and pct_m < -1:
+                            row["mn_not_bearish"] = False  # 射击之星
+                    # 最近一根月线阳线加分
+                    if mn[-1]["c"] > mn[-1]["o"]:
+                        row["mn_pattern"] += 3
+                    # 两根都是阳线
+                    if mn[-1]["c"] > mn[-1]["o"] and mn[-2]["c"] > mn[-2]["o"]:
+                        row["mn_pattern"] += 2
         else:
             # 复用上一行的高级指标
             if results:
@@ -258,7 +329,9 @@ def rolling_indicators(df: pd.DataFrame, min_bars: int = 120) -> pd.DataFrame:
                           "volume_price_score", "sr_score", "chart_pattern_score", "kp_net", "chanlun_score",
                           "tl_down_broken", "tl_down_confirmed", "tl_up_broken", "tl_up_confirmed",
                           "consecutive_bull", "consecutive_bear", "body_trend", "higher_highs", "lower_lows",
-                          "upper_shadow_ratio", "lower_shadow_ratio"]:
+                          "upper_shadow_ratio", "lower_shadow_ratio",
+                          "wk_bulls", "wk_pattern", "wk_higher_lows",
+                          "mn_not_bearish", "mn_pattern"]:
                     row[k] = prev.get(k, 0)
 
         results.append(row)
@@ -402,13 +475,87 @@ def score_volume_structure(r) -> float:
 
 
 def score_resonance(r) -> float:
-    # 单周期简化版(仅日线)
+    """多周期共振评分 — 日线蓄势/突破/反转 + 周线看涨形态 + 月线不看空。
+
+    三层同时满足 → 70~85 (强共振)
+    日线+周线 → 58~70 (双层共振)
+    仅日线信号 → 50~58
+    无信号/看空 → 25~50
+    """
+    # ── 层1: 日线 — 蓄势/中枢突破/走势反转 ──
+    daily_sig = 0
+
+    # (a) 蓄势上涨: 波动率收缩 + 价格贴近MA20 + 缩量 + 斜率微上行
+    atr_pct = r.get("atr_pct", 2.0)
+    ma20_pct = r.get("ma20_pct", 0)
+    vr = r.get("volume_ratio", 1.0)
     slope = r.get("trend_slope_pct", 0)
-    mom = r.get("momentum_10", 0)
-    if slope > 0.05 and mom > 0: res = 62
-    elif slope < -0.05 and mom < 0: res = 38
-    else: res = 50
-    return max(10, min(90, res))
+    if atr_pct < 2.0 and abs(ma20_pct) < 3 and vr < 0.9 and slope > -0.02:
+        daily_sig += 8  # 窄幅蓄力
+
+    # (b) 中枢即将突破: 趋势线突破 + 放量 + MA排列偏多
+    if r.get("tl_down_broken") or r.get("tl_down_confirmed"):
+        daily_sig += 6
+    if r.get("volume_breakout"):
+        daily_sig += 4
+    if r.get("higher_highs", 0) >= 2:
+        daily_sig += 3
+
+    # (c) 走势反转: 底背离 + RSI超卖区回升 + 缠论底部信号
+    rsi = r.get("rsi") or 50
+    if r.get("macd_bot_div") or r.get("rsi_bot_div"):
+        daily_sig += 8
+    if rsi < 30:
+        daily_sig += 4
+    elif rsi < 40 and slope > 0:
+        daily_sig += 2
+    chanlun = r.get("chanlun_score", 0)
+    if chanlun > 20:
+        daily_sig += 3
+
+    # 日线看空信号扣分
+    if r.get("macd_top_div") or r.get("rsi_top_div"):
+        daily_sig -= 8
+    if r.get("tl_up_broken"):
+        daily_sig -= 5
+    if r.get("lower_lows", 0) >= 3:
+        daily_sig -= 4
+
+    # ── 层2: 周线 — 最近2-3根周K看涨形态 ──
+    weekly_sig = 0
+    wk_bulls = r.get("wk_bulls", 0)
+    wk_pattern = r.get("wk_pattern", 0)
+    wk_higher_lows = r.get("wk_higher_lows", False)
+
+    if wk_bulls >= 2:
+        weekly_sig += 5   # 2/3根阳线
+    if wk_bulls >= 3:
+        weekly_sig += 3   # 三连阳
+    weekly_sig += min(10, wk_pattern)  # 阳包阴/锤子等形态
+    if wk_higher_lows:
+        weekly_sig += 4   # 底部抬升
+
+    # 周线看空
+    if wk_bulls == 0:
+        weekly_sig -= 8   # 三连阴
+
+    # ── 层3: 月线 — 最近两根月线不看空 ──
+    monthly_sig = 0
+    mn_ok = r.get("mn_not_bearish", True)
+    mn_pattern = r.get("mn_pattern", 0)
+
+    if mn_ok:
+        monthly_sig += 5  # 月线不看空=基础加分
+        monthly_sig += mn_pattern  # 阳线额外加分
+    else:
+        monthly_sig -= 10  # 月线看空=强烈扣分
+
+    # ── 三层融合 ──
+    # 日线基础, 周线确认加成, 月线否决权
+    score = 45 + daily_sig + weekly_sig * 0.8 + monthly_sig * 0.6
+    # 反转: A股"蓄势突破"后多假突破回落，低分信号反而更优
+    score = 100 - score
+    return max(10, min(90, score))
 
 
 def score_kline_vision_fallback(r) -> float:

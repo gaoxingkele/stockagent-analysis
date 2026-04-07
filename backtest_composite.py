@@ -37,13 +37,14 @@ from stockagent_analysis.channel_reversal import compute_channel, detect_phases
 # resonance(IC≈0)、sentiment_flow(σ=5) 大幅降权
 # 释放的权重分配给 IC 正的 agent
 WEIGHTS = {
-    "channel_reversal": 0.22,
-    "chanlun":          0.20,
-    "divergence":       0.20,
-    "trend_momentum":   0.16,
+    "channel_reversal": 0.21,
+    "chanlun":          0.19,
+    "divergence":       0.19,
+    "trend_momentum":   0.15,
     "capital_liquidity":0.10,
     "ichimoku":         0.06,
-    "volume_structure": 0.04,
+    "resonance":        0.05,
+    "volume_structure": 0.03,
     "kline_vision":     0.01,
     "sentiment_flow":   0.01,
 }
@@ -149,6 +150,7 @@ def run_backtest(symbols: list[str]) -> list[tuple[float, float, float, float]]:
                     "volume_structure":  score_volume_structure(row),
                     "kline_vision":      score_kline_vision_fallback(row),
                     "ichimoku":          score_ichimoku(row),
+                    "resonance":         score_resonance(row),
                     "channel_reversal":  float(cr_scores[idx]) if idx < len(cr_scores) else 50.0,
                 }
 
