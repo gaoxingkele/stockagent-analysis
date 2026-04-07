@@ -112,6 +112,36 @@ def rolling_indicators(df: pd.DataFrame, min_bars: int = 120) -> pd.DataFrame:
         cur_price = float(c.iloc[-1])
         row["atr_pct"] = (atr / cur_price * 100) if atr and cur_price > 0 else 0
 
+        # ── quant_alpha 指标 ──
+        # ATR5 / ATR20 波动收敛
+        atr5 = DataBackend._calc_atr(h, l, c, 5) if ni >= 6 else atr
+        atr20 = DataBackend._calc_atr(h, l, c, 20) if ni >= 21 else atr
+        row["atr5"] = atr5 or 0
+        row["atr20"] = atr20 or 0
+        row["atr_converge"] = (atr5 / atr20) if atr5 and atr20 and atr20 > 0 else 1.0
+        # 近60日高点距离
+        if ni >= 60:
+            high60 = float(h.iloc[-60:].max())
+            row["near_high60"] = (cur_price / high60) if high60 > 0 else 0
+        else:
+            row["near_high60"] = 1.0
+        # 20日平均成交额
+        if ni >= 20:
+            amt = (c * v).iloc[-20:]
+            row["avg_amount20"] = float(amt.mean())
+        else:
+            row["avg_amount20"] = float((c * v).iloc[-1]) if ni >= 1 else 0
+        # 量能比 (当日成交额 / 20日均额)
+        cur_amount = float(c.iloc[-1] * v.iloc[-1]) if ni >= 1 else 0
+        row["amount_ratio"] = (cur_amount / row["avg_amount20"]) if row["avg_amount20"] > 0 else 1.0
+        # momentum_5
+        if ni >= 5:
+            row["momentum_5"] = (float(c.iloc[-1]) / float(c.iloc[-5]) - 1) * 100
+        else:
+            row["momentum_5"] = 0
+        # MA20斜率 (已有 trend_slope_pct，这里单独命名以语义清晰)
+        row["ma20_slope"] = row["trend_slope_pct"]
+
         # 一目均衡图 (Ichimoku)
         if ni >= 52:
             # 转换线 (Tenkan-sen): (9日最高+9日最低)/2
@@ -657,6 +687,137 @@ def score_atr_regime(r) -> float:
     return max(10, min(90, score))
 
 
+def score_quant_alpha(r) -> float:
+    """量化Alpha评分 — 融合6个核心因子的趋势质量综合评分。
+
+    总分 = 30%相对强度 + 20%趋势斜率 + 15%波动收敛 + 15%近高位结构 + 10%流动性 + 10%量能确认
+    评分范围 0-100，50=中性。
+    """
+    # ── 1. 相对强度 (30%) ── 用 ret20 做个股绝对动量代理
+    # (RPS需跨股票对比，暂用绝对动量; 线上版可接入板块/指数对比)
+    ret20 = r.get("momentum_20", 0)
+    ret10 = r.get("momentum_10", 0)
+    ret5 = r.get("momentum_5", 0)
+    # "中高强度但不过热": ret20在5-20%最优, >30%过热, <0弱
+    if ret20 > 30:
+        rps_score = 55     # 过热，不是最优
+    elif ret20 > 20:
+        rps_score = 70     # 强但略过热
+    elif ret20 > 10:
+        rps_score = 85     # 最优区间
+    elif ret20 > 5:
+        rps_score = 75     # 中强
+    elif ret20 > 0:
+        rps_score = 60     # 弱多
+    elif ret20 > -5:
+        rps_score = 45     # 弱
+    elif ret20 > -15:
+        rps_score = 30     # 下跌
+    else:
+        rps_score = 15     # 深度下跌
+    # 短期收益结构加成: 稳态上升(ret5>0 & ret10>0 & ret20>0)
+    if ret5 > 0 and ret10 > 0 and ret20 > 0:
+        rps_score += 5     # 三级联涨
+    elif ret5 < 0 and ret10 > 0 and ret20 > 0:
+        rps_score += 2     # 强趋势回踩
+
+    # ── 2. 趋势斜率 (20%) ── MA20斜率
+    slope = r.get("ma20_slope", 0)
+    # slope > 0.1 强上行, 0.02~0.1 平稳抬升, <0 下行
+    if slope > 0.15:
+        slope_score = 85
+    elif slope > 0.08:
+        slope_score = 75
+    elif slope > 0.03:
+        slope_score = 65   # 平稳抬升最理想
+    elif slope > 0:
+        slope_score = 55
+    elif slope > -0.03:
+        slope_score = 45
+    elif slope > -0.1:
+        slope_score = 30
+    else:
+        slope_score = 15
+
+    # ── 3. 波动收敛 (15%) ── ATR5/ATR20
+    atr_conv = r.get("atr_converge", 1.0)
+    # <0.8 强收敛(蓄势), 0.8-1.0 正常, >1.2 扩张(不稳定)
+    if atr_conv < 0.6:
+        vol_score = 85     # 极度收敛
+    elif atr_conv < 0.8:
+        vol_score = 75     # 蓄势完成
+    elif atr_conv < 1.0:
+        vol_score = 60     # 正常偏收敛
+    elif atr_conv < 1.2:
+        vol_score = 45     # 正常偏扩张
+    elif atr_conv < 1.5:
+        vol_score = 30     # 波动扩大
+    else:
+        vol_score = 15     # 剧烈波动
+
+    # ── 4. 近高位结构 (15%) ── 当前价/60日高点
+    near_h = r.get("near_high60", 1.0)
+    # 0.95-1.0 近高位(结构强), 0.85-0.95 中位, <0.85 远离(弱)
+    if near_h > 0.98:
+        high_score = 80    # 接近新高
+    elif near_h > 0.93:
+        high_score = 75    # 强结构
+    elif near_h > 0.85:
+        high_score = 60    # 中位
+    elif near_h > 0.75:
+        high_score = 40    # 偏弱
+    else:
+        high_score = 20    # 深度调整
+
+    # ── 5. 流动性 (10%) ── 20日均额
+    avg_amt = r.get("avg_amount20", 0)
+    # A股: >5亿优秀, 1-5亿正常, <5000万流动性差
+    if avg_amt > 5e8:
+        liq_score = 80
+    elif avg_amt > 2e8:
+        liq_score = 70
+    elif avg_amt > 5e7:
+        liq_score = 55
+    elif avg_amt > 1e7:
+        liq_score = 40
+    else:
+        liq_score = 25
+
+    # ── 6. 量能确认 (10%) ── 当日量能比
+    amt_ratio = r.get("amount_ratio", 1.0)
+    # 1.0-1.5 温和放量(健康), >2.0 爆量(可能过热), <0.6 缩量
+    if 1.0 <= amt_ratio < 1.5:
+        amt_score = 75     # 温和放量最佳
+    elif 1.5 <= amt_ratio < 2.0:
+        amt_score = 65     # 明显放量
+    elif amt_ratio >= 2.0:
+        amt_score = 45     # 爆量,可能见顶
+    elif amt_ratio > 0.7:
+        amt_score = 55     # 正常
+    elif amt_ratio > 0.5:
+        amt_score = 40     # 缩量
+    else:
+        amt_score = 25     # 极度缩量
+
+    # ── 均线多头结构加成 ──
+    ma_vals = r.get("ma_vals", {})
+    periods = sorted(ma_vals.keys())
+    ordered = sum(1 for i in range(len(periods)-1) if ma_vals[periods[i]] > ma_vals[periods[i+1]])
+    n_pairs = max(1, len(periods)-1)
+    ma_bonus = 0
+    if ordered == n_pairs:
+        ma_bonus = 5       # 完美多头排列
+    elif ordered >= n_pairs - 1:
+        ma_bonus = 2       # 近似多头
+
+    # ── 加权合成 ──
+    total = (rps_score * 0.30 + slope_score * 0.20 + vol_score * 0.15 +
+             high_score * 0.15 + liq_score * 0.10 + amt_score * 0.10 + ma_bonus)
+    # 反转: A股低分段(超跌+弱势)后续收益远超高分段，均值回归效应
+    total = 100 - total
+    return max(10, min(90, total))
+
+
 # ── Agent注册 ──────────────────────────────────────────────────
 
 AGENTS = {
@@ -671,6 +832,7 @@ AGENTS = {
     "kline_vision": ("K线视觉(降级)", score_kline_vision_fallback),
     "ichimoku": ("一目均衡图", score_ichimoku),
     "atr_regime": ("ATR波动状态", score_atr_regime),
+    "quant_alpha": ("量化Alpha", score_quant_alpha),
 }
 
 
