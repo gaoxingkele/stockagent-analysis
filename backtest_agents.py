@@ -818,6 +818,75 @@ def score_quant_alpha(r) -> float:
     return max(10, min(90, total))
 
 
+# ── 单因子评分 (用于逐因子IC评估) ──────────────────────────────
+
+def _f_rps(r) -> float:
+    """相对强度: ret20 映射到分数"""
+    ret20 = r.get("momentum_20", 0)
+    ret5 = r.get("momentum_5", 0)
+    ret10 = r.get("momentum_10", 0)
+    if ret20 > 30: s = 55
+    elif ret20 > 20: s = 70
+    elif ret20 > 10: s = 85
+    elif ret20 > 5: s = 75
+    elif ret20 > 0: s = 60
+    elif ret20 > -5: s = 45
+    elif ret20 > -15: s = 30
+    else: s = 15
+    if ret5 > 0 and ret10 > 0 and ret20 > 0: s += 5
+    elif ret5 < 0 and ret10 > 0 and ret20 > 0: s += 2
+    return s
+
+def _f_slope(r) -> float:
+    """MA20斜率"""
+    slope = r.get("ma20_slope", 0)
+    if slope > 0.15: return 85
+    elif slope > 0.08: return 75
+    elif slope > 0.03: return 65
+    elif slope > 0: return 55
+    elif slope > -0.03: return 45
+    elif slope > -0.1: return 30
+    else: return 15
+
+def _f_atr_conv(r) -> float:
+    """ATR5/ATR20 波动收敛"""
+    c = r.get("atr_converge", 1.0)
+    if c < 0.6: return 85
+    elif c < 0.8: return 75
+    elif c < 1.0: return 60
+    elif c < 1.2: return 45
+    elif c < 1.5: return 30
+    else: return 15
+
+def _f_near_high(r) -> float:
+    """近60日高点距离"""
+    h = r.get("near_high60", 1.0)
+    if h > 0.98: return 80
+    elif h > 0.93: return 75
+    elif h > 0.85: return 60
+    elif h > 0.75: return 40
+    else: return 20
+
+def _f_liquidity(r) -> float:
+    """20日平均成交额"""
+    a = r.get("avg_amount20", 0)
+    if a > 5e8: return 80
+    elif a > 2e8: return 70
+    elif a > 5e7: return 55
+    elif a > 1e7: return 40
+    else: return 25
+
+def _f_amt_ratio(r) -> float:
+    """量能比"""
+    ar = r.get("amount_ratio", 1.0)
+    if 1.0 <= ar < 1.5: return 75
+    elif 1.5 <= ar < 2.0: return 65
+    elif ar >= 2.0: return 45
+    elif ar > 0.7: return 55
+    elif ar > 0.5: return 40
+    else: return 25
+
+
 # ── Agent注册 ──────────────────────────────────────────────────
 
 AGENTS = {
@@ -832,7 +901,14 @@ AGENTS = {
     "kline_vision": ("K线视觉(降级)", score_kline_vision_fallback),
     "ichimoku": ("一目均衡图", score_ichimoku),
     "atr_regime": ("ATR波动状态", score_atr_regime),
-    "quant_alpha": ("量化Alpha", score_quant_alpha),
+    "quant_alpha": ("量化Alpha(合)", score_quant_alpha),
+    # ── 单因子拆分评估 ──
+    "f_rps20": ("因子:相对强度", lambda r: max(10,min(90, _f_rps(r)))),
+    "f_slope": ("因子:MA20斜率", lambda r: max(10,min(90, _f_slope(r)))),
+    "f_atr_conv": ("因子:ATR收敛", lambda r: max(10,min(90, _f_atr_conv(r)))),
+    "f_near_high": ("因子:近高位", lambda r: max(10,min(90, _f_near_high(r)))),
+    "f_liquidity": ("因子:流动性", lambda r: max(10,min(90, _f_liquidity(r)))),
+    "f_amt_ratio": ("因子:量能比", lambda r: max(10,min(90, _f_amt_ratio(r)))),
 }
 
 

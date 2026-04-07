@@ -25,9 +25,8 @@ from pathlib import Path
 from backtest_agents import (
     load_tdx_daily, rolling_indicators,
     score_trend_momentum, score_capital_liquidity, score_divergence,
-    score_chanlun, score_pattern, score_sentiment_flow,
-    score_volume_structure, score_resonance, score_kline_vision_fallback,
-    score_ichimoku, score_atr_regime, score_quant_alpha,
+    score_chanlun, score_resonance,
+    score_ichimoku, _f_amt_ratio,
 )
 from stockagent_analysis.channel_reversal import compute_channel, detect_phases
 
@@ -36,18 +35,17 @@ from stockagent_analysis.channel_reversal import compute_channel, detect_phases
 # pattern(IC=-0.029)、fundamental(恒=50) 禁用
 # resonance(IC≈0)、sentiment_flow(σ=5) 大幅降权
 # 释放的权重分配给 IC 正的 agent
+# R3基础 + f_amt_ratio 10%
+# 砍掉 volume_structure/kline_vision/sentiment_flow (IC弱+σ小)
 WEIGHTS = {
-    "channel_reversal": 0.18,
-    "chanlun":          0.16,
-    "divergence":       0.17,
-    "trend_momentum":   0.13,
-    "quant_alpha":      0.10,
+    "channel_reversal": 0.21,
+    "chanlun":          0.19,
+    "divergence":       0.19,
+    "trend_momentum":   0.15,
     "capital_liquidity":0.10,
-    "ichimoku":         0.06,
-    "resonance":        0.05,
-    "volume_structure": 0.03,
-    "kline_vision":     0.01,
-    "sentiment_flow":   0.01,
+    "f_amt_ratio":      0.10,
+    "ichimoku":         0.05,
+    "resonance":        0.01,
 }
 
 _KEY_DIMS = {
@@ -147,11 +145,8 @@ def run_backtest(symbols: list[str]) -> list[tuple[float, float, float, float]]:
                     "capital_liquidity": score_capital_liquidity(row),
                     "divergence":        score_divergence(row),
                     "chanlun":           score_chanlun(row),
-                    "sentiment_flow":    score_sentiment_flow(row),
-                    "volume_structure":  score_volume_structure(row),
-                    "kline_vision":      score_kline_vision_fallback(row),
+                    "f_amt_ratio":       max(10, min(90, _f_amt_ratio(row))),
                     "ichimoku":          score_ichimoku(row),
-                    "quant_alpha":       score_quant_alpha(row),
                     "resonance":         score_resonance(row),
                     "channel_reversal":  float(cr_scores[idx]) if idx < len(cr_scores) else 50.0,
                 }
