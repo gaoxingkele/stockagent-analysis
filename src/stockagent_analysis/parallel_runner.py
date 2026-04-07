@@ -29,7 +29,7 @@ from core.runner import (
 from core.router import LLMRouter, _supports_vision, _DEFAULT_VISION_FALLBACK, _DOMESTIC_VISION_FALLBACK_ORDER
 
 # ── 领域相关导入 ──
-from .agents import AgentBaseResult
+from .agents import AgentBaseResult, _parse_vision_response
 from .llm_client import (
     assign_agent_weights, score_agent_analysis, enrich_and_score, config_weights,
 )
@@ -378,8 +378,12 @@ def _provider_worker(
                 text = _vision_enrich_with_fallback(agent_id, base, v_routers)
                 if text:
                     result.enrichments[agent_id] = text
-                reason_for_score = text or base.reason
-                score = _vision_score_with_fallback(agent_id, base, reason_for_score)
+                # 直接从视觉LLM文本解析评分，不再二次提交给评分LLM
+                # (二次评分会被data_context中的本地评分污染)
+                if text:
+                    _, score, _ = _parse_vision_response(text)
+                else:
+                    score = _vision_score_with_fallback(agent_id, base, base.reason)
             else:
                 # 普通Agent：合并一步
                 text, score = _enrich_and_score_with_fallback(agent_id, base)
