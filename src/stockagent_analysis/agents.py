@@ -400,6 +400,8 @@ class AnalystAgent:
             return self._score_resonance(mom, kli, f)
         if dim == "KLINE_VISION":
             return self._score_kline_vision_fallback(mom, vol, vr, pct, kli)
+        if dim == "ICHIMOKU":
+            return self._score_ichimoku(kli)
         # 未知维度: 中性
         return 50.0
 
@@ -744,6 +746,54 @@ class AnalystAgent:
         elif rsi < 25: rsi_score = 8
         slope_score = max(-10.0, min(10.0, slope * 60))
         return 50 + slope_score + rsi_score + 0.3 * mom + (vr - 1.0) * 8 - 0.15 * vol
+
+    # ---------- 12. ICHIMOKU: 一目均衡图 云位置+TK交叉+价格距离 ----------
+    def _score_ichimoku(self, kli) -> float:
+        day = kli.get("day", {}) if isinstance(kli, dict) else {}
+        if not isinstance(day, dict):
+            return 50.0
+
+        close = float(day.get("close") or 0)
+        high_data = day.get("high_series")  # 可能无此数据
+        low_data = day.get("low_series")
+
+        # 从MA系统提取均线近似一目均衡图
+        ma_sys = day.get("ma_system", {}) if isinstance(day, dict) else {}
+        ma10 = float(ma_sys.get("ma10", {}).get("value", 0) if isinstance(ma_sys.get("ma10"), dict) else 0)
+        ma20 = float(ma_sys.get("ma20", {}).get("value", 0) if isinstance(ma_sys.get("ma20"), dict) else 0)
+        ma60 = float(ma_sys.get("ma60", {}).get("value", 0) if isinstance(ma_sys.get("ma60"), dict) else 0)
+
+        if close <= 0 or ma20 <= 0:
+            return 50.0
+
+        # 用 MA10/MA20 近似转换线/基准线, MA60 近似先行带B
+        tenkan_proxy = ma10 if ma10 > 0 else close
+        kijun_proxy = ma20
+        senkou_b_proxy = ma60 if ma60 > 0 else ma20
+
+        senkou_a_proxy = (tenkan_proxy + kijun_proxy) / 2
+        cloud_top = max(senkou_a_proxy, senkou_b_proxy)
+        cloud_bot = min(senkou_a_proxy, senkou_b_proxy)
+
+        # 基础位置分
+        if close > cloud_top:
+            base = 62
+        elif close < cloud_bot:
+            base = 38
+        else:
+            base = 50
+
+        # TK交叉方向
+        tk_adj = 8 if tenkan_proxy > kijun_proxy else -8
+
+        # 距云距离
+        cloud_dist_pct = (close / cloud_top - 1) * 100 if cloud_top > 0 else 0
+        dist_adj = max(-10, min(10, cloud_dist_pct * 1.5))
+
+        # 价格vs基准线
+        price_vs_kijun = max(-8, min(8, (close / kijun_proxy - 1) * 200))
+
+        return 50 + (base - 50) + tk_adj + dist_adj + price_vs_kijun
 
     # ------------------------------------------------------------------
     # 提交结果

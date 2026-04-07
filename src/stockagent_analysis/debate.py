@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 # ── Agent 团队分组 ──
 TEAM_TECH = {"trend_momentum_agent", "tech_quant_agent", "divergence_agent",
-             "chanlun_agent", "pattern_agent", "volume_structure_agent", "resonance_agent"}
+             "chanlun_agent", "pattern_agent", "volume_structure_agent", "resonance_agent",
+             "ichimoku_agent"}
 TEAM_CAPITAL = {"capital_liquidity_agent", "sentiment_flow_agent", "kline_vision_agent"}
 TEAM_FUNDAMENTAL = {"fundamental_agent", "deriv_margin_agent"}
 

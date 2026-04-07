@@ -1,0 +1,17 @@
+{
+  "agent_id": "ichimoku_agent",
+  "agent_type": "ichimoku",
+  "dim_code": "ICHIMOKU",
+  "name": "一目均衡图Agent",
+  "role": "一目均衡图趋势分析师",
+  "enabled": true,
+  "mandatory": false,
+  "weight": 0.06,
+  "data_sources": {
+    "mode": "combined",
+    "primary": ["tdx", "akshare", "tushare"],
+    "fallback": ["akshare"],
+    "required_data_points": ["日K线OHLCV(≥52根)", "MA10/MA20/MA60均线系统"]
+  },
+  "llm_base_weight": 0.20
+}

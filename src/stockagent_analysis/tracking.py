@@ -38,10 +38,10 @@ COLUMNS = [
     "decision",
     "decision_level",
     "base_close",       # 评分当日收盘价
-    # 12个智能体维度分数
+    # 13个智能体维度分数
     "trend_momentum", "capital_liquidity", "fundamental", "tech_quant",
     "pattern", "sentiment_flow", "chanlun", "divergence",
-    "kline_vision", "resonance", "volume_structure", "deriv_margin",
+    "kline_vision", "resonance", "volume_structure", "deriv_margin", "ichimoku",
     # T+N 收盘价
     "close_1d", "close_2d", "close_3d", "close_5d", "close_10d", "close_20d",
     # T+N 涨跌幅%
@@ -128,6 +128,7 @@ AGENT_DIM_MAP = {
     "resonance_agent": "resonance",
     "volume_structure_agent": "volume_structure",
     "deriv_margin_agent": "deriv_margin",
+    "ichimoku_agent": "ichimoku",
 }
 
 

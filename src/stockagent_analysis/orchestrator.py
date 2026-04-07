@@ -676,8 +676,8 @@ def run_analysis(
 
     model_totals: dict[str, float] = {}
     # v2: PATTERN agent 内部已处理顶底结构反转
-    # trend_momentum: A股趋势动量为反向指标(回测IC负), 反转使用; 乖离率惩罚已移除
-    _INVERT_DIMS: set[str] = {"TREND_MOMENTUM"}
+    # trend_momentum/ichimoku: A股趋势动量和一目均衡图为反向指标(回测IC负), 反转使用
+    _INVERT_DIMS: set[str] = {"TREND_MOMENTUM", "ICHIMOKU"}
 
     # ── 逐Agent动态LLM权重计算 ──
     # 每个Agent有 llm_base_weight (config, 0.20/0.35/0.45)
