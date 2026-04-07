@@ -530,24 +530,44 @@ class AnalystAgent:
 
         return 50 + obv_score + vr_score + turn_score + vp_score + 0.2 * pct
 
-    # ---------- 4. FUNDAMENTAL: PE高估惩罚(PE>50扣分, <=50中性不占权重) ----------
+    # ---------- 4. FUNDAMENTAL: 多维度基本面评分(估值+盈利+成长+财务健康+同业) ----------
     def _score_fundamental(self, mom, pe, pb, f) -> float:
-        if pe is None:
-            return 50.0  # 无PE数据，中性
-        pe_f = float(pe)
-        if pe_f < 0:
-            return 40.0  # 亏损，轻度扣分
-        if pe_f <= 50:
-            return 50.0  # PE正常范围，中性不干扰
-        # PE > 50: 高估惩罚，越高扣越多
-        if pe_f > 200:
-            return 20.0
-        elif pe_f > 100:
-            return 30.0
-        elif pe_f > 75:
-            return 38.0
-        else:  # 50 < PE <= 75
-            return 44.0
+        score = 50.0
+
+        # ── A. PE估值 ── (±15)
+        if pe is not None:
+            pe_f = float(pe)
+            if pe_f < 0:
+                score -= 10  # 亏损
+            elif pe_f > 200:
+                score -= 15
+            elif pe_f > 100:
+                score -= 10
+            elif pe_f > 75:
+                score -= 6
+            elif pe_f > 50:
+                score -= 3
+            elif pe_f < 15:
+                score += 8   # 低估
+            elif pe_f < 25:
+                score += 4
+
+        # ── B. PB估值 ── (±8)
+        if pb is not None:
+            pb_f = float(pb)
+            if pb_f < 1.0:
+                score += 6   # 破净，可能低估
+            elif pb_f < 1.5:
+                score += 3
+            elif pb_f > 10:
+                score -= 8
+            elif pb_f > 6:
+                score -= 4
+
+        # ── C. ROE/成长/负债/流动/同业（复用已有辅助函数）── (±30+)
+        score += self._calc_fundamental_extra(f)
+
+        return max(10, min(90, score))
 
     # ---------- 5. SENTIMENT_FLOW: 新闻+行业+主力行为+量比异动 ----------
     def _score_sentiment_flow(self, pct, mom, vol, vr, news_c, f) -> float:
@@ -1532,6 +1552,125 @@ class ChannelReversalAgent(AnalystAgent):
         return _bdc(self, ctx)
 
 
+class FundamentalAgent(AnalystAgent):
+    """基本面增强Agent — 多维度估值+盈利+成长+财务健康+同业对比。"""
+
+    def _simple_policy(self, snap, ctx):
+        f = ctx.get("features", {})
+        pe = f.get("pe_ttm")
+        pb = f.get("pb")
+        mom = float(f.get("momentum_20", 0.0))
+        score = self._score_fundamental(mom, pe, pb, f)
+        score = max(0.0, min(100.0, score))
+
+        # 数据丰富度决定置信度
+        data_fields = sum(1 for k in ("roe", "revenue_yoy", "netprofit_yoy",
+                                       "debt_to_assets", "grossprofit_margin")
+                          if f.get(k) is not None)
+        has_peer = bool(f.get("peer_comparison", {}).get("peers"))
+        confidence = 0.30 + 0.08 * data_fields + (0.15 if has_peer else 0)
+        confidence = max(0.2, min(0.85, confidence))
+
+        # 构建原因
+        parts = []
+        if pe is not None:
+            parts.append(f"PE={float(pe):.1f}")
+        roe = f.get("roe")
+        if roe is not None:
+            parts.append(f"ROE={float(roe):.1f}%")
+        rev = f.get("revenue_yoy")
+        if rev is not None:
+            parts.append(f"营收增速={float(rev):.1f}%")
+        reason = f"基本面评分={score:.0f} | " + " ".join(parts) if parts else f"基本面评分={score:.0f}"
+
+        if score >= 65:
+            return "buy", score, confidence, reason
+        if score <= 35:
+            return "sell", score, confidence, reason
+        return "hold", score, confidence, reason
+
+    def _build_data_context(self, ctx: dict[str, Any]) -> str:
+        parts: list[str] = []
+        parts.append("你是一位A股基本面分析专家。请从以下维度综合评估：")
+        parts.append("1. 估值水平：PE/PB与行业对比，是否低估/高估")
+        parts.append("2. 盈利质量：ROE/毛利率/净利率，盈利能力是否优秀")
+        parts.append("3. 成长性：营收/净利润增速，是否处于高增长阶段")
+        parts.append("4. 财务健康：资产负债率/流动比率/速动比率，是否有债务风险")
+        parts.append("5. 同业对比：相对行业TOP5的估值和盈利能力排名")
+        parts.append("")
+
+        snap = ctx.get("snapshot", {})
+        if snap:
+            parts.append(f"行情: 收盘={snap.get('close')}, 涨跌幅={snap.get('pct_chg')}%")
+
+        f = ctx.get("features", {})
+
+        # 估值数据
+        val_parts = []
+        for k, label in (("pe_ttm", "PE(TTM)"), ("pb", "PB"), ("total_mv", "总市值(万)")):
+            v = f.get(k)
+            if v is not None:
+                val_parts.append(f"{label}={v}")
+        if val_parts:
+            parts.append("估值: " + " | ".join(val_parts))
+
+        # 盈利质量
+        prof_parts = []
+        for k, label in (("roe", "ROE"), ("grossprofit_margin", "毛利率"),
+                         ("netprofit_margin", "净利率"), ("eps", "EPS"), ("cfps", "每股现金流")):
+            v = f.get(k)
+            if v is not None:
+                prof_parts.append(f"{label}={v:.2f}" if isinstance(v, float) else f"{label}={v}")
+        if prof_parts:
+            parts.append("盈利: " + " | ".join(prof_parts))
+
+        # 成长性
+        grow_parts = []
+        for k, label in (("revenue_yoy", "营收增速"), ("netprofit_yoy", "净利润增速")):
+            v = f.get(k)
+            if v is not None:
+                grow_parts.append(f"{label}={v:.1f}%")
+        if grow_parts:
+            parts.append("成长: " + " | ".join(grow_parts))
+
+        # 财务健康
+        health_parts = []
+        for k, label in (("debt_to_assets", "资产负债率"), ("current_ratio", "流动比率"), ("quick_ratio", "速动比率")):
+            v = f.get(k)
+            if v is not None:
+                health_parts.append(f"{label}={v:.2f}" if isinstance(v, float) else f"{label}={v}")
+        if health_parts:
+            parts.append("财务: " + " | ".join(health_parts))
+
+        # 同业对比
+        peer = f.get("peer_comparison", {})
+        if peer.get("peers"):
+            ind_avg = peer.get("industry_avg", {})
+            parts.append(f"\n同业对比 ({peer.get('industry', '未知行业')}):")
+            for p in peer["peers"][:5]:
+                line = f"  {p.get('name', '?')}: PE={p.get('pe_ttm', 'N/A')}, ROE={p.get('roe', 'N/A')}, 营收增速={p.get('revenue_yoy', 'N/A')}%"
+                parts.append(line)
+            if ind_avg:
+                avg_line = "  行业均值:"
+                if ind_avg.get("pe_ttm"):
+                    avg_line += f" PE={ind_avg['pe_ttm']:.1f}"
+                if ind_avg.get("roe"):
+                    avg_line += f" ROE={ind_avg['roe']:.1f}%"
+                if ind_avg.get("revenue_yoy"):
+                    avg_line += f" 营收增速={ind_avg['revenue_yoy']:.1f}%"
+                parts.append(avg_line)
+
+        # RS相对强弱
+        rs_ind = f.get("rs_vs_industry")
+        if isinstance(rs_ind, dict) and rs_ind.get("ok"):
+            parts.append(f"相对行业: 超额收益20日={rs_ind.get('excess_return_20d')}%")
+
+        parts.append(
+            "\n请严格按格式输出：\n建议：buy/hold/sell\n评分：[0-100]\n核心判断：[2-3句分析]"
+        )
+        return "\n".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # Agent 工厂
 # ---------------------------------------------------------------------------
@@ -1563,4 +1702,6 @@ def create_agent(
         return ResonanceAgent(cfg, run_dir, backend, llm_routers=llm_routers)
     if agent_type == "channel_reversal":
         return ChannelReversalAgent(cfg, run_dir, backend, llm_routers=llm_routers)
+    if agent_type == "fundamental":
+        return FundamentalAgent(cfg, run_dir, backend, llm_routers=llm_routers)
     return AnalystAgent(cfg, run_dir, backend, llm_routers=llm_routers)

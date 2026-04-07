@@ -1,6 +1,6 @@
 {
   "agent_id": "fundamental_agent",
-  "agent_type": "analyst",
+  "agent_type": "fundamental",
   "dim_code": "FUNDAMENTAL",
   "name": "基本面估值Agent",
   "role": "基本面与估值分析师",

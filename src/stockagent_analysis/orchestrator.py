@@ -728,7 +728,8 @@ def run_analysis(
                 "chanlun_agent": 0.15,              # IC最高，拉力最大
                 "channel_reversal_agent": 0.12,     # 独立计算引擎，信号清晰
                 "divergence_agent": 0.10,           # IC(20d)=+0.066，全Agent最强
-                "capital_liquidity_agent": 0.08,    # IC(20d)=+0.031，fundamental替换(fundamental永远=50)
+                "capital_liquidity_agent": 0.08,    # IC(20d)=+0.031
+                "fundamental_agent": 0.06,          # IC(5d)=+0.080，增强后有真实信号
             }
             _key_bonus = 0.0
             for _kid, _pull in _KEY_DIMS.items():
