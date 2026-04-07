@@ -108,6 +108,42 @@ def rolling_indicators(df: pd.DataFrame, min_bars: int = 120) -> pd.DataFrame:
         # ATR
         atr = DataBackend._calc_atr(h, l, c)
         row["atr"] = atr
+        # ATR% (相对价格的波动率)
+        cur_price = float(c.iloc[-1])
+        row["atr_pct"] = (atr / cur_price * 100) if atr and cur_price > 0 else 0
+
+        # 一目均衡图 (Ichimoku)
+        if ni >= 52:
+            # 转换线 (Tenkan-sen): (9日最高+9日最低)/2
+            tenkan = (float(h.iloc[-9:].max()) + float(l.iloc[-9:].min())) / 2
+            # 基准线 (Kijun-sen): (26日最高+26日最低)/2
+            kijun = (float(h.iloc[-26:].max()) + float(l.iloc[-26:].min())) / 2
+            # 先行带A (Senkou Span A): (转换线+基准线)/2
+            senkou_a = (tenkan + kijun) / 2
+            # 先行带B (Senkou Span B): (52日最高+52日最低)/2
+            senkou_b = (float(h.iloc[-52:].max()) + float(l.iloc[-52:].min())) / 2
+            row["ichi_tenkan"] = tenkan
+            row["ichi_kijun"] = kijun
+            row["ichi_senkou_a"] = senkou_a
+            row["ichi_senkou_b"] = senkou_b
+            # 价格相对云的位置
+            cloud_top = max(senkou_a, senkou_b)
+            cloud_bot = min(senkou_a, senkou_b)
+            row["ichi_above_cloud"] = cur_price > cloud_top
+            row["ichi_below_cloud"] = cur_price < cloud_bot
+            row["ichi_in_cloud"] = cloud_bot <= cur_price <= cloud_top
+            # TK交叉: 转换线在基准线上方=多头
+            row["ichi_tk_bull"] = tenkan > kijun
+            # 价格距云顶/底的百分比
+            row["ichi_cloud_dist_pct"] = ((cur_price - cloud_top) / cloud_top * 100) if cloud_top > 0 else 0
+        else:
+            row["ichi_tenkan"] = row["ichi_kijun"] = cur_price
+            row["ichi_senkou_a"] = row["ichi_senkou_b"] = cur_price
+            row["ichi_above_cloud"] = False
+            row["ichi_below_cloud"] = False
+            row["ichi_in_cloud"] = True
+            row["ichi_tk_bull"] = False
+            row["ichi_cloud_dist_pct"] = 0
 
         # Momentum
         if ni >= 10:
@@ -393,6 +429,87 @@ def score_fundamental_pe(r) -> float:
     return 50.0
 
 
+def score_ichimoku(r) -> float:
+    """一目均衡图评分 — 云上/云下/TK交叉/云距离综合判断。
+
+    云上+TK多头 → 65~85 (强多)
+    云中 → 40~60 (震荡)
+    云下+TK空头 → 15~35 (强空)
+    """
+    above = r.get("ichi_above_cloud", False)
+    below = r.get("ichi_below_cloud", False)
+    in_cloud = r.get("ichi_in_cloud", True)
+    tk_bull = r.get("ichi_tk_bull", False)
+    cloud_dist = r.get("ichi_cloud_dist_pct", 0)
+
+    # 基础位置分
+    if above:
+        base = 62
+    elif below:
+        base = 38
+    else:
+        base = 50
+
+    # TK交叉方向
+    tk_adj = 8 if tk_bull else -8
+
+    # 距云距离: 越远离云越确认趋势, 但过远可能过度延伸
+    dist_adj = max(-10, min(10, cloud_dist * 1.5))
+
+    # 转换线与基准线的价格位置作为动量确认
+    tenkan = r.get("ichi_tenkan", 0)
+    kijun = r.get("ichi_kijun", 0)
+    cur = r.get("close", 0)
+    price_vs_kijun = 0
+    if kijun > 0 and cur > 0:
+        pct = (cur / kijun - 1) * 100
+        price_vs_kijun = max(-8, min(8, pct * 2))
+
+    score = base + tk_adj + dist_adj + price_vs_kijun
+    # 反转: A股一目均衡图为反向指标(云上=过热回调, 云下=超跌反弹)
+    score = 100 - score
+    return max(10, min(90, score))
+
+
+def score_atr_regime(r) -> float:
+    """ATR波动率状态评分 — 低波蓄力看多，高波衰竭看空。
+
+    ATR%低+趋势向上 → 60~80 (蓄力突破)
+    ATR%高+趋势向下 → 20~40 (恐慌抛售)
+    ATR%适中 → 45~55 (正常波动)
+    """
+    atr_pct = r.get("atr_pct", 0)
+    slope = r.get("trend_slope_pct", 0)
+    mom = r.get("momentum_20", 0)
+    vr = r.get("volume_ratio", 1.0)
+
+    # ATR%分位: A股日均ATR%约1.5-3%
+    if atr_pct < 1.2:
+        vol_score = 10      # 极低波动 → 蓄力待突破
+    elif atr_pct < 2.0:
+        vol_score = 5       # 低波动 → 偏稳
+    elif atr_pct < 3.5:
+        vol_score = 0       # 正常波动
+    elif atr_pct < 5.0:
+        vol_score = -5      # 高波动 → 不确定性大
+    else:
+        vol_score = -12     # 极高波动 → 恐慌/狂热
+
+    # 波动率+趋势交互: 低波+上行=蓄力, 高波+下行=崩溃
+    trend_dir = 1 if (slope > 0.02 and mom > 0) else (-1 if (slope < -0.02 and mom < 0) else 0)
+    interaction = vol_score * trend_dir * 0.3
+
+    # 量比确认: 缩量低波=真蓄力, 放量高波=真恐慌
+    vol_confirm = 0
+    if atr_pct < 2.0 and vr < 0.8:
+        vol_confirm = 5   # 缩量低波蓄力
+    elif atr_pct > 3.5 and vr > 1.5:
+        vol_confirm = -5  # 放量高波恐慌
+
+    score = 50 + vol_score + interaction + vol_confirm + 0.15 * mom
+    return max(10, min(90, score))
+
+
 # ── Agent注册 ──────────────────────────────────────────────────
 
 AGENTS = {
@@ -405,7 +522,8 @@ AGENTS = {
     "volume_structure": ("量价结构", score_volume_structure),
     "resonance": ("多周期共振(日线)", score_resonance),
     "kline_vision": ("K线视觉(降级)", score_kline_vision_fallback),
-    # fundamental 和 kline_vision(视觉模式) 无法从K线独立回测
+    "ichimoku": ("一目均衡图", score_ichimoku),
+    "atr_regime": ("ATR波动状态", score_atr_regime),
 }
 
 

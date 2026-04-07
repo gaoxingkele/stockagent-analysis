@@ -27,6 +27,7 @@ from backtest_agents import (
     score_trend_momentum, score_capital_liquidity, score_divergence,
     score_chanlun, score_pattern, score_sentiment_flow,
     score_volume_structure, score_resonance, score_kline_vision_fallback,
+    score_ichimoku, score_atr_regime,
 )
 from stockagent_analysis.channel_reversal import compute_channel, detect_phases
 
@@ -36,15 +37,15 @@ from stockagent_analysis.channel_reversal import compute_channel, detect_phases
 # resonance(IC≈0)、sentiment_flow(σ=5) 大幅降权
 # 释放的权重分配给 IC 正的 agent
 WEIGHTS = {
-    "channel_reversal": 0.24,
-    "chanlun":          0.22,
+    "channel_reversal": 0.22,
+    "chanlun":          0.20,
     "divergence":       0.20,
     "trend_momentum":   0.16,
     "capital_liquidity":0.10,
+    "ichimoku":         0.06,
     "volume_structure": 0.04,
-    "kline_vision":     0.02,
+    "kline_vision":     0.01,
     "sentiment_flow":   0.01,
-    "resonance":        0.01,
 }
 
 _KEY_DIMS = {
@@ -146,8 +147,8 @@ def run_backtest(symbols: list[str]) -> list[tuple[float, float, float, float]]:
                     "chanlun":           score_chanlun(row),
                     "sentiment_flow":    score_sentiment_flow(row),
                     "volume_structure":  score_volume_structure(row),
-                    "resonance":         score_resonance(row),
                     "kline_vision":      score_kline_vision_fallback(row),
+                    "ichimoku":          score_ichimoku(row),
                     "channel_reversal":  float(cr_scores[idx]) if idx < len(cr_scores) else 50.0,
                 }
 
