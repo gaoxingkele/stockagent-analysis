@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import statistics
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,70 @@ from .report_pdf import build_investor_pdf
 
 def _print_data_progress(step: str, detail: str) -> None:
     print(f"[数据] {step}: {detail}", flush=True)
+
+
+# ── 方案一：后置自适应展宽 ─────────────────────────────────────
+_STRETCH_HISTORY_FILE = Path("output/score_stretch_history.json")
+_STRETCH_HISTORY_MAX = 100
+_STRETCH_SIGMA_THRESHOLD = 12.0
+_STRETCH_TARGET_SIGMA = 18.0
+_STRETCH_TARGET_MEAN = 55.0
+
+manager_logger_stretch = logging.getLogger("stockagent.stretch")
+
+
+def _load_stretch_history() -> list[float]:
+    try:
+        if _STRETCH_HISTORY_FILE.exists():
+            data = json.loads(_STRETCH_HISTORY_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return [float(x) for x in data[-_STRETCH_HISTORY_MAX:]]
+    except Exception:
+        pass
+    return []
+
+
+def _save_stretch_history(history: list[float]) -> None:
+    _STRETCH_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _STRETCH_HISTORY_FILE.write_text(
+        json.dumps(history[-_STRETCH_HISTORY_MAX:], ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def stretch_score(raw_score: float) -> tuple[float, dict]:
+    """后置展宽：当历史σ<12时，z-score展宽到目标σ=18。
+    返回 (stretched_score, info_dict)。
+    """
+    history = _load_stretch_history()
+    history.append(raw_score)
+    _save_stretch_history(history)
+
+    info: dict = {"raw": raw_score, "stretched": False, "history_len": len(history)}
+
+    if len(history) < 30:
+        info["reason"] = "cold_start"
+        return raw_score, info
+
+    mu = statistics.mean(history)
+    sigma = statistics.stdev(history)
+    info["mu"] = round(mu, 2)
+    info["sigma"] = round(sigma, 2)
+
+    if sigma >= _STRETCH_SIGMA_THRESHOLD:
+        info["reason"] = "sigma_ok"
+        return raw_score, info
+
+    z = (raw_score - mu) / max(sigma, 0.01)
+    stretched = _STRETCH_TARGET_MEAN + z * _STRETCH_TARGET_SIGMA
+    stretched = max(5.0, min(95.0, stretched))
+    info.update({"stretched": True, "z": round(z, 3), "result": round(stretched, 2),
+                 "reason": f"sigma={sigma:.2f}<{_STRETCH_SIGMA_THRESHOLD}"})
+    manager_logger_stretch.info(
+        "stretch: raw=%.2f mu=%.2f σ=%.2f z=%.3f → %.2f",
+        raw_score, mu, sigma, z, stretched,
+    )
+    return stretched, info
 
 
 def _build_agent_task_summary(analyst_cfg: list[dict[str, Any]]) -> str:
@@ -800,6 +865,16 @@ def run_analysis(
             _weighted_score_before, _debate_score_raw, _debate_decision, _debate_score_aligned, final_score,
         )
         print(f"[辩论融合] 加权评分={_weighted_score_before:.1f} × 60% + 辩论评分={_ds:.0f}({_debate_decision})→对齐={_debate_score_aligned:.0f} × 40% = {final_score:.1f}", flush=True)
+
+    # ── 方案一：后置自适应展宽 ──
+    _pre_stretch = final_score
+    final_score, _stretch_info = stretch_score(final_score)
+    if _stretch_info.get("stretched"):
+        print(
+            f"[展宽] σ={_stretch_info['sigma']:.2f}<{_STRETCH_SIGMA_THRESHOLD} → "
+            f"raw={_pre_stretch:.1f} z={_stretch_info['z']:.3f} → stretched={final_score:.1f}",
+            flush=True,
+        )
 
     # 基于市场状态动态调整阈值
     _regime = analysis_context.get("features", {}).get("market_regime", {}).get("regime", "unknown")

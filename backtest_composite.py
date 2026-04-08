@@ -4,7 +4,7 @@
 用法:
     python backtest_composite.py [--max N]   # 限制最多N只股票(调试用)
 """
-import sys, os, glob, struct, time
+import sys, os, glob, struct, time, statistics
 
 if sys.platform == "win32":
     if hasattr(sys.stdout, "reconfigure"):
@@ -107,6 +107,35 @@ def key_dim_dominance(scores: dict) -> float:
 def composite_score(row_scores: dict) -> float:
     raw = sum(row_scores.get(k, 50.0) * w for k, w in WEIGHTS.items())
     return max(0.0, min(100.0, raw + key_dim_dominance(row_scores)))
+
+
+# ── 后置自适应展宽（方案一）─────────────────────────────────────
+_STRETCH_SIGMA_THRESHOLD = 12.0
+_STRETCH_TARGET_SIGMA = 18.0
+_STRETCH_TARGET_MEAN = 55.0
+
+
+def batch_stretch_scores(records: list[tuple]) -> list[tuple]:
+    """对全量回测结果做后置展宽。records = [(score, r5, r10, r20), ...]"""
+    if len(records) < 30:
+        return records
+    scores = [r[0] for r in records]
+    mu = statistics.mean(scores)
+    sigma = statistics.stdev(scores)
+    print(f"[展宽] 原始分布: μ={mu:.2f}, σ={sigma:.2f}", flush=True)
+    if sigma >= _STRETCH_SIGMA_THRESHOLD:
+        print(f"[展宽] σ>={_STRETCH_SIGMA_THRESHOLD}，无需展宽", flush=True)
+        return records
+    stretched = []
+    for rec in records:
+        z = (rec[0] - mu) / max(sigma, 0.01)
+        new_score = max(5.0, min(95.0, _STRETCH_TARGET_MEAN + z * _STRETCH_TARGET_SIGMA))
+        stretched.append((new_score,) + rec[1:])
+    new_scores = [r[0] for r in stretched]
+    new_mu = statistics.mean(new_scores)
+    new_sigma = statistics.stdev(new_scores)
+    print(f"[展宽] 展宽后: μ={new_mu:.2f}, σ={new_sigma:.2f}", flush=True)
+    return stretched
 
 
 # ── 回测主循环 ────────────────────────────────────────────────
@@ -332,11 +361,19 @@ def main():
     print(f"权重: {WEIGHTS}", flush=True)
     t0 = time.time()
 
-    pairs = run_backtest(symbols)
+    pairs_raw = run_backtest(symbols)
     elapsed = time.time() - t0
-    print(f"总样本: {len(pairs):,}  用时: {elapsed:.0f}s ({elapsed/60:.1f}min)", flush=True)
+    print(f"总样本: {len(pairs_raw):,}  用时: {elapsed:.0f}s ({elapsed/60:.1f}min)", flush=True)
 
+    # 原始分布分析
+    result_raw = analyze(pairs_raw)
+    print("\n── 原始评分（展宽前）──")
+    print_result(result_raw)
+
+    # 后置展宽
+    pairs = batch_stretch_scores(pairs_raw)
     result = analyze(pairs)
+    print("\n── 展宽后评分 ──")
     print_result(result)
     write_report(result, len(symbols), "docs/composite-backtest-report.md")
 
