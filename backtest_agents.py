@@ -377,22 +377,22 @@ def score_trend_momentum(r) -> float:
     ordered = sum(1 for i in range(len(periods)-1) if ma_vals[periods[i]] > ma_vals[periods[i+1]])
     reversed_ = sum(1 for i in range(len(periods)-1) if ma_vals[periods[i]] < ma_vals[periods[i+1]])
     n_pairs = max(1, len(periods)-1)
-    ma_score = (ordered - reversed_) / n_pairs * 20.0
+    ma_score = (ordered - reversed_) / n_pairs * 25.0  # was 20
 
     slope = r.get("trend_slope_pct", 0)
-    slope_score = max(-15, min(15, slope * 80))
+    slope_score = max(-20, min(20, slope * 100))  # was ±15, coeff 80
 
     tl_bonus = 0
-    if r.get("tl_down_confirmed"): tl_bonus += 12
-    elif r.get("tl_down_broken"): tl_bonus += 5
-    if r.get("tl_up_confirmed"): tl_bonus -= 12
-    elif r.get("tl_up_broken"): tl_bonus -= 5
+    if r.get("tl_down_confirmed"): tl_bonus += 15   # was 12
+    elif r.get("tl_down_broken"): tl_bonus += 7      # was 5
+    if r.get("tl_up_confirmed"): tl_bonus -= 15      # was -12
+    elif r.get("tl_up_broken"): tl_bonus -= 7        # was -5
 
     adx = r.get("adx")
     adx_adj = 0
     if adx is not None:
-        if adx > 40: adx_adj = 8.0 if (ma_score + slope_score) > 0 else -8.0
-        elif adx > 25: adx_adj = 4.0 if (ma_score + slope_score) > 0 else -4.0
+        if adx > 40: adx_adj = 10.0 if (ma_score + slope_score) > 0 else -10.0  # was ±8
+        elif adx > 25: adx_adj = 5.0 if (ma_score + slope_score) > 0 else -5.0  # was ±4
 
     mom = r.get("momentum_20", 0)
     score = 50 + ma_score + slope_score + tl_bonus + 0.3 * mom + adx_adj
@@ -405,14 +405,14 @@ def score_capital_liquidity(r) -> float:
     vr = r.get("volume_ratio", 1.0)
     pct = r.get("pct_chg", 0)
     obv = r.get("obv_trend", "flat")
-    obv_score = 12 if obv == "up" else (-12 if obv == "down" else 0)  # was ±8
-    vr_score = max(-15, min(15, (vr - 1) * 18))
+    obv_score = 18 if obv == "up" else (-18 if obv == "down" else 0)  # was ±12
+    vr_score = max(-22, min(22, (vr - 1) * 25))  # was ±15, coeff 18
     vp_score = 0
-    if r.get("volume_breakout"): vp_score += 12  # was 8
-    if r.get("shrink_pullback"): vp_score += 8   # was 6
-    if r.get("climax_volume"): vp_score -= 8
-    if r.get("volume_anomaly"): vp_score += 4
-    return max(0, min(100, 50 + obv_score + vr_score + vp_score + 0.2 * pct))
+    if r.get("volume_breakout"): vp_score += 16  # was 12
+    if r.get("shrink_pullback"): vp_score += 12  # was 8
+    if r.get("climax_volume"): vp_score -= 12    # was -8
+    if r.get("volume_anomaly"): vp_score += 6    # was 4
+    return max(0, min(100, 50 + obv_score + vr_score + vp_score + 0.3 * pct))
 
 
 def score_divergence(r) -> float:
@@ -455,8 +455,8 @@ def score_divergence(r) -> float:
 
 def score_chanlun(r) -> float:
     cs = r.get("chanlun_score", 0)
-    score = 50 + cs * 0.5 * 1.0  # day only, scale 1.0
-    return max(10, min(90, score))
+    score = 50 + cs * 0.8  # was *0.5, 放宽区分力
+    return max(5, min(95, score))
 
 
 def score_pattern(r) -> float:
@@ -621,17 +621,17 @@ def score_ichimoku(r) -> float:
 
     # 基础位置分
     if above:
-        base = 62
+        base = 68   # was 62
     elif below:
-        base = 38
+        base = 32   # was 38
     else:
         base = 50
 
     # TK交叉方向
-    tk_adj = 8 if tk_bull else -8
+    tk_adj = 12 if tk_bull else -12  # was ±8
 
     # 距云距离: 越远离云越确认趋势, 但过远可能过度延伸
-    dist_adj = max(-10, min(10, cloud_dist * 1.5))
+    dist_adj = max(-15, min(15, cloud_dist * 2.0))  # was ±10, coeff 1.5
 
     # 转换线与基准线的价格位置作为动量确认
     tenkan = r.get("ichi_tenkan", 0)
@@ -640,7 +640,7 @@ def score_ichimoku(r) -> float:
     price_vs_kijun = 0
     if kijun > 0 and cur > 0:
         pct = (cur / kijun - 1) * 100
-        price_vs_kijun = max(-8, min(8, pct * 2))
+        price_vs_kijun = max(-12, min(12, pct * 3))  # was ±8, coeff 2
 
     score = base + tk_adj + dist_adj + price_vs_kijun
     # 反转: A股一目均衡图为反向指标(云上=过热回调, 云下=超跌反弹)
@@ -879,12 +879,12 @@ def _f_liquidity(r) -> float:
 def _f_amt_ratio(r) -> float:
     """量能比"""
     ar = r.get("amount_ratio", 1.0)
-    if 1.0 <= ar < 1.5: return 75
-    elif 1.5 <= ar < 2.0: return 65
-    elif ar >= 2.0: return 45
-    elif ar > 0.7: return 55
-    elif ar > 0.5: return 40
-    else: return 25
+    if 1.0 <= ar < 1.5: return 85    # was 75 温和放量最佳
+    elif 1.5 <= ar < 2.0: return 72  # was 65
+    elif ar >= 2.0: return 35        # was 45 爆量过热
+    elif ar > 0.7: return 50         # was 55
+    elif ar > 0.5: return 30         # was 40
+    else: return 15                  # was 25 极度缩量
 
 
 # ── Agent注册 ──────────────────────────────────────────────────
