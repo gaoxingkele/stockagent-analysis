@@ -38,14 +38,14 @@ from stockagent_analysis.channel_reversal import compute_channel, detect_phases
 # R3基础 + f_amt_ratio 10%
 # 砍掉 volume_structure/kline_vision/sentiment_flow (IC弱+σ小)
 WEIGHTS = {
-    "channel_reversal": 0.21,
-    "chanlun":          0.19,
-    "divergence":       0.19,
-    "trend_momentum":   0.15,
-    "capital_liquidity":0.10,
-    "f_amt_ratio":      0.10,
+    "channel_reversal": 0.19,
+    "chanlun":          0.18,
+    "divergence":       0.18,
+    "trend_momentum":   0.14,
+    "capital_liquidity":0.09,
+    "f_amt_ratio":      0.09,
+    "resonance":        0.08,
     "ichimoku":         0.05,
-    "resonance":        0.01,
 }
 
 _KEY_DIMS = {

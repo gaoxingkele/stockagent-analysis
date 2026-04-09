@@ -505,87 +505,134 @@ def score_volume_structure(r) -> float:
 
 
 def score_resonance(r) -> float:
-    """多周期共振评分 — 日线蓄势/突破/反转 + 周线看涨形态 + 月线不看空。
+    """多周期共振评分 — 周线趋势 + 月线趋势 + 大级别压制检测。
 
-    三层同时满足 → 70~85 (强共振)
-    日线+周线 → 58~70 (双层共振)
-    仅日线信号 → 50~58
-    无信号/看空 → 25~50
+    核心逻辑: 20日/60日收益取决于周线和月线级别的趋势方向。
+    周线月线同为多头 → 65~90 (强共振做多)
+    周线多头月线中性 → 55~65
+    大级别空头压制日线多头 → 30~45 (限制做多)
+    周线月线同为空头 → 10~30 (做空信号)
     """
-    # ── 层1: 日线 — 蓄势/中枢突破/走势反转 ──
-    daily_sig = 0
+    # ── 周线级别趋势 (MA5=MA25日, MA10=MA50日) ──
+    # 用日线MA来表达周线级别趋势
+    ma5 = r.get("ma5_val", 0)
+    ma10 = r.get("ma10_val", 0)
+    ma20 = r.get("ma20_val", 0)
+    ma60 = r.get("ma60_val", 0)
+    ma120 = r.get("ma120_val", 0)
+    price = r.get("close", 0)
+    if price <= 0:
+        return 50.0
 
-    # (a) 蓄势上涨: 波动率收缩 + 价格贴近MA20 + 缩量 + 斜率微上行
-    atr_pct = r.get("atr_pct", 2.0)
-    ma20_pct = r.get("ma20_pct", 0)
-    vr = r.get("volume_ratio", 1.0)
-    slope = r.get("trend_slope_pct", 0)
-    if atr_pct < 2.0 and abs(ma20_pct) < 3 and vr < 0.9 and slope > -0.02:
-        daily_sig += 8  # 窄幅蓄力
+    # 周线趋势: price vs MA20, MA20斜率, MA5 vs MA20
+    wk_score = 0
+    ma20_pct = r.get("ma20_pct", 0)  # price相对MA20偏离%
+    slope = r.get("trend_slope_pct", 0)  # MA20斜率
 
-    # (b) 中枢即将突破: 趋势线突破 + 放量 + MA排列偏多
-    if r.get("tl_down_broken") or r.get("tl_down_confirmed"):
-        daily_sig += 6
-    if r.get("volume_breakout"):
-        daily_sig += 4
-    if r.get("higher_highs", 0) >= 2:
-        daily_sig += 3
+    # 价格在MA20上方
+    if ma20_pct > 5:
+        wk_score += 12
+    elif ma20_pct > 2:
+        wk_score += 8
+    elif ma20_pct > 0:
+        wk_score += 4
+    elif ma20_pct > -2:
+        wk_score -= 2
+    elif ma20_pct > -5:
+        wk_score -= 6
+    else:
+        wk_score -= 12
 
-    # (c) 走势反转: 底背离 + RSI超卖区回升 + 缠论底部信号
-    rsi = r.get("rsi") or 50
-    if r.get("macd_bot_div") or r.get("rsi_bot_div"):
-        daily_sig += 8
-    if rsi < 30:
-        daily_sig += 4
-    elif rsi < 40 and slope > 0:
-        daily_sig += 2
-    chanlun = r.get("chanlun_score", 0)
-    if chanlun > 20:
-        daily_sig += 3
+    # MA20斜率(周线级别趋势方向)
+    if slope > 0.08:
+        wk_score += 10
+    elif slope > 0.03:
+        wk_score += 6
+    elif slope > 0:
+        wk_score += 2
+    elif slope > -0.03:
+        wk_score -= 2
+    elif slope > -0.08:
+        wk_score -= 6
+    else:
+        wk_score -= 10
 
-    # 日线看空信号扣分
-    if r.get("macd_top_div") or r.get("rsi_top_div"):
-        daily_sig -= 8
-    if r.get("tl_up_broken"):
-        daily_sig -= 5
-    if r.get("lower_lows", 0) >= 3:
-        daily_sig -= 4
+    # MA5 > MA20 (短期均线在中期上方 = 周线多头排列)
+    if ma5 > 0 and ma20 > 0:
+        if ma5 > ma20:
+            wk_score += 5
+        else:
+            wk_score -= 5
 
-    # ── 层2: 周线 — 最近2-3根周K看涨形态 ──
-    weekly_sig = 0
+    # 周K形态加分
     wk_bulls = r.get("wk_bulls", 0)
     wk_pattern = r.get("wk_pattern", 0)
     wk_higher_lows = r.get("wk_higher_lows", False)
-
     if wk_bulls >= 2:
-        weekly_sig += 5   # 2/3根阳线
-    if wk_bulls >= 3:
-        weekly_sig += 3   # 三连阳
-    weekly_sig += min(10, wk_pattern)  # 阳包阴/锤子等形态
+        wk_score += 3
+    if wk_pattern > 0:
+        wk_score += min(5, wk_pattern)
     if wk_higher_lows:
-        weekly_sig += 4   # 底部抬升
-
-    # 周线看空
+        wk_score += 3
     if wk_bulls == 0:
-        weekly_sig -= 8   # 三连阴
+        wk_score -= 5  # 三连阴
 
-    # ── 层3: 月线 — 最近两根月线不看空 ──
-    monthly_sig = 0
+    # ── 月线级别趋势 (MA60=月线MA3, MA120=月线MA6) ──
+    mn_score = 0
+
+    # 价格 vs MA60 (月线级别)
+    if ma60 > 0:
+        ma60_pct = (price / ma60 - 1) * 100
+        if ma60_pct > 10:
+            mn_score += 10
+        elif ma60_pct > 3:
+            mn_score += 6
+        elif ma60_pct > 0:
+            mn_score += 3
+        elif ma60_pct > -5:
+            mn_score -= 3
+        elif ma60_pct > -10:
+            mn_score -= 8
+        else:
+            mn_score -= 12  # 深度破位月线均线
+
+    # MA60方向 (用MA20 vs MA60近似月线MA方向)
+    if ma20 > 0 and ma60 > 0:
+        if ma20 > ma60:
+            mn_score += 5  # 中期在长期上方 = 月线多头
+        else:
+            mn_score -= 5  # 月线空头
+
+    # MA120 (半年线, 大趋势)
+    if ma120 > 0:
+        ma120_pct = (price / ma120 - 1) * 100
+        if ma120_pct > 5:
+            mn_score += 4
+        elif ma120_pct < -10:
+            mn_score -= 6  # 严重破位半年线
+
+    # 月K形态
     mn_ok = r.get("mn_not_bearish", True)
     mn_pattern = r.get("mn_pattern", 0)
+    if not mn_ok:
+        mn_score -= 8  # 月线大阴/射击之星
+    if mn_pattern > 0:
+        mn_score += min(4, mn_pattern)
 
-    if mn_ok:
-        monthly_sig += 5  # 月线不看空=基础加分
-        monthly_sig += mn_pattern  # 阳线额外加分
-    else:
-        monthly_sig -= 10  # 月线看空=强烈扣分
+    # ── 大级别压制检测 ──
+    # 月线空头压制日线多头 = 限制涨幅
+    suppress = 0
+    if ma60 > 0 and ma120 > 0:
+        if price < ma60 and price < ma120:
+            suppress -= 8  # 双均线压制
+        elif price < ma120:
+            suppress -= 4  # 半年线压制
 
-    # ── 三层融合 ──
-    # 日线基础, 周线确认加成, 月线否决权
-    score = 45 + daily_sig + weekly_sig * 0.8 + monthly_sig * 0.6
-    # 反转: A股"蓄势突破"后多假突破回落，低分信号反而更优
-    score = 100 - score
-    return max(10, min(90, score))
+    # ── 融合: 周线40% + 月线50% + 压制10% ──
+    raw = 50 + wk_score * 0.4 + mn_score * 0.5 + suppress
+    # 反转: A股20日周期均值回归占主导，大级别多头排列短期反而回调
+    raw = 100 - raw
+    return max(10, min(90, raw))
 
 
 def score_kline_vision_fallback(r) -> float:
