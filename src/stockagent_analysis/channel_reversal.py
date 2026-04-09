@@ -247,8 +247,16 @@ def detect_phases(df: pd.DataFrame) -> pd.DataFrame:
         prev_days = days
         prev_above_middle = above_middle
 
+        # ── 通道位置比例: 中轨=0, 上轨=+1, 下轨=-1 ──
+        ch_width_up = upper - middle if upper > middle else 1e-9
+        ch_width_dn = middle - lower if middle > lower else 1e-9
+        if close >= middle:
+            ch_pos = min(1.0, (close - middle) / ch_width_up)
+        else:
+            ch_pos = max(-1.0, -(middle - close) / ch_width_dn)
+
         # ── 评分 ──
-        scores[i] = _calc_score(phase, rsi, slope, vol_r, days)
+        scores[i] = _calc_score(phase, rsi, slope, vol_r, days, ch_pos)
 
     df["phase"] = phases
     df["phase_days"] = phase_days
@@ -256,8 +264,13 @@ def detect_phases(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _calc_score(phase: str, rsi: float, rsi_slope: float, vol_ratio: float, days: int) -> float:
-    """根据阶段 + RSI + 量能计算评分。"""
+def _calc_score(phase: str, rsi: float, rsi_slope: float, vol_ratio: float, days: int, ch_pos: float = 0.0) -> float:
+    """根据阶段 + RSI + 量能 + 通道位置计算评分。
+
+    ch_pos: 通道位置比例, 中轨=0, 上轨=+1, 下轨=-1
+    P_0U/P_0D: 按通道位置线性插值, 中轨50 → 上轨80 / 下轨20
+    其他阶段: 保持原有逻辑(特殊事件信号)
+    """
     rsi = rsi if not pd.isna(rsi) else 50
     rsi_slope = rsi_slope if not pd.isna(rsi_slope) else 0
     vol_ratio = vol_ratio if not pd.isna(vol_ratio) else 1.0
@@ -267,13 +280,14 @@ def _calc_score(phase: str, rsi: float, rsi_slope: float, vol_ratio: float, days
     # 评分基于146只股票48039样本回测校准(2026-04-05):
     #   4B胜率69%/20日+12.1%(最佳) > 3B胜率56%/+7.9% > 1破下轨胜率61.5%
     #   4A胜率仅50%(站上上轨后短期超买) > 3A胜率56%(实际不弱)
-    if phase == P_0U:
-        score = 55
-    elif phase == P_0D:
-        score = 35
+    if phase in (P_0U, P_0D):
+        # 通道内均值回归: 靠近下轨→超跌反弹机会(高分), 靠近上轨→回调风险(低分)
+        # 下轨(-1)=80分, 中轨(0)=50分, 上轨(+1)=20分
+        score = 50 - ch_pos * 30
     elif phase == P_1:
         # 破下轨: 回测胜率61.5%，均值回归效应强，是反转买点
-        score = 30
+        # 越远离下轨(ch_pos越负)→反弹空间越大→分数越高
+        score = 50 - ch_pos * 30
         if rsi < 20:
             score += 8   # 深度超卖，反转潜力大
         elif rsi < 30:
@@ -281,55 +295,50 @@ def _calc_score(phase: str, rsi: float, rsi_slope: float, vol_ratio: float, days
         if vol_ratio > 1.3:
             score += 5   # 破下轨+放量=恐慌释放
     elif phase == P_2:
-        score = 40
-        # RSI从超卖回升
+        # 从破下轨回到轨道内, 仍在下半区, 均值回归看多
+        score = 50 - ch_pos * 30
+        # RSI从超卖回升额外加分
         if rsi < 30 and rsi_slope > 0:
-            score += 10  # RSI开始回升但仍在超卖区
+            score += 8
         elif rsi >= 30 and rsi_slope > 1:
-            score += 8   # RSI脱离超卖且加速回升
-        # 量能
+            score += 6
         if vol_ratio > 1.2:
-            score += 5
+            score += 4
     elif phase == P_3A:
-        # 弱反弹: 回测胜率56%/20日+5.36%，评分不应过于悲观
-        score = 28
+        # 弱反弹: 回测胜率56%/20日+5.36%
+        score = 50 - ch_pos * 30 - 5  # 位置基础上略扣分
         if rsi < 30:
-            score -= 3   # RSI深度低迷才额外扣分
+            score -= 3
     elif phase == P_3B:
         # 过中轨: 回测胜率56%/20日+7.91%，可靠的看多确认信号
         score = 68
-        # RSI脱离超卖且连升
         if rsi > 40 and rsi_slope > 0.5:
             score += 8
         elif rsi > 35 and rsi_slope > 0:
             score += 4
-        # 量能
         if vol_ratio > 1.2:
             score += 5
-        # 三者齐备
         if rsi > 40 and rsi_slope > 1.0 and vol_ratio > 1.2:
-            score = max(score, 82)  # 最有效的反转信号
+            score = max(score, 82)
     elif phase == P_4A:
-        # 有效反转: 回测胜率仅50%（短期超买），20日+5.71%（中期仍正）
-        # 降分: 站上上轨已是强势末端，短期回调风险大
+        # 有效反转: 站上上轨
         score = 72
         if rsi > 50 and rsi_slope > 0:
             score += 3
         if vol_ratio > 1.5:
             score += 3
         if days > 5:
-            score -= 5   # 站上上轨太久，动能衰减
+            score -= 5
         score = min(80, score)
     elif phase == P_4B:
-        # 上轨整理: 回测胜率69%/20日+12.1%(最佳信号！)
-        # 大幅提分: 蓄力整理后突破概率最高
+        # 上轨整理: 回测最佳信号
         score = 78
         if vol_ratio > 1.0:
-            score += 4   # 整理期量能未萎缩
+            score += 4
         if rsi > 45 and rsi_slope > 0:
-            score += 4   # RSI保持强势
+            score += 4
         if days > 15:
-            score -= 5   # 整理太久，动能可能耗尽
+            score -= 5
         score = min(88, score)
 
     return max(5, min(95, score))
