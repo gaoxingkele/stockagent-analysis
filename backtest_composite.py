@@ -38,14 +38,14 @@ from stockagent_analysis.channel_reversal import compute_channel, detect_phases
 # R3基础 + f_amt_ratio 10%
 # 砍掉 volume_structure/kline_vision/sentiment_flow (IC弱+σ小)
 WEIGHTS = {
-    "channel_reversal": 0.19,
-    "chanlun":          0.18,
-    "divergence":       0.18,
-    "trend_momentum":   0.18,
-    "capital_liquidity":0.09,
-    "f_amt_ratio":      0.09,
-    "ichimoku":         0.09,
-    # resonance: 不参与加权, 改为门控因子(见 apply_resonance_gate)
+    "channel_reversal": 0.21,
+    "chanlun":          0.19,
+    "divergence":       0.19,
+    "trend_momentum":   0.15,
+    "capital_liquidity":0.10,
+    "f_amt_ratio":      0.10,
+    "ichimoku":         0.05,
+    "resonance":        0.01,
 }
 
 _KEY_DIMS = {
@@ -104,27 +104,9 @@ def key_dim_dominance(scores: dict) -> float:
     return bonus
 
 
-def apply_resonance_gate(composite: float, resonance: float) -> float:
-    """共振门控: 月线/周线深度空头时, 削弱多头综合分(一票否决).
-
-    高级别空头压制日线多头, 即便日线技术面看多, 也不应给高分。
-    - resonance >= 35: 不干预 (允许做多)
-    - resonance < 35 且 composite > 50: 削弱多头超出部分
-    - resonance 越低, 削弱越强
-    - 不增强空头(空头有自己的判定)
-    """
-    if resonance >= 35 or composite <= 50:
-        return composite
-    penalty_factor = (35 - resonance) / 35  # 0.0~1.0
-    excess = composite - 50  # 多头超出中性的部分
-    return composite - excess * penalty_factor * 0.7  # 削弱70%
-
-
 def composite_score(row_scores: dict) -> float:
     raw = sum(row_scores.get(k, 50.0) * w for k, w in WEIGHTS.items())
-    raw += key_dim_dominance(row_scores)
-    raw = apply_resonance_gate(raw, row_scores.get("resonance", 50.0))
-    return max(0.0, min(100.0, raw))
+    return max(0.0, min(100.0, raw + key_dim_dominance(row_scores)))
 
 
 # ── 后置自适应展宽（方案一）─────────────────────────────────────
