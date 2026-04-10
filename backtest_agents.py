@@ -505,18 +505,18 @@ def score_volume_structure(r) -> float:
 
 
 def score_resonance(r) -> float:
-    """多周期共振评分 — 周线趋势 + 月线趋势 + 大级别压制检测。
+    """多周期共振评分 — 高级别趋势主导 + 空头一票否决。
 
-    核心逻辑: 20日/60日收益取决于周线和月线级别的趋势方向。
-    周线月线同为多头 → 65~90 (强共振做多)
-    周线多头月线中性 → 55~65
-    大级别空头压制日线多头 → 30~45 (限制做多)
-    周线月线同为空头 → 10~30 (做空信号)
+    核心原则:
+    - 月线/周线/日线 三级共振多头 → 80~90 (极强信号)
+    - 月线多头 + 周线多头 → 65~80 (强多)
+    - 月线多头 + 其他不明 → 55~65 (温和偏多, 单月线多头无妨)
+    - 月线空头(无论日线如何) → 25~40 (警惕, 高级别一票否决)
+    - 月线空头 + 日线"假"多头 → 20~35 (额外扣分)
+    - 周线/月线 共振空头 → 10~25 (做空信号)
+    - 中性 → 50
     """
-    # ── 周线级别趋势 (MA5=MA25日, MA10=MA50日) ──
-    # 用日线MA来表达周线级别趋势
     ma5 = r.get("ma5_val", 0)
-    ma10 = r.get("ma10_val", 0)
     ma20 = r.get("ma20_val", 0)
     ma60 = r.get("ma60_val", 0)
     ma120 = r.get("ma120_val", 0)
@@ -524,115 +524,123 @@ def score_resonance(r) -> float:
     if price <= 0:
         return 50.0
 
-    # 周线趋势: price vs MA20, MA20斜率, MA5 vs MA20
-    wk_score = 0
-    ma20_pct = r.get("ma20_pct", 0)  # price相对MA20偏离%
-    slope = r.get("trend_slope_pct", 0)  # MA20斜率
+    ma20_pct = r.get("ma20_pct", 0)
+    slope = r.get("trend_slope_pct", 0)
+    mom20 = r.get("momentum_20", 0)
 
-    # 价格在MA20上方
-    if ma20_pct > 5:
-        wk_score += 12
-    elif ma20_pct > 2:
-        wk_score += 8
-    elif ma20_pct > 0:
-        wk_score += 4
-    elif ma20_pct > -2:
-        wk_score -= 2
-    elif ma20_pct > -5:
-        wk_score -= 6
-    else:
-        wk_score -= 12
-
-    # MA20斜率(周线级别趋势方向)
-    if slope > 0.08:
-        wk_score += 10
-    elif slope > 0.03:
-        wk_score += 6
-    elif slope > 0:
-        wk_score += 2
-    elif slope > -0.03:
-        wk_score -= 2
-    elif slope > -0.08:
-        wk_score -= 6
-    else:
-        wk_score -= 10
-
-    # MA5 > MA20 (短期均线在中期上方 = 周线多头排列)
-    if ma5 > 0 and ma20 > 0:
-        if ma5 > ma20:
-            wk_score += 5
-        else:
-            wk_score -= 5
-
-    # 周K形态加分
-    wk_bulls = r.get("wk_bulls", 0)
-    wk_pattern = r.get("wk_pattern", 0)
-    wk_higher_lows = r.get("wk_higher_lows", False)
-    if wk_bulls >= 2:
-        wk_score += 3
-    if wk_pattern > 0:
-        wk_score += min(5, wk_pattern)
-    if wk_higher_lows:
-        wk_score += 3
-    if wk_bulls == 0:
-        wk_score -= 5  # 三连阴
-
-    # ── 月线级别趋势 (MA60=月线MA3, MA120=月线MA6) ──
-    mn_score = 0
-
-    # 价格 vs MA60 (月线级别)
-    if ma60 > 0:
-        ma60_pct = (price / ma60 - 1) * 100
-        if ma60_pct > 10:
-            mn_score += 10
-        elif ma60_pct > 3:
-            mn_score += 6
-        elif ma60_pct > 0:
-            mn_score += 3
-        elif ma60_pct > -5:
-            mn_score -= 3
-        elif ma60_pct > -10:
-            mn_score -= 8
-        else:
-            mn_score -= 12  # 深度破位月线均线
-
-    # MA60方向 (用MA20 vs MA60近似月线MA方向)
-    if ma20 > 0 and ma60 > 0:
-        if ma20 > ma60:
-            mn_score += 5  # 中期在长期上方 = 月线多头
-        else:
-            mn_score -= 5  # 月线空头
-
-    # MA120 (半年线, 大趋势)
-    if ma120 > 0:
-        ma120_pct = (price / ma120 - 1) * 100
-        if ma120_pct > 5:
-            mn_score += 4
-        elif ma120_pct < -10:
-            mn_score -= 6  # 严重破位半年线
-
-    # 月K形态
-    mn_ok = r.get("mn_not_bearish", True)
-    mn_pattern = r.get("mn_pattern", 0)
-    if not mn_ok:
-        mn_score -= 8  # 月线大阴/射击之星
-    if mn_pattern > 0:
-        mn_score += min(4, mn_pattern)
-
-    # ── 大级别压制检测 ──
-    # 月线空头压制日线多头 = 限制涨幅
-    suppress = 0
+    # ── 月线趋势判定 (price vs MA60/MA120, MA20 vs MA60) ──
+    # mn_state: +2=强多, +1=多, 0=中性, -1=空, -2=强空
+    mn_state = 0
     if ma60 > 0 and ma120 > 0:
-        if price < ma60 and price < ma120:
-            suppress -= 8  # 双均线压制
-        elif price < ma120:
-            suppress -= 4  # 半年线压制
+        ma60_pct = (price / ma60 - 1) * 100
+        ma120_pct = (price / ma120 - 1) * 100
+        # 双均线之上 + MA20 > MA60 = 强多
+        if price > ma60 and price > ma120 and ma20 > ma60 and ma60_pct > 3:
+            mn_state = 2
+        elif price > ma60 and ma20 > ma60:
+            mn_state = 1
+        elif price < ma60 and price < ma120 and ma20 < ma60 and ma60_pct < -5:
+            mn_state = -2  # 双均线下方 + 严重破位
+        elif price < ma60 and ma20 < ma60:
+            mn_state = -1
+        # 否则保持中性
+    elif ma60 > 0:
+        if price > ma60 * 1.03 and ma20 > ma60:
+            mn_state = 1
+        elif price < ma60 * 0.95:
+            mn_state = -1
 
-    # ── 融合: 周线40% + 月线50% + 压制10% ──
-    raw = 50 + wk_score * 0.4 + mn_score * 0.5 + suppress
-    # 反转: A股20日周期均值回归占主导，大级别多头排列短期反而回调
-    raw = 100 - raw
-    return max(10, min(90, raw))
+    # 月K形态修正
+    if not r.get("mn_not_bearish", True):
+        mn_state = min(mn_state, -1)  # 月线大阴线 强制至少-1
+
+    # ── 周线趋势判定 (price vs MA20, slope, MA5 vs MA20) ──
+    wk_state = 0
+    if ma5 > 0 and ma20 > 0:
+        if price > ma20 and ma5 > ma20 and slope > 0.05 and ma20_pct > 3:
+            wk_state = 2  # 强多
+        elif price > ma20 and ma5 > ma20 and slope > 0:
+            wk_state = 1
+        elif price < ma20 and ma5 < ma20 and slope < -0.05:
+            wk_state = -2
+        elif price < ma20 and ma5 < ma20:
+            wk_state = -1
+
+    # 周K形态修正
+    wk_bulls = r.get("wk_bulls", 0)
+    if wk_bulls >= 3 and wk_state >= 0:
+        wk_state = max(wk_state, 1)
+    if wk_bulls == 0 and wk_state <= 0:
+        wk_state = min(wk_state, -1)
+
+    # ── 日线趋势判定 ──
+    dy_state = 0
+    if slope > 0.03 and mom20 > 5:
+        dy_state = 2
+    elif slope > 0 and mom20 > 0:
+        dy_state = 1
+    elif slope < -0.03 and mom20 < -5:
+        dy_state = -2
+    elif slope < 0 and mom20 < 0:
+        dy_state = -1
+
+    # ── 共振评分 (核心逻辑) ──
+    score = 50.0
+
+    # 三级共振 (最强信号)
+    if mn_state >= 1 and wk_state >= 1 and dy_state >= 1:
+        score = 75 + (mn_state + wk_state + dy_state - 3) * 4  # 75~87
+    elif mn_state <= -1 and wk_state <= -1 and dy_state <= -1:
+        score = 25 - (-mn_state - wk_state - dy_state - 3) * 4  # 13~25
+
+    # 月线主导 (高级别)
+    elif mn_state == 2:
+        if wk_state >= 1:
+            score = 70  # 月强多 + 周多 = 强多
+        elif wk_state == 0:
+            score = 60  # 月强多 但周线观望 = 偏多
+        else:
+            score = 50  # 月强多 但周线开始空 = 中性
+    elif mn_state == 1:
+        if wk_state >= 1:
+            score = 65
+        elif wk_state == 0:
+            score = 55  # 月线多头, 周线不明 = 温和偏多 (用户原意: 也无妨)
+        else:
+            score = 45
+
+    # 月线空头 一票否决
+    elif mn_state == -2:
+        # 即便日线多头, 月线深度破位 -> 极度警惕
+        if dy_state >= 1:
+            score = 22  # 假突破警告
+        else:
+            score = 18
+    elif mn_state == -1:
+        if dy_state >= 1:
+            # 月线空头 但日线多头 = 警惕假反弹
+            score = 32
+        elif wk_state <= -1:
+            score = 28  # 月+周 共振空头
+        else:
+            score = 38
+
+    # 月线中性, 周线主导
+    else:  # mn_state == 0
+        if wk_state == 2:
+            score = 65  # 周线强多 主导日线
+        elif wk_state == 1:
+            score = 58
+        elif wk_state == -2:
+            score = 32  # 周线空头主导
+        elif wk_state == -1:
+            score = 42
+        elif dy_state >= 1:
+            score = 53
+        elif dy_state <= -1:
+            score = 47
+
+    return max(10, min(90, score))
 
 
 def score_kline_vision_fallback(r) -> float:
