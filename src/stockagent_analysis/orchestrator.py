@@ -742,7 +742,9 @@ def run_analysis(
     model_totals: dict[str, float] = {}
     # v2: PATTERN agent 内部已处理顶底结构反转
     # trend_momentum/ichimoku: A股趋势动量和一目均衡图为反向指标(回测IC负), 反转使用
-    _INVERT_DIMS: set[str] = {"TREND_MOMENTUM", "ICHIMOKU"}
+    # 反转维度: A股5-20日周期, 这些维度为反向指标(趋势末端效应/均值回归)
+    # TIMEFRAME_RESONANCE: 单因子IC=-0.0624, 反转后IC=+0.0624(最强因子)
+    _INVERT_DIMS: set[str] = {"TREND_MOMENTUM", "ICHIMOKU", "TIMEFRAME_RESONANCE"}
 
     # ── 逐Agent动态LLM权重计算 ──
     # 每个Agent有 llm_base_weight (config, 0.20/0.35/0.45)

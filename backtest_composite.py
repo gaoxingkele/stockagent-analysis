@@ -31,28 +31,28 @@ from backtest_agents import (
 from stockagent_analysis.channel_reversal import compute_channel, detect_phases
 
 
-# ── 权重配置 ─────────────────────────────────────────────────
-# pattern(IC=-0.029)、fundamental(恒=50) 禁用
-# resonance(IC≈0)、sentiment_flow(σ=5) 大幅降权
-# 释放的权重分配给 IC 正的 agent
-# R3基础 + f_amt_ratio 10%
-# 砍掉 volume_structure/kline_vision/sentiment_flow (IC弱+σ小)
+# ── 权重配置 V4 (2026-04-12) ─────────────────────────────────
+# V1 baseline + resonance_rev 0.08 (其余等比缩减)
+# resonance单因子IC=-0.0624(反向指标), 反转(100-score)后IC=+0.0624
+# 直接加入综合分, 不作为门控(门控方向曾搞反导致IC降)
+# 400只对比实测: IC不变(+0.0367 vs V1 +0.0371), 高分胜率大幅提升:
+#   55-65: 57.2% vs 54.2% (+3pp) | 65-75: 62.7% vs 58.3% (+4.4pp)
 WEIGHTS = {
-    "channel_reversal": 0.21,
-    "chanlun":          0.19,
-    "divergence":       0.19,
-    "trend_momentum":   0.15,
-    "capital_liquidity":0.10,
-    "f_amt_ratio":      0.10,
+    "channel_reversal": 0.19,
+    "chanlun":          0.18,
+    "divergence":       0.18,
+    "trend_momentum":   0.14,
+    "capital_liquidity":0.09,
+    "f_amt_ratio":      0.09,
     "ichimoku":         0.05,
-    "resonance":        0.01,
+    "resonance_rev":    0.08,  # 100-resonance, 均值回归对冲
 }
 
 _KEY_DIMS = {
     "chanlun":          0.15,
     "channel_reversal": 0.12,
     "divergence":       0.10,
-    "capital_liquidity": 0.08,
+    "capital_liquidity":0.08,
 }
 
 
@@ -169,6 +169,8 @@ def run_backtest(symbols: list[str]) -> list[tuple[float, float, float, float]]:
                 r10 = (close_arr[idx+10] / close_arr[idx] - 1)*100 if idx+10 < len(close_arr) else np.nan
                 r20 = (close_arr[idx+20] / close_arr[idx] - 1)*100 if idx+20 < len(close_arr) else np.nan
 
+                # resonance_rev: 100-原始resonance (反转). 原始resonance单因子IC=-0.0624
+                # (A股趋势末端均值回归), 反转后变成+0.0624的强正向因子.
                 agent_scores = {
                     "trend_momentum":    score_trend_momentum(row),
                     "capital_liquidity": score_capital_liquidity(row),
@@ -176,7 +178,7 @@ def run_backtest(symbols: list[str]) -> list[tuple[float, float, float, float]]:
                     "chanlun":           score_chanlun(row),
                     "f_amt_ratio":       max(10, min(90, _f_amt_ratio(row))),
                     "ichimoku":          score_ichimoku(row),
-                    "resonance":         score_resonance(row),
+                    "resonance_rev":     100.0 - score_resonance(row),
                     "channel_reversal":  float(cr_scores[idx]) if idx < len(cr_scores) else 50.0,
                 }
 
