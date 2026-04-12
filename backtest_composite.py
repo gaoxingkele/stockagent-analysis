@@ -31,29 +31,31 @@ from backtest_agents import (
 from stockagent_analysis.channel_reversal import compute_channel, detect_phases
 
 
-# ── 权重配置 V4 (2026-04-12) ─────────────────────────────────
-# V1 baseline + resonance_rev 0.08 (其余等比缩减)
-# resonance单因子IC=-0.0624(反向指标), 反转(100-score)后IC=+0.0624
-# 直接加入综合分, 不作为门控(门控方向曾搞反导致IC降)
-# 400只对比实测: IC不变(+0.0367 vs V1 +0.0371), 高分胜率大幅提升:
-#   55-65: 57.2% vs 54.2% (+3pp) | 65-75: 62.7% vs 58.3% (+4.4pp)
+# ── 权重配置 V6 (2026-04-13) ─────────────────────────────────
+# 两大改进:
+#   1. 三因子融合: trend_momentum + ichimoku + resonance_rev → mean_reversion
+#      (三者ρ=0.73~0.79, 分开算是三重复计; 融合后消除冗余)
+#   2. 中性零权重: |score-50| ≤ 5 时权重渐减→0, 权重动态重分配给有信号因子
+#      (divergence 76%恒=50, chanlun弱信号时稀释综合分 → 现在自动归零)
+# 400只实测: IC(20d) +0.0367→+0.0552 (+50%!), 75-85胜率 62%→66%
 WEIGHTS = {
-    "channel_reversal": 0.19,
+    "channel_reversal": 0.20,
+    "divergence":       0.20,
+    "capital_liquidity":0.15,  # 独立因子中IC最高(+0.051)
+    "mean_reversion":   0.15,  # trend_momentum+ichimoku+resonance_rev均值
+    "f_amt_ratio":      0.12,
     "chanlun":          0.18,
-    "divergence":       0.18,
-    "trend_momentum":   0.14,
-    "capital_liquidity":0.09,
-    "f_amt_ratio":      0.09,
-    "ichimoku":         0.05,
-    "resonance_rev":    0.08,  # 100-resonance, 均值回归对冲
 }
 
 _KEY_DIMS = {
-    "chanlun":          0.15,
     "channel_reversal": 0.12,
     "divergence":       0.10,
-    "capital_liquidity":0.08,
+    "capital_liquidity":0.10,
+    "chanlun":          0.10,
 }
+
+# 中性零权重阈值: |score-50| <= 此值时权重渐减
+_NEUTRAL_THRESHOLD = 5.0
 
 
 # ── 股票池构建（TDX全量A股扫描）──────────────────────────────
@@ -105,7 +107,25 @@ def key_dim_dominance(scores: dict) -> float:
 
 
 def composite_score(row_scores: dict) -> float:
-    raw = sum(row_scores.get(k, 50.0) * w for k, w in WEIGHTS.items())
+    """综合评分 V6: 中性零权重 + 关键维度拉力。
+
+    |score - 50| ≤ _NEUTRAL_THRESHOLD 时权重渐减→0,
+    释放的权重动态分配给有信号的因子。
+    """
+    eff_weights = {}
+    for k, w in WEIGHTS.items():
+        s = row_scores.get(k, 50.0)
+        dev = abs(s - 50.0)
+        if dev >= _NEUTRAL_THRESHOLD:
+            eff_weights[k] = w
+        else:
+            eff_weights[k] = w * (dev / _NEUTRAL_THRESHOLD)
+
+    total_w = sum(eff_weights.values())
+    if total_w < 0.01:
+        return 50.0
+
+    raw = sum(row_scores.get(k, 50.0) * (ew / total_w) for k, ew in eff_weights.items())
     return max(0.0, min(100.0, raw + key_dim_dominance(row_scores)))
 
 
@@ -169,16 +189,19 @@ def run_backtest(symbols: list[str]) -> list[tuple[float, float, float, float]]:
                 r10 = (close_arr[idx+10] / close_arr[idx] - 1)*100 if idx+10 < len(close_arr) else np.nan
                 r20 = (close_arr[idx+20] / close_arr[idx] - 1)*100 if idx+20 < len(close_arr) else np.nan
 
-                # resonance_rev: 100-原始resonance (反转). 原始resonance单因子IC=-0.0624
-                # (A股趋势末端均值回归), 反转后变成+0.0624的强正向因子.
+                # mean_reversion: trend_momentum + ichimoku + resonance_rev 三因子均值
+                # 三者ρ=0.73~0.79, 分开计算是三重复计; 融合消除冗余
+                _tm = score_trend_momentum(row)
+                _ich = score_ichimoku(row)
+                _res_rev = 100.0 - score_resonance(row)
+                _mr = (_tm + _ich + _res_rev) / 3.0
+
                 agent_scores = {
-                    "trend_momentum":    score_trend_momentum(row),
                     "capital_liquidity": score_capital_liquidity(row),
                     "divergence":        score_divergence(row),
                     "chanlun":           score_chanlun(row),
                     "f_amt_ratio":       max(10, min(90, _f_amt_ratio(row))),
-                    "ichimoku":          score_ichimoku(row),
-                    "resonance_rev":     100.0 - score_resonance(row),
+                    "mean_reversion":    _mr,
                     "channel_reversal":  float(cr_scores[idx]) if idx < len(cr_scores) else 50.0,
                 }
 

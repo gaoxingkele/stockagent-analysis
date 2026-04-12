@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""V1 vs V2 权重方案对比 — 一次遍历数据同时计算两套权重的综合分。"""
+"""权重方案对比 — V4(当前) vs V5(三因子融合) vs V6(融合+中性零权重)。"""
 import sys, os, time, statistics
 
 if sys.platform == "win32":
@@ -22,55 +22,8 @@ from backtest_agents import (
 )
 from stockagent_analysis.channel_reversal import compute_channel, detect_phases
 
-# ── V1 权重 (HEAD baseline) ──
-W_V1 = {
-    "channel_reversal": 0.21,
-    "chanlun":          0.19,
-    "divergence":       0.19,
-    "trend_momentum":   0.15,
-    "capital_liquidity":0.10,
-    "f_amt_ratio":      0.10,
-    "ichimoku":         0.05,
-    "resonance":        0.01,
-}
-KEY_V1 = {
-    "chanlun": 0.15, "channel_reversal": 0.12,
-    "divergence": 0.10, "capital_liquidity": 0.08,
-}
 
-# ── V2 权重 (IC-proportional + resonance_rev heavy) ──
-W_V2 = {
-    "resonance_rev":    0.22,
-    "trend_momentum":   0.16,
-    "ichimoku":         0.15,
-    "capital_liquidity":0.11,
-    "f_amt_ratio":      0.11,
-    "channel_reversal": 0.10,
-    "divergence":       0.10,
-    "chanlun":          0.05,
-}
-KEY_V2 = {
-    "channel_reversal": 0.12, "divergence": 0.10,
-    "resonance_rev": 0.10, "capital_liquidity": 0.08, "chanlun": 0.06,
-}
-
-# ── V3 权重 (保守调整: chanlun降权+ichimoku升权+resonance_rev适度) ──
-W_V3 = {
-    "channel_reversal": 0.18,
-    "trend_momentum":   0.17,
-    "divergence":       0.15,
-    "ichimoku":         0.12,
-    "chanlun":          0.10,
-    "capital_liquidity":0.10,
-    "f_amt_ratio":      0.10,
-    "resonance_rev":    0.08,
-}
-KEY_V3 = {
-    "channel_reversal": 0.12, "divergence": 0.10,
-    "chanlun": 0.10, "capital_liquidity": 0.08,
-}
-
-# ── V4 权重 (V1+仅添加resonance_rev 0.08, 其余等比缩减) ──
+# ── V4 权重 (当前已提交版本) ──
 W_V4 = {
     "channel_reversal": 0.19,
     "chanlun":          0.18,
@@ -81,7 +34,43 @@ W_V4 = {
     "ichimoku":         0.05,
     "resonance_rev":    0.08,
 }
-KEY_V4 = KEY_V1.copy()
+KEY_V4 = {
+    "chanlun": 0.15, "channel_reversal": 0.12,
+    "divergence": 0.10, "capital_liquidity": 0.08,
+}
+
+# ── V5: 三因子融合为 mean_reversion ──
+# trend_momentum(ρ=0.79 ichimoku, 0.73 res_rev) + ichimoku + resonance_rev → 均值
+# 释放的权重分给独立因子(capital_liquidity IC=+0.051最高)
+W_V5 = {
+    "channel_reversal": 0.20,
+    "divergence":       0.20,
+    "capital_liquidity":0.15,
+    "mean_reversion":   0.15,   # 三合一
+    "f_amt_ratio":      0.12,
+    "chanlun":          0.18,
+}
+KEY_V5 = {
+    "channel_reversal": 0.12, "divergence": 0.10,
+    "capital_liquidity": 0.10, "chanlun": 0.10,
+}
+
+# ── V5b: 同V5但capital_liquidity更激进 ──
+W_V5b = {
+    "capital_liquidity":0.20,
+    "channel_reversal": 0.20,
+    "divergence":       0.20,
+    "mean_reversion":   0.15,
+    "f_amt_ratio":      0.12,
+    "chanlun":          0.13,
+}
+KEY_V5b = KEY_V5.copy()
+
+# ── V6: V5 + 中性零权重 ──
+# (动态计算, 不需要静态权重表, 在composite函数中实现)
+W_V6_BASE = W_V5.copy()
+KEY_V6 = KEY_V5.copy()
+NEUTRAL_THRESHOLD = 5.0  # |score - 50| <= 5 → 权重渐减
 
 
 def key_bonus(scores, key_dims):
@@ -93,8 +82,29 @@ def key_bonus(scores, key_dims):
     return b
 
 
-def composite(scores, weights, key_dims):
+def composite_static(scores, weights, key_dims):
     raw = sum(scores.get(k, 50.0) * w for k, w in weights.items())
+    return max(0.0, min(100.0, raw + key_bonus(scores, key_dims)))
+
+
+def composite_dynamic(scores, base_weights, key_dims, threshold=5.0):
+    """中性零权重: |score-50| <= threshold 时权重渐减到0, 释放的权重重分配。"""
+    eff_weights = {}
+    for k, w in base_weights.items():
+        s = scores.get(k, 50.0)
+        dev = abs(s - 50.0)
+        if dev >= threshold:
+            eff_weights[k] = w
+        else:
+            # 渐进: dev=0→0%, dev=threshold→100%
+            eff_weights[k] = w * (dev / threshold)
+
+    total_w = sum(eff_weights.values())
+    if total_w < 0.01:
+        return 50.0
+
+    # 归一化
+    raw = sum(scores.get(k, 50.0) * (ew / total_w) for k, ew in eff_weights.items())
     return max(0.0, min(100.0, raw + key_bonus(scores, key_dims)))
 
 
@@ -131,12 +141,13 @@ def analyze(pairs):
     mu = float(np.mean(scores))
     sigma = float(np.std(scores))
 
-    bins = [(0,30),(30,45),(45,55),(55,65),(65,75),(75,85),(85,100)]
+    bins = [(0, 30), (30, 45), (45, 55), (55, 65), (65, 75), (75, 85), (85, 100)]
     bks = []
     for lo, hi in bins:
         mask = (scores >= lo) & (scores < hi) & m
         cnt = int(mask.sum())
-        if cnt == 0: continue
+        if cnt == 0:
+            continue
         sr = r20[mask]
         bks.append({
             "range": f"{lo}-{hi}", "count": cnt,
@@ -156,73 +167,81 @@ def main():
     if args.max > 0:
         symbols = symbols[:args.max]
 
-    print(f"V1 vs V2 对比 — {len(symbols)} 只股票", flush=True)
+    print(f"V4/V5/V5b/V6 对比 — {len(symbols)} 只股票", flush=True)
     t0 = time.time()
 
-    schemes = {
-        "V1": (W_V1, KEY_V1),
-        "V2": (W_V2, KEY_V2),
-        "V3": (W_V3, KEY_V3),
-        "V4": (W_V4, KEY_V4),
-    }
-    all_data = {k: [] for k in schemes}
+    all_data = {k: [] for k in ("V4", "V5", "V5b", "V6")}
 
     for si, sym in enumerate(symbols):
         if (si + 1) % 50 == 0:
             print(f"  进度: {si+1}/{len(symbols)}...", flush=True)
         try:
             df = load_tdx_daily(sym)
-            if df is None or len(df) < 200: continue
+            if df is None or len(df) < 200:
+                continue
             cr_arr = compute_channel_scores(df)
             ind = rolling_indicators(df, min_bars=120)
-            if ind.empty: continue
+            if ind.empty:
+                continue
             close_arr = df["close"].values
 
             for _, r in ind.iterrows():
                 row = r.to_dict()
                 idx = int(row["idx"])
-                r20 = (close_arr[idx+20] / close_arr[idx] - 1) * 100 if idx + 20 < len(close_arr) else np.nan
+                r20 = (close_arr[idx + 20] / close_arr[idx] - 1) * 100 if idx + 20 < len(close_arr) else np.nan
 
-                res_raw = score_resonance(row)
+                tm = score_trend_momentum(row)
+                ich = score_ichimoku(row)
+                res_rev = 100.0 - score_resonance(row)
+                # 三因子融合: 简单均值
+                mr = (tm + ich + res_rev) / 3.0
+
                 base = {
-                    "trend_momentum":    score_trend_momentum(row),
+                    "channel_reversal": float(cr_arr[idx]) if idx < len(cr_arr) else 50.0,
+                    "chanlun":          score_chanlun(row),
+                    "divergence":       score_divergence(row),
                     "capital_liquidity": score_capital_liquidity(row),
-                    "divergence":        score_divergence(row),
-                    "chanlun":           score_chanlun(row),
-                    "f_amt_ratio":       max(10, min(90, _f_amt_ratio(row))),
-                    "ichimoku":          score_ichimoku(row),
-                    "channel_reversal":  float(cr_arr[idx]) if idx < len(cr_arr) else 50.0,
+                    "f_amt_ratio":      max(10, min(90, _f_amt_ratio(row))),
                 }
 
-                for name, (w, kd) in schemes.items():
-                    s = dict(base)
-                    if "resonance" in w:
-                        s["resonance"] = res_raw
-                    if "resonance_rev" in w:
-                        s["resonance_rev"] = 100.0 - res_raw
-                    all_data[name].append((composite(s, w, kd), r20))
+                # V4: 当前版本 (分开三因子)
+                s4 = dict(base)
+                s4["trend_momentum"] = tm
+                s4["ichimoku"] = ich
+                s4["resonance_rev"] = res_rev
+                all_data["V4"].append((composite_static(s4, W_V4, KEY_V4), r20))
+
+                # V5/V5b: 三合一
+                s5 = dict(base)
+                s5["mean_reversion"] = mr
+                all_data["V5"].append((composite_static(s5, W_V5, KEY_V5), r20))
+                all_data["V5b"].append((composite_static(s5, W_V5b, KEY_V5b), r20))
+
+                # V6: V5 + 中性零权重
+                all_data["V6"].append((composite_dynamic(s5, W_V6_BASE, KEY_V6, NEUTRAL_THRESHOLD), r20))
 
         except Exception:
             pass
 
     elapsed = time.time() - t0
-    print(f"\n样本: {len(all_data['V1']):,}  用时: {elapsed:.0f}s", flush=True)
+    print(f"\n样本: {len(all_data['V4']):,}  用时: {elapsed:.0f}s", flush=True)
 
     labels = {
-        "V1": "V1 (HEAD baseline)",
-        "V2": "V2 (IC权重+resonance_rev重)",
-        "V3": "V3 (保守调整: chanlun↓ ichimoku↑ res_rev适度)",
-        "V4": "V4 (V1+仅添加res_rev 0.08)",
+        "V4": "V4 当前(三因子分开, 27%权重冗余)",
+        "V5": "V5 三因子融合(mean_reversion 15%)",
+        "V5b": "V5b 融合+capital_liquidity加权至20%",
+        "V6": "V6 V5+中性零权重(|s-50|≤5渐减)",
     }
-    for name in ("V1", "V2", "V3", "V4"):
+    for name in ("V4", "V5", "V5b", "V6"):
         data_s = stretch(all_data[name])
         ic, mu, sigma, bks = analyze(data_s)
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print(f"{labels[name]}  IC(20d)={ic:+.4f}  μ={mu:.2f}  σ={sigma:.2f}")
         for b in bks:
             pct = b["count"] / len(all_data[name]) * 100
             flag = " ◀" if int(b["range"].split("-")[0]) >= 65 else ""
             print(f"  {b['range']:>8} | {b['count']:>6,} ({pct:>4.1f}%) | 20d={b['avg']:+.2f}% | wr={b['wr']:.1f}%{flag}")
+
 
 if __name__ == "__main__":
     main()
