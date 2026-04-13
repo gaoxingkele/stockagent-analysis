@@ -13,5 +13,5 @@
     "fallback": ["akshare"],
     "required_data_points": ["日/周/月K线", "MACD", "RSI", "背离信号"]
   },
-  "llm_base_weight": 0.20
+  "llm_base_weight": 0.0
 }

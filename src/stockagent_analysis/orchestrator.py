@@ -742,9 +742,61 @@ def run_analysis(
     model_totals: dict[str, float] = {}
     # v2: PATTERN agent 内部已处理顶底结构反转
     # trend_momentum/ichimoku: A股趋势动量和一目均衡图为反向指标(回测IC负), 反转使用
-    # 反转维度: A股5-20日周期, 这些维度为反向指标(趋势末端效应/均值回归)
-    # TIMEFRAME_RESONANCE: 单因子IC=-0.0624, 反转后IC=+0.0624(最强因子)
-    _INVERT_DIMS: set[str] = {"TREND_MOMENTUM", "ICHIMOKU", "TIMEFRAME_RESONANCE"}
+    # 反转维度: 仅保留TIMEFRAME_RESONANCE（该因子设计上就是反转信号, IC=-0.0624→反转后+0.0624）
+    # TREND_MOMENTUM / ICHIMOKU 评分语义已经是"高分=看多"，不应反转
+    _INVERT_DIMS: set[str] = {"TIMEFRAME_RESONANCE"}
+
+    # ── 稀疏评分: 中性因子不参与加权 ──
+    # 事件驱动型因子(50=无信号)用大阈值, 连续型因子(每分都有含义)阈值=0始终参与
+    _SPARSE_THRESHOLDS: dict[str, float] = {
+        "CHANLUN": 8.0,           # 事件驱动: 无买卖点时恒=50
+        "DIVERGENCE": 8.0,        # 事件驱动: 无背离时恒=50
+        "PATTERN": 8.0,           # 事件驱动: 无形态时kp/cp/structure都=0→50
+        "VOLUME_STRUCTURE": 5.0,  # 半事件: volume_price_score+sr_score=0时→50
+        "RESONANCE": 3.0,         # 离散档位: 45=弱冲突信号, 50=中性
+    }
+    _DEFAULT_THRESHOLD = 0.0      # 连续型因子(trend/capital/fundamental等): 始终参与
+
+    def _activation_weight(score: float, base_weight: float, dim_code: str = "") -> float:
+        """渐进式激活权重: 事件驱动因子中性时归零, 连续型因子始终参与."""
+        threshold = _SPARSE_THRESHOLDS.get(dim_code, _DEFAULT_THRESHOLD)
+        if threshold <= 0:
+            return base_weight  # 连续型: 始终全权重
+        deviation = abs(score - 50.0)
+        if deviation >= threshold:
+            return base_weight
+        return base_weight * (deviation / threshold)
+
+    # ── 跨因子交互: 背离信号修正趋势因子 ──
+    # 背离是趋势的"调节器": 顶背离压制趋势高分, 底背离托底趋势低分
+    # 无背离时(50附近, 已被稀疏静默)不干预
+    _TREND_DIMS = {"TREND_MOMENTUM", "ICHIMOKU"}
+    _DIVERGENCE_DIM = "DIVERGENCE"
+
+    def _apply_cross_factor(scores_by_dim: dict[str, float]) -> dict[str, float]:
+        """背离信号对趋势因子的条件修正。返回修正后的scores副本。"""
+        div_score = scores_by_dim.get(_DIVERGENCE_DIM)
+        if div_score is None:
+            return scores_by_dim
+        # 背离在中性区(42-58) → 无信号，不干预
+        div_dev = abs(div_score - 50.0)
+        if div_dev < 8:
+            return scores_by_dim
+        result = dict(scores_by_dim)
+        for dim in _TREND_DIMS:
+            trend_s = result.get(dim)
+            if trend_s is None:
+                continue
+            # 顶背离(div<42) + 趋势强(trend>60): 把趋势向50压制
+            # 底背离(div>58) + 趋势弱(trend<40): 把趋势向50托底
+            # 压制/托底强度 = divergence偏离度 / 50, 最大拉回70%
+            if div_score < 42 and trend_s > 60:
+                pull = min(0.7, (42 - div_score) / 50.0)
+                result[dim] = trend_s - (trend_s - 50) * pull
+            elif div_score > 58 and trend_s < 40:
+                pull = min(0.7, (div_score - 58) / 50.0)
+                result[dim] = trend_s + (50 - trend_s) * pull
+        return result
 
     # ── 逐Agent动态LLM权重计算 ──
     # 每个Agent有 llm_base_weight (config, 0.20/0.35/0.45)
@@ -773,23 +825,40 @@ def run_analysis(
         local_scores = {d["agent_id"]: d["score_0_100"] for d in detail}
         _dim_map = {a.agent_id: a.dim_code for a in analysts}
         for p, w_map in model_weights.items():
-            total = 0.0
+            # 第一遍: 计算每个Agent的融合评分
+            _agent_fused_scores = {}
             for a, res in zip(analysts, submissions):
-                w = w_map.get(a.agent_id, 1.0 / len(analysts))
-                # 逐Agent动态融合权重
                 _llm_w = _calc_agent_llm_weight(a.agent_id, _agent_llm_base[a.agent_id], model_scores)
                 _local_w = 1.0 - _llm_w
-                # 融合本地评分与LLM评分
                 local_s = local_scores.get(a.agent_id, res.score_0_100)
                 llm_s = model_scores.get(p, {}).get(a.agent_id)
                 if llm_s is not None and 0 <= llm_s <= 100:
                     score = local_s * _local_w + llm_s * _llm_w
                 else:
                     score = local_s
-                # v2: PATTERN agent内部已处理顶底反转, 无需外部反转
                 if _dim_map.get(a.agent_id) in _INVERT_DIMS:
                     score = 100.0 - score
-                total += score * w
+                _agent_fused_scores[a.agent_id] = score
+            # 第1.5遍: 跨因子交互 — 背离修正趋势
+            _dim_scores = {_dim_map[aid]: s for aid, s in _agent_fused_scores.items()}
+            _dim_scores = _apply_cross_factor(_dim_scores)
+            for a in analysts:
+                _agent_fused_scores[a.agent_id] = _dim_scores.get(a.dim_code, _agent_fused_scores[a.agent_id])
+            # 第二遍: 稀疏加权 — 中性因子权重归零，有信号因子重新归一化
+            _raw_weights = {}
+            for a in analysts:
+                base_w = w_map.get(a.agent_id, 1.0 / len(analysts))
+                _raw_weights[a.agent_id] = _activation_weight(
+                    _agent_fused_scores[a.agent_id], base_w, a.dim_code,
+                )
+            _total_active_w = sum(_raw_weights.values())
+            if _total_active_w < 1e-6:
+                total = 50.0  # 所有因子均无信号 → 中性
+            else:
+                total = sum(
+                    _agent_fused_scores[a.agent_id] * _raw_weights[a.agent_id] / _total_active_w
+                    for a in analysts
+                )
             # ── 2b: 关键维度主导 — 高IC维度极端分时额外拉力突破加权束缚 ──
             _KEY_DIMS = {
                 "chanlun_agent": 0.15,              # IC最高，拉力最大
@@ -825,19 +894,53 @@ def run_analysis(
                 _median, _outlier_bonus, final_score, sum(_mt_vals) / len(_mt_vals),
             )
         else:
-            total_weight = sum(a.weight for a in analysts) or 1.0
-            weighted_score = sum(
-                (100.0 - r.score_0_100 if a.dim_code in _INVERT_DIMS else r.score_0_100) * a.weight
-                for a, r in zip(analysts, submissions)
-            )
-            final_score = weighted_score / total_weight
+            # 稀疏加权 fallback (multi-model但无model_totals)
+            _dim_fb = {a.dim_code: (100.0 - r.score_0_100 if a.dim_code in _INVERT_DIMS else r.score_0_100)
+                       for a, r in zip(analysts, submissions)}
+            _dim_fb = _apply_cross_factor(_dim_fb)
+            _scores_fb = [_dim_fb[a.dim_code] for a in analysts]
+            _weights_fb = [_activation_weight(s, a.weight, a.dim_code) for s, a in zip(_scores_fb, analysts)]
+            _tw_fb = sum(_weights_fb)
+            final_score = sum(s * w for s, w in zip(_scores_fb, _weights_fb)) / _tw_fb if _tw_fb > 1e-6 else 50.0
     else:
-        total_weight = sum(a.weight for a in analysts) or 1.0
-        weighted_score = sum(
-            (100.0 - r.score_0_100 if a.dim_code in _INVERT_DIMS else r.score_0_100) * a.weight
-            for a, r in zip(analysts, submissions)
-        )
-        final_score = weighted_score / total_weight
+        # 稀疏加权 (单Provider模式)
+        _dim_sp = {a.dim_code: (100.0 - r.score_0_100 if a.dim_code in _INVERT_DIMS else r.score_0_100)
+                   for a, r in zip(analysts, submissions)}
+        _dim_sp = _apply_cross_factor(_dim_sp)
+        _scores_sp = [_dim_sp[a.dim_code] for a in analysts]
+        _weights_sp = [_activation_weight(s, a.weight, a.dim_code) for s, a in zip(_scores_sp, analysts)]
+        _tw_sp = sum(_weights_sp)
+        final_score = sum(s * w for s, w in zip(_scores_sp, _weights_sp)) / _tw_sp if _tw_sp > 1e-6 else 50.0
+
+    # 稀疏评分日志
+    # 稀疏+交互 日志
+    _log_dim_raw = {a.dim_code: (100.0 - r.score_0_100 if a.dim_code in _INVERT_DIMS else r.score_0_100)
+                    for a, r in zip(analysts, submissions)}
+    _log_dim_adj = _apply_cross_factor(_log_dim_raw)
+    _sparse_active = []
+    _sparse_muted = []
+    _cross_adj = []
+    for a in analysts:
+        s_raw = _log_dim_raw[a.dim_code]
+        s_adj = _log_dim_adj[a.dim_code]
+        aw = _activation_weight(s_adj, a.weight, a.dim_code)
+        if aw < a.weight * 0.01:
+            _sparse_muted.append(a.agent_id)
+        elif aw < a.weight:
+            _sparse_active.append(f"{a.agent_id}({s_adj:.0f},{aw/a.weight:.0%})")
+        else:
+            _sparse_active.append(f"{a.agent_id}({s_adj:.0f})")
+        if abs(s_adj - s_raw) > 0.5:
+            _cross_adj.append(f"{a.agent_id}:{s_raw:.0f}->{s_adj:.0f}")
+    if _sparse_muted or _cross_adj:
+        parts = []
+        if _sparse_muted:
+            parts.append(f"静默:{','.join(_sparse_muted)}")
+        if _cross_adj:
+            parts.append(f"交互修正:{','.join(_cross_adj)}")
+        print(f"[稀疏] 激活:{len(_sparse_active)} {' | '.join(parts)}", flush=True)
+        manager_logger.info("sparse scoring: active=%s muted=%s cross_adj=%s", _sparse_active, _sparse_muted, _cross_adj)
+
     # ── v2: 辩论评分融合 ──
     # 辩论返回的 score 是"对 decision 的置信度"，需要对齐到 0-100 看多量表：
     #   decision=buy  → score 直接使用（高=看多）
