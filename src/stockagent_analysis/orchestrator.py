@@ -917,9 +917,9 @@ def run_analysis(
             if decision_level in ("strong_buy", "weak_buy"):
                 decision_level = "hold"
                 final_decision = "hold"
-                bias_warning = f"⚠️ 乖离率警告: MA5乖离{_bias_pct:.1f}%>{_bias_th}%，建议等待回踩后介入"
+                bias_warning = f"乖离率警告: MA5乖离{_bias_pct:.1f}%>{_bias_th}%，建议等待回踩后介入"
             elif decision_level == "hold":
-                bias_warning = f"⚠️ 乖离率偏高({_bias_pct:.1f}%)，谨慎追高"
+                bias_warning = f"乖离率偏高({_bias_pct:.1f}%)，谨慎追高"
 
     done += 1
     print(
