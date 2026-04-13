@@ -3805,10 +3805,16 @@ class DataBackend:
             last_bi = bi_list[-1]
 
             # --- 一买：跌破中枢后出现底分型（背驰段结束）---
+            # 额外验证: 如果后续出现更低的低点, 说明下跌延续, 一买失效
             if last_bi["dir"] == "down" and last_bi["end_price"] < last_zs["low"]:
-                # 检查是否有底分型确认
                 recent_bots = [f for f in fractals if f[0] == "bot" and f[2] >= last_bi["end_idx"] - 3]
-                if recent_bots:
+                lower_after = any(
+                    f[0] == "bot" and f[3] < last_bi["end_price"] and f[2] > last_bi["end_idx"]
+                    for f in fractals
+                )
+                if curr_price < last_bi["end_price"]:
+                    lower_after = True
+                if recent_bots and not lower_after:
                     buy_signals.append({
                         "type": "一买",
                         "price": round(last_bi["end_price"], 2),
@@ -3840,9 +3846,18 @@ class DataBackend:
                 chanlun_score += 18
 
             # --- 一卖：涨破中枢后出现顶分型 ---
+            # 额外验证: 如果后续出现更高的高点, 说明趋势延续, 一卖失效
             if last_bi["dir"] == "up" and last_bi["end_price"] > last_zs["high"]:
                 recent_tops = [f for f in fractals if f[0] == "top" and f[2] >= last_bi["end_idx"] - 3]
-                if recent_tops:
+                # 检查是否有后续更高高点(包括未成笔的分型)
+                higher_after = any(
+                    f[0] == "top" and f[3] > last_bi["end_price"] and f[2] > last_bi["end_idx"]
+                    for f in fractals
+                )
+                # 或者当前价格 > 卖点价格 (趋势仍在延续)
+                if curr_price > last_bi["end_price"]:
+                    higher_after = True
+                if recent_tops and not higher_after:
                     sell_signals.append({
                         "type": "一卖",
                         "price": round(last_bi["end_price"], 2),

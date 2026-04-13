@@ -24,5 +24,5 @@
       "MACD/RSI背离信号"
     ]
   },
-  "llm_base_weight": 0.2
+  "llm_base_weight": 0.0
 }
