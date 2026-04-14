@@ -39,7 +39,10 @@ STRATEGY_MAP = {
 
 
 def determine_strategy(regime: dict[str, Any]) -> MarketStrategy:
-    """基于市场状态判定策略阶段。"""
+    """基于市场状态判定策略阶段。
+
+    兼容旧版(regime字段)和增强版(market_context)两种输入。
+    """
     regime_name = regime.get("regime", "unknown")
     vol_20d = float(regime.get("index_vol_20d", 2))
 
@@ -49,6 +52,29 @@ def determine_strategy(regime: dict[str, Any]) -> MarketStrategy:
         return STRATEGY_MAP["defensive"]
     else:
         return STRATEGY_MAP["balanced"]
+
+
+def determine_strategy_enhanced(market_score: float, phase: str) -> MarketStrategy:
+    """基于增强版市场环境评分判定策略阶段。
+
+    market_score: 0-100 综合大盘评分
+    phase: offensive/balanced/defensive
+    """
+    strategy = STRATEGY_MAP.get(phase, STRATEGY_MAP["balanced"])
+    # 用market_score微调仓位上限
+    if market_score >= 75:
+        adjusted_cap = min(0.95, strategy.position_cap + 0.1)
+    elif market_score <= 25:
+        adjusted_cap = max(0.15, strategy.position_cap - 0.1)
+    else:
+        adjusted_cap = strategy.position_cap
+    return MarketStrategy(
+        phase=strategy.phase,
+        phase_cn=strategy.phase_cn,
+        position_cap=adjusted_cap,
+        sector_bias=strategy.sector_bias,
+        risk_note=strategy.risk_note,
+    )
 
 
 def strategy_to_dict(strategy: MarketStrategy) -> dict[str, Any]:

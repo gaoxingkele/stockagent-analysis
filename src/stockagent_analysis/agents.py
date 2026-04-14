@@ -241,6 +241,23 @@ class AnalystAgent:
                 f"建议最大仓位{strategy.get('position_cap', 0.6) * 100:.0f}% | "
                 f"{strategy.get('sector_bias', '')}"
             )
+        # 市场环境感知(增强版)
+        mkt_ctx = f.get("market_context", {})
+        if mkt_ctx:
+            from .market_context import MarketContext, TrendState, SectorHeat, market_context_summary
+            try:
+                _obj = MarketContext(
+                    market_score=float(mkt_ctx.get("market_score", 50)),
+                    market_phase=mkt_ctx.get("market_phase", "balanced"),
+                    market_phase_cn=mkt_ctx.get("market_phase_cn", "平衡"),
+                    index_states=[TrendState(**s) for s in mkt_ctx.get("index_states", [])],
+                    sector_heats=[SectorHeat(**s) for s in mkt_ctx.get("sector_heats", [])],
+                    etf_states=[TrendState(**s) for s in mkt_ctx.get("etf_states", [])],
+                    vision_summary=mkt_ctx.get("vision_summary", ""),
+                )
+                parts.append(market_context_summary(_obj))
+            except Exception:
+                pass
         news = ctx.get("news", [])[:5]
         if news:
             titles = [str(n.get("title", ""))[:40] for n in news if n.get("title")]

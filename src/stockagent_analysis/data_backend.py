@@ -16,9 +16,15 @@ load_dotenv()
 _DATA_NO_PROXY = (
     # Tushare
     "api.tushare.pro,api.waditu.com,"
-    # 东方财富 (AKShare 主力源)
+    # 东方财富 (AKShare 主力源) - 含数字前缀子域(如 79.push2.eastmoney.com)
     ".eastmoney.com,push2his.eastmoney.com,push2.eastmoney.com,"
     "datacenter-web.eastmoney.com,data.eastmoney.com,"
+    "1.push2.eastmoney.com,2.push2.eastmoney.com,3.push2.eastmoney.com,"
+    "4.push2.eastmoney.com,5.push2.eastmoney.com,6.push2.eastmoney.com,"
+    "7.push2.eastmoney.com,8.push2.eastmoney.com,9.push2.eastmoney.com,"
+    "19.push2.eastmoney.com,29.push2.eastmoney.com,39.push2.eastmoney.com,"
+    "49.push2.eastmoney.com,59.push2.eastmoney.com,69.push2.eastmoney.com,"
+    "79.push2.eastmoney.com,89.push2.eastmoney.com,99.push2.eastmoney.com,"
     # 腾讯财经
     ".gtimg.cn,stock.gtimg.cn,web.ifzq.gtimg.cn,qt.gtimg.cn,"
     "web.sqt.gtimg.cn,proxy.finance.qq.com,"
@@ -111,6 +117,9 @@ class DataBackend:
         import threading
         self._remote_api_sem = threading.Semaphore(3)  # 远程数据API最多3路并发
         _ensure_akshare_no_proxy()
+        # 市场环境分析器(会话级缓存,跨股票共享)
+        from .market_context import MarketContextAnalyzer
+        self.market_analyzer = MarketContextAnalyzer()
 
     def _get_tdx_reader(self):
         """获取通达信本地数据读取器（惰性初始化，TDX目录不存在时返回None）。"""
@@ -405,11 +414,34 @@ class DataBackend:
         # 融资融券 + 北向资金（Tushare权限不足时返回空dict，不影响主流程）
         features["margin_data"] = self._fetch_margin_data(symbol)
         features["hsgt_data"] = self._fetch_hsgt_data(symbol)
-        # 市场状态识别
+        # 市场状态识别(保留旧字段兼容)
         features["market_regime"] = self._detect_market_regime()
         # 市场策略框架（三阶段映射）
         from .market_strategy import determine_strategy, strategy_to_dict
         features["market_strategy"] = strategy_to_dict(determine_strategy(features["market_regime"]))
+        # 市场环境感知(增强版: 多指数状态+板块热度+ETF走势)
+        if progress_cb:
+            progress_cb("市场环境感知", "开始(指数+板块+ETF)")
+        try:
+            _industry = fundamentals.get("industry", "")
+            _mkt_ctx = self.market_analyzer.analyze_stock_context(
+                symbol=symbol, industry=_industry, run_dir=str(run_dir),
+            )
+            features["market_context"] = _mkt_ctx.to_dict()
+            # 用增强版结果覆盖旧的market_strategy
+            features["market_strategy"]["phase"] = _mkt_ctx.market_phase
+            features["market_strategy"]["phase_cn"] = _mkt_ctx.market_phase_cn
+            if progress_cb:
+                progress_cb("市场环境感知", f"完成 大盘={_mkt_ctx.market_phase_cn} "
+                            f"评分={_mkt_ctx.market_score:.0f} "
+                            f"板块={len(_mkt_ctx.sector_heats)}个 "
+                            f"ETF={len(_mkt_ctx.etf_states)}个")
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).warning("market context failed (non-fatal): %s", _e)
+            features["market_context"] = {}
+            if progress_cb:
+                progress_cb("市场环境感知", f"失败(非致命): {_e}")
         # 筹码结构分析（基于日线量价模拟）
         if day_df is not None and not day_df.empty and snapshot.close:
             features["chip_distribution"] = self._fetch_chip_distribution(day_df, float(snapshot.close))
