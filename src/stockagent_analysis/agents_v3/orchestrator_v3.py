@@ -326,9 +326,18 @@ def run_analysis_v3(
     (run_dir / "final_decision_v3.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # 生成 markdown 总报告(替代 PDF 的简化输出)
+    # 生成 markdown 总报告(原始, 供调试阅读)
     md_report = _build_markdown_report(result, bundle, debate_out, risk_out)
     (run_dir / f"{symbol}_{name}_v3_报告.md").write_text(md_report, encoding="utf-8")
+
+    # 生成机构级 PDF 报告
+    try:
+        from .report_pdf_v3 import build_investor_pdf_v3
+        pdf_path = build_investor_pdf_v3(run_dir, result)
+        result["pdf_path"] = str(pdf_path)
+        logger.info("[v3] PDF 报告生成: %s", pdf_path)
+    except Exception as e:
+        logger.warning("[v3] PDF 生成失败(不影响流水线): %s", e)
 
     # ── 保存记忆 ──
     if save_memory:

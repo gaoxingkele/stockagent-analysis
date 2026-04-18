@@ -109,11 +109,46 @@ class RoleMemory:
             logger.warning("[RoleMemory:%s] 读取失败: %s", self.role, e)
         return out
 
-    def retrieve(self, situation: str, n: int = 3, min_sim: float = 0.05) -> list[MemoryRecord]:
-        """关键词召回 top-n 相似历史记录。"""
+    def retrieve(
+        self,
+        situation: str,
+        n: int = 3,
+        min_sim: float = 0.05,
+        method: str = "auto",
+    ) -> list[MemoryRecord]:
+        """召回 top-n 相似历史记录。
+
+        Args:
+            situation: 当前情境摘要
+            n: 返回 top-n
+            min_sim: 相似度阈值(embedding 方法下通常 0.3+)
+            method: "auto"=优先 embedding, 失败降级 jaccard; "embedding"=强制向量; "jaccard"=强制关键词
+        """
         all_recs = self.all_records()
-        if not all_recs:
+        if not all_recs or not situation:
             return []
+
+        if method in ("auto", "embedding"):
+            try:
+                from .embedding import embed_texts, cosine_sim_matrix, get_backend_name
+                texts = [situation] + [r.situation for r in all_recs]
+                vecs = embed_texts(texts)
+                if vecs.shape[0] == len(texts) and vecs.shape[1] > 1:
+                    sims = cosine_sim_matrix(vecs[0], vecs[1:])
+                    backend = get_backend_name()
+                    # 不同 backend 的合理阈值差异
+                    thr = {"sentence-transformers": 0.35, "openai": 0.30, "tfidf": 0.05}.get(backend, min_sim)
+                    scored = [(rec, float(s)) for rec, s in zip(all_recs, sims) if s >= thr]
+                    scored.sort(key=lambda x: x[1], reverse=True)
+                    if scored:
+                        return [r for r, _ in scored[:n]]
+                    # 无匹配但 embedding 成功: 若 method="embedding" 就返空; 否则 auto 降级到 jaccard
+                    if method == "embedding":
+                        return []
+            except Exception as e:
+                logger.warning("[RoleMemory:%s] embedding 召回失败, 降级 jaccard: %s", self.role, e)
+
+        # Jaccard fallback
         q_tokens = _tokenize(situation)
         if not q_tokens:
             return []
