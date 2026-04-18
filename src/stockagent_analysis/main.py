@@ -133,12 +133,12 @@ def main() -> None:
         help="v2=原有因子打分架构(默认); v3=LLM 角色化架构(Phase 0-5 流水线, 6 份报告+专家+多空辩论+Trader+风控)",
     )
     p_analyze.add_argument(
-        "--debate-rounds", type=int, default=3,
-        help="v3 Phase 2 多空辩论轮数(默认 3)",
+        "--debate-rounds", type=int, default=4,
+        help="v3 Phase 2 多空辩论轮数(默认 4, 越多越充分但耗时线性增加)",
     )
     p_analyze.add_argument(
-        "--risk-rounds", type=int, default=2,
-        help="v3 Phase 4 风控辩论轮数(默认 2)",
+        "--risk-rounds", type=int, default=3,
+        help="v3 Phase 4 风控辩论轮数(默认 3)",
     )
     p_analyze.set_defaults(func=_cmd_analyze)
 

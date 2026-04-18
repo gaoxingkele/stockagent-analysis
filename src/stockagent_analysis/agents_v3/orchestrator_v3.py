@@ -53,33 +53,70 @@ def _make_run_dir(symbol: str, name: str) -> Path:
 def _compose_final_score(
     experts: dict[str, ExpertResult],
     investment_plan: InvestmentPlan,
+    trading_plan: TradingPlan,
     risk_policy: RiskPolicy,
 ) -> tuple[float, dict[str, float]]:
-    """融合专家+Judge+PM 产出最终评分。
+    """融合专家+Judge+Trader+PM 产出最终评分(v2 融合公式)。
 
-    α=0.50(expert_avg) + β=0.30(judge) + γ=0.20(risk_mapped)
+    改进点(相比 v1):
+    1. Risk 映射拉伸: [38,73] → [20,85] (仓位跨度更大)
+    2. Judge 强信号放大: direction+confidence 双高时评分放大 ±8%
+    3. 三层方向一致性奖励: Judge/Trader/PM 共识时 +5 或 -5
+    4. 冲突惩罚: Judge vs Trader 方向相反时 -4(降低置信)
+
+    融合系数: α=0.50·expert + β=0.32·judge_adj + γ=0.18·risk + bonus
     """
     scores = [er.score for er in experts.values() if 0 <= er.score <= 100]
     expert_avg = sum(scores) / max(len(scores), 1) if scores else 50.0
 
-    judge_score = float(investment_plan.overall_score) if investment_plan.overall_score else 50.0
+    judge_score_raw = float(investment_plan.overall_score) if investment_plan.overall_score else 50.0
+    j_dir = (investment_plan.direction or "HOLD").upper()
+    j_conf = float(investment_plan.confidence or 0.5)
 
-    # 风险评级 → 分数映射(保守=弱化, 激进=放大)
+    # 1) Judge 强信号放大: BUY/SELL + 高置信 → ±8%
+    if j_dir == "BUY" and j_conf >= 0.65:
+        judge_adj = min(100.0, judge_score_raw * 1.08)
+    elif j_dir == "SELL" and j_conf >= 0.65:
+        judge_adj = max(0.0, judge_score_raw * 0.92)
+    else:
+        judge_adj = judge_score_raw
+
+    # 2) Risk 映射拉伸: 仓位 [0,1] → 分数 [20,80], 叠加 rating_bonus
     rating = (risk_policy.final_risk_rating or "中").strip()
-    rating_bonus = {"低": +3.0, "中": 0.0, "高": -5.0}.get(rating, 0.0)
-    # 仓位比例作为风控"信心"指标: 0-1 映射到 40-70 分
+    rating_bonus = {"低": +8.0, "中": 0.0, "高": -10.0}.get(rating, 0.0)
     try:
-        risk_base = 40 + float(risk_policy.max_position_ratio or 0.5) * 30
+        maxpos = float(risk_policy.max_position_ratio or 0.3)
     except (ValueError, TypeError):
-        risk_base = 55.0
+        maxpos = 0.3
+    risk_base = 20 + maxpos * 60  # 0仓位→20, 0.5仓位→50, 1仓位→80
     risk_mapped = max(0.0, min(100.0, risk_base + rating_bonus))
 
-    final = 0.50 * expert_avg + 0.30 * judge_score + 0.20 * risk_mapped
-    final = round(max(0.0, min(100.0, final)), 2)
+    # 3) 三层方向一致性奖励/冲突惩罚
+    t_dir = (trading_plan.final_decision or "HOLD").upper()
+    pm_bias = (risk_policy.alignment_with or "neutral").lower()
+    bonus = 0.0
+    bonus_reason = "无"
+    if j_dir == "BUY" and t_dir == "BUY":
+        bonus = 5.0 if pm_bias in ("aggressive", "neutral") else 2.0
+        bonus_reason = f"Judge+Trader 共识 BUY | PM={pm_bias}"
+    elif j_dir == "SELL" and t_dir == "SELL":
+        bonus = -5.0 if pm_bias in ("conservative", "neutral") else -2.0
+        bonus_reason = f"Judge+Trader 共识 SELL | PM={pm_bias}"
+    elif (j_dir == "BUY" and t_dir == "SELL") or (j_dir == "SELL" and t_dir == "BUY"):
+        bonus = -4.0
+        bonus_reason = f"Judge({j_dir}) vs Trader({t_dir}) 冲突"
+
+    # 4) 最终融合
+    final_raw = 0.50 * expert_avg + 0.32 * judge_adj + 0.18 * risk_mapped + bonus
+    final = round(max(0.0, min(100.0, final_raw)), 2)
+
     return final, {
         "expert_avg": round(expert_avg, 2),
-        "judge_score": round(judge_score, 2),
+        "judge_score": round(judge_score_raw, 2),
+        "judge_adj": round(judge_adj, 2),
         "risk_mapped": round(risk_mapped, 2),
+        "consensus_bonus": round(bonus, 2),
+        "bonus_reason": bonus_reason,
         "final_score": final,
     }
 
@@ -87,18 +124,26 @@ def _compose_final_score(
 def _decide_level(final_score: float, trader_decision: str) -> tuple[str, str]:
     """根据融合分与 Trader 决策确定最终等级。
 
+    阈值重新校准 (去极端化后分布拉开):
+    - ≥80     → strong_buy
+    - 72-79.9 → weak_buy (若 Trader=SELL 则 hold)
+    - 62-71.9 → hold
+    - 52-61.9 → watch (hold 偏悲观,持有者可开始减)
+    - 42-51.9 → weak_sell
+    - <42     → strong_sell
+
     Returns: (final_decision, decision_level)
     """
     td = (trader_decision or "HOLD").upper()
-    if final_score >= 80 and td == "BUY":
+    if final_score >= 80:
         return "buy", "strong_buy"
-    if final_score >= 70:
-        return "buy" if td != "SELL" else "hold", "weak_buy" if td == "BUY" else "hold"
-    if final_score >= 55:
+    if final_score >= 72:
+        return ("buy", "weak_buy") if td != "SELL" else ("hold", "hold")
+    if final_score >= 62:
         return "hold", "hold"
-    if final_score >= 45:
+    if final_score >= 52:
         return "hold", "watch_sell"
-    if final_score >= 30:
+    if final_score >= 42:
         return "sell", "weak_sell"
     return "sell", "strong_sell"
 
@@ -238,7 +283,8 @@ def run_analysis_v3(
         encoding="utf-8")
 
     # ── Phase 5: 综合评分 + 最终决策 ──
-    final_score, score_components = _compose_final_score(experts, investment_plan, risk_policy)
+    final_score, score_components = _compose_final_score(
+        experts, investment_plan, trading_plan, risk_policy)
     final_decision, decision_level = _decide_level(final_score, trading_plan.final_decision)
 
     result = {
