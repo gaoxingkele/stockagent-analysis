@@ -9,6 +9,29 @@ from .orchestrator import run_analysis
 
 
 def _cmd_analyze(args: argparse.Namespace) -> None:
+    # v3 角色化架构分支 --------------------------------------------------
+    if getattr(args, "version", "v2") == "v3":
+        from .agents_v3 import run_analysis_v3
+        from pathlib import Path as _Path
+        reuse = _Path(args.run_dir) if getattr(args, "run_dir", None) else None
+        result = run_analysis_v3(
+            symbol=args.symbol,
+            name=args.name,
+            bull_provider=args.provider or "grok",
+            bear_provider=args.provider or "grok",
+            judge_provider=args.provider or "grok",
+            trader_provider=args.provider or "grok",
+            pm_provider=args.provider or "grok",
+            debate_rounds=getattr(args, "debate_rounds", 3),
+            risk_rounds=getattr(args, "risk_rounds", 2),
+            reuse_context_from=reuse,
+        )
+        print(f"[v3] run_dir: {result['run_dir']}")
+        print(f"[v3] final_decision: {result['final_decision']} score={result['final_score']}")
+        print(f"[v3] duration: {result['duration_sec']}s")
+        return
+
+    # v2 原有分支(向后兼容) -------------------------------------------------
     root = Path(__file__).resolve().parents[2]
     if args.run_dir:
         run_dir = Path(args.run_dir)
@@ -104,6 +127,18 @@ def main() -> None:
         type=str,
         default=None,
         help="指定已有的run目录路径用于断点续传。崩溃或部分provider失败后，可用相同--run-dir重新运行，自动加载已有数据和已完成的provider结果",
+    )
+    p_analyze.add_argument(
+        "--version", choices=["v2", "v3"], default="v2",
+        help="v2=原有因子打分架构(默认); v3=LLM 角色化架构(Phase 0-5 流水线, 6 份报告+专家+多空辩论+Trader+风控)",
+    )
+    p_analyze.add_argument(
+        "--debate-rounds", type=int, default=3,
+        help="v3 Phase 2 多空辩论轮数(默认 3)",
+    )
+    p_analyze.add_argument(
+        "--risk-rounds", type=int, default=2,
+        help="v3 Phase 4 风控辩论轮数(默认 2)",
     )
     p_analyze.set_defaults(func=_cmd_analyze)
 
