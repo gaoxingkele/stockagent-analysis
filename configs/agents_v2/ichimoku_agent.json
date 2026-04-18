@@ -6,7 +6,7 @@
   "role": "一目均衡图趋势分析师",
   "enabled": true,
   "mandatory": false,
-  "weight": 0.06,
+  "weight": 0.08,
   "data_sources": {
     "mode": "combined",
     "primary": ["tdx", "akshare", "tushare"],

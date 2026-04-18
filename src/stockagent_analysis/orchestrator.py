@@ -754,6 +754,7 @@ def run_analysis(
         "PATTERN": 8.0,           # 事件驱动: 无形态时kp/cp/structure都=0→50
         "VOLUME_STRUCTURE": 5.0,  # 半事件: volume_price_score+sr_score=0时→50
         "RESONANCE": 3.0,         # 离散档位: 45=弱冲突信号, 50=中性
+        "CHANNEL_REVERSAL": 5.0,  # 通道反弹: 无信号时恒≈50, 释放20%权重给其他因子
     }
     _DEFAULT_THRESHOLD = 0.0      # 连续型因子(trend/capital/fundamental等): 始终参与
 
@@ -956,8 +957,10 @@ def run_analysis(
             _debate_score_aligned = _ds           # buy+80 → 80（看多）
         else:
             _debate_score_aligned = _ds            # hold → 用辩论原始分
-        # ── 2c: 辩论权重动态化 — 强信号放大，犹豫时降低干扰 ──
-        if _debate_decision in ("buy", "sell") and _ds > 75:
+        # ── 2c: 辩论权重动态化 — 强信号放大，犹豫时降低干扰，低分票防拉升 ──
+        if final_score < 48 and _debate_score_aligned > final_score:
+            _debate_w = 0.20  # 因子评分弱+辩论乐观: 压低辩论权重,防止系统性拉升sell票
+        elif _debate_decision in ("buy", "sell") and _ds > 75:
             _debate_w = 0.50  # 强信号时辩论权重提升
         elif _debate_decision == "hold":
             _debate_w = 0.25  # 犹豫时降低辩论干扰
@@ -969,7 +972,7 @@ def run_analysis(
             "debate score fusion: weighted=%.2f debate_raw=%s(%s) aligned=%.2f → final=%.2f",
             _weighted_score_before, _debate_score_raw, _debate_decision, _debate_score_aligned, final_score,
         )
-        print(f"[辩论融合] 加权评分={_weighted_score_before:.1f} × 60% + 辩论评分={_ds:.0f}({_debate_decision})→对齐={_debate_score_aligned:.0f} × 40% = {final_score:.1f}", flush=True)
+        print(f"[辩论融合] 加权评分={_weighted_score_before:.1f} × {(1-_debate_w)*100:.0f}% + 辩论评分={_ds:.0f}({_debate_decision})→对齐={_debate_score_aligned:.0f} × {_debate_w*100:.0f}% = {final_score:.1f}", flush=True)
 
     # ── 方案一：后置自适应展宽 ──
     _pre_stretch = final_score

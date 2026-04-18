@@ -1067,6 +1067,7 @@ def compute_market_adjustment(market_ctx: MarketContext, stock_score: float) -> 
     - 大盘弱势(score<35) + 板块冷门(rank>20或0) → 减分(最多-8)
     - ETF上涨通道 → 小幅加分; 下跌通道 → 小幅减分
     - 个股分数已经极端(>85或<15)时调节减半,避免过度偏移
+    - 弱势市场下,高分股(≥70)不削弱 — 保留逆势优秀标的的区分力
     """
     adj = 0.0
 
@@ -1099,6 +1100,10 @@ def compute_market_adjustment(market_ctx: MarketContext, stock_score: float) -> 
     # 极端分数时调节减半
     if stock_score > 85 or stock_score < 15:
         adj *= 0.5
+
+    # 弱势市场不削弱高分逆势股: 评分≥70时,负向调节清零
+    if adj < 0 and stock_score >= 70:
+        adj = 0.0
 
     return round(max(-8, min(8, adj)), 2)
 
