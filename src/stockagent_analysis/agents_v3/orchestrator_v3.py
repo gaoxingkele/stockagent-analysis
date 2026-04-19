@@ -71,16 +71,67 @@ def _compose_final_score(
 
     融合系数: α=0.50·expert + β=0.32·judge_adj + γ=0.18·risk + bonus
     """
-    scores = [er.score for er in experts.values() if 0 <= er.score <= 100]
-    expert_avg = sum(scores) / max(len(scores), 1) if scores else 50.0
+    # FOMC 点阵图模式: 收集 4 专家详情, 计算均值/中位数/分歧度/异议
+    expert_details = []
+    for role_id, er in experts.items():
+        if isinstance(er, ExpertResult):
+            s = er.score
+            cn = er.role_cn
+        else:
+            # dict-like (反序列化场景)
+            try:
+                s = float(er.get("score", 50))
+                cn = er.get("role_cn", role_id)
+            except Exception:
+                continue
+        if 0 <= s <= 100:
+            expert_details.append({"role": role_id, "role_cn": cn, "score": s})
+
+    scores = [d["score"] for d in expert_details]
+    n = len(scores)
+    expert_avg = sum(scores) / max(n, 1) if scores else 50.0
+
+    # 中位数(偶数个取中间两个均值)
+    if scores:
+        s_sorted = sorted(scores)
+        if n % 2 == 1:
+            expert_median = s_sorted[n // 2]
+        else:
+            expert_median = (s_sorted[n // 2 - 1] + s_sorted[n // 2]) / 2
+    else:
+        expert_median = 50.0
+
+    # 标准差(分歧度)
+    if n > 1:
+        _mean = expert_avg
+        expert_std = (sum((s - _mean) ** 2 for s in scores) / (n - 1)) ** 0.5
+    else:
+        expert_std = 0.0
+
+    # 识别异议专家(偏离中位数超过 15 分)
+    dissent = []
+    for d in expert_details:
+        dev = d["score"] - expert_median
+        if abs(dev) >= 15:
+            dissent.append({
+                "role_cn": d["role_cn"],
+                "score": d["score"],
+                "deviation": round(dev, 1),
+                "direction": "偏多" if dev > 0 else "偏空",
+            })
+
+    # 共识分: 用中位数为主, 叠加分歧惩罚(均值与中位数偏离越大 → 共识越低)
+    gap = abs(expert_avg - expert_median)
+    consensus_penalty = min(gap * 0.3, 3.0)   # 最多扣 3 分
+    expert_consensus = max(0.0, min(100.0, expert_median - consensus_penalty))
 
     judge_score_raw = float(investment_plan.overall_score) if investment_plan.overall_score else 50.0
     j_dir = (investment_plan.direction or "HOLD").upper()
     j_conf = float(investment_plan.confidence or 0.5)
 
     # 1) Judge 分重构 — 融合多维度避免 LLM 整齐挡位扎堆
-    # 基底: Judge overall_score 占 65%, Expert 冲击 15%, 剩 20% 给动态调节
-    base = judge_score_raw * 0.65 + expert_avg * 0.15
+    # 基底: Judge overall_score 占 65%, Expert 共识分(FOMC 中位数)冲击 15%
+    base = judge_score_raw * 0.65 + expert_consensus * 0.15
 
     # 方向性置信偏移: conf=0.5→0, conf=0.75→+5, conf=0.85→+7
     conf_offset = (j_conf - 0.5) * 20
@@ -127,12 +178,17 @@ def _compose_final_score(
         bonus = -4.0
         bonus_reason = f"Judge({j_dir}) vs Trader({t_dir}) 冲突"
 
-    # 4) 最终融合
-    final_raw = 0.50 * expert_avg + 0.32 * judge_adj + 0.18 * risk_mapped + bonus
+    # 4) 最终融合(用 FOMC 共识分替代均值)
+    final_raw = 0.50 * expert_consensus + 0.32 * judge_adj + 0.18 * risk_mapped + bonus
     final = round(max(0.0, min(100.0, final_raw)), 2)
 
     return final, {
         "expert_avg": round(expert_avg, 2),
+        "expert_median": round(expert_median, 2),
+        "expert_std": round(expert_std, 2),
+        "expert_consensus": round(expert_consensus, 2),
+        "expert_details": expert_details,
+        "dissent": dissent,
         "judge_score": round(judge_score_raw, 2),
         "judge_adj": round(judge_adj, 2),
         "risk_mapped": round(risk_mapped, 2),

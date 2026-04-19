@@ -23,9 +23,89 @@ from reportlab.lib.units import mm
 from reportlab.platypus import (
     Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak,
 )
+from reportlab.graphics.shapes import Drawing, Circle, Line, String, Rect, Polygon
 
 from ..report_pdf import _register_fonts, _esc, _cell, _safe_filename
 from .report_pdf_v3 import _register_font_family, _LEVEL_CN, _LEVEL_COLOR, _score_color, _trim
+
+
+# FOMC Dot Plot: 4 专家颜色编码
+_EXPERT_COLORS = {
+    "structure_expert": "#E74C3C",    # K 走势 - 红
+    "wave_expert": "#27AE60",         # 波浪 - 绿
+    "intraday_t_expert": "#3498DB",   # 短 T - 蓝
+    "martingale_expert": "#F39C12",   # 马丁 - 橙
+}
+_EXPERT_SHORT = {
+    "structure_expert": "K",
+    "wave_expert": "浪",
+    "intraday_t_expert": "T",
+    "martingale_expert": "马",
+}
+
+
+def _make_dot_plot(experts: list[dict], avg: float, median: float,
+                   width: float = 380, height: float = 28) -> Drawing:
+    """FOMC 点阵图: 横轴 0-100, 4 专家彩点 + 均值(灰▽) + 中位数(蓝▲)。"""
+    d = Drawing(width, height)
+    margin = 12
+    track_w = width - 2 * margin
+
+    # 背景条
+    d.add(Rect(margin, height / 2 - 1, track_w, 2,
+               fillColor=colors.HexColor("#E5E5E5"), strokeColor=None))
+
+    # 刻度: 0/25/50/75/100
+    for v in [0, 25, 50, 75, 100]:
+        x = margin + track_w * v / 100
+        d.add(Line(x, height / 2 - 3, x, height / 2 + 3,
+                   strokeColor=colors.HexColor("#BBBBBB"), strokeWidth=0.5))
+        d.add(String(x, 1, str(v), fontSize=6,
+                     textAnchor="middle",
+                     fillColor=colors.HexColor("#999999")))
+
+    # 50 分中线(深灰)
+    x50 = margin + track_w * 0.5
+    d.add(Line(x50, height / 2 - 6, x50, height / 2 + 6,
+               strokeColor=colors.HexColor("#888888"), strokeWidth=0.7))
+
+    # 专家彩点(放背景条上方, 大圆 + 白色边框易识别重叠)
+    y_dot = height / 2 + 4
+    for e in experts:
+        try:
+            s = float(e.get("score", 50))
+            role = e.get("role", "")
+            col = _EXPERT_COLORS.get(role, "#666666")
+            x = margin + track_w * s / 100
+            d.add(Circle(x, y_dot, 3.8,
+                         fillColor=colors.HexColor(col),
+                         strokeColor=colors.white, strokeWidth=1))
+        except Exception:
+            continue
+
+    # 均值: 灰色小三角(朝下, 在顶部)
+    x_avg = margin + track_w * avg / 100
+    d.add(Polygon(points=[x_avg - 3, height - 2, x_avg + 3, height - 2, x_avg, height - 6],
+                  fillColor=colors.HexColor("#808080"), strokeColor=None))
+
+    # 中位数: 深蓝三角(朝上, 在底部)
+    x_med = margin + track_w * median / 100
+    d.add(Polygon(points=[x_med - 3, 8, x_med + 3, 8, x_med, 12],
+                  fillColor=colors.HexColor("#0D3B66"), strokeColor=None))
+
+    return d
+
+
+def _dot_plot_legend(bold_font: str) -> str:
+    """图例文字(放在 Dot Plot 下方)。"""
+    return (
+        f"<font color='#E74C3C'>●</font>K走势  "
+        f"<font color='#27AE60'>●</font>波浪  "
+        f"<font color='#3498DB'>●</font>短T  "
+        f"<font color='#F39C12'>●</font>马丁  "
+        f"<font color='#808080'>▽</font>均值  "
+        f"<font color='#0D3B66'>▲</font>中位数"
+    )
 
 
 _CURRENT_BODY = "STSong-Light"
@@ -116,6 +196,20 @@ def build_portfolio_summary_pdf(
         f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}  |  标的数量: {len(rows)}",
         ParagraphStyle("cover", fontName=body_font, fontSize=10, textColor=colors.HexColor("#666")),
     ))
+
+    # FOMC 点阵图图例说明
+    legend_para = ParagraphStyle("legend2", fontName=body_font, fontSize=9,
+                                  leading=13, textColor=colors.HexColor("#333"))
+    flow.append(Spacer(1, 4))
+    flow.append(Paragraph(
+        "<b>FOMC 点阵图说明:</b>  "
+        "<font color='#E74C3C'>●</font>K走势结构  "
+        "<font color='#27AE60'>●</font>波浪理论  "
+        "<font color='#3498DB'>●</font>短线做T  "
+        "<font color='#F39C12'>●</font>马丁网格  "
+        "<font color='#808080'>▽</font>均值  "
+        "<font color='#0D3B66'>▲</font>中位数   "
+        "异议专家(偏离中位±15 分以上)会在点阵图下方标注", legend_para))
     flow.append(Spacer(1, 8))
 
     # ── 统计概览 ──
@@ -299,6 +393,31 @@ def _render_one_card(flow, r: dict, rank: int, st_h2, st_body, group: str):
            color={"低": "#27AE60", "中": "#E67E22", "高": "#C0392B"}.get(rp.get('final_risk_rating', ''), "#333")),
     ]
 
+    # Dot Plot 行: FOMC 点阵图 + 图例
+    expert_details = sc.get("expert_details") or []
+    expert_median = sc.get("expert_median", expert_avg)
+    expert_std = sc.get("expert_std", 0)
+    dissent = sc.get("dissent") or []
+
+    from reportlab.platypus import Paragraph as _P
+    from reportlab.lib.styles import ParagraphStyle as _PS
+    legend_style = _PS("legend", fontName=_CURRENT_BODY, fontSize=7.5,
+                       textColor=colors.HexColor("#555"), leading=10)
+    dot_plot = _make_dot_plot(expert_details, expert_avg, expert_median,
+                              width=380, height=26) if expert_details else _c("-")
+
+    # 异议标注
+    if dissent:
+        dissent_text = "⚠ 异议: " + " | ".join(
+            f"{d['role_cn']}({d['score']:.0f} → {d['direction']}{abs(d['deviation']):.0f}分)"
+            for d in dissent[:3]
+        )
+    else:
+        dissent_text = f"专家共识良好  μ={expert_avg:.1f} / 中位={expert_median:.1f} / σ={expert_std:.1f}"
+    dissent_style = _PS("dissent", fontName=_CURRENT_BODY, fontSize=8,
+                        textColor=colors.HexColor("#C0392B") if dissent else colors.HexColor("#7F8C8D"),
+                        leading=11)
+
     # 第 3 行: 买入/持有理由
     reason_label_buy = "买入理由" if group == "buy" else "核心判断" if group == "hold" else "Judge 点评"
     if group == "sell":
@@ -320,34 +439,38 @@ def _render_one_card(flow, r: dict, rank: int, st_h2, st_body, group: str):
         risk_parts.append(f"风控: {_trim(pm_sum, 200)}")
     risk_text = "\n".join(risk_parts) if risk_parts else "-"
 
-    # 组装 4 行表格(8 列)
+    # 组装 6 行表格(8 列), 新增 Dot Plot 行 + 异议/共识行
     data = [
-        row1_header,
-        row1_vals,
-        row2_header,
-        row2_vals,
-        [_c(reason_label_buy, bold=True, size=8.5, color="#0D3B66"),
-         _c(reasons_text, size=9, color="#222")] + [_c("")] * 6,
-        [_c("风险纪律", bold=True, size=8.5, color="#0D3B66"),
-         _c(risk_text, size=9, color="#555")] + [_c("")] * 6,
+        row1_header,                                                          # Row 0
+        row1_vals,                                                            # Row 1
+        row2_header,                                                          # Row 2
+        row2_vals,                                                            # Row 3
+        [_c("专家点阵图", bold=True, size=8.5, color="#0D3B66"),               # Row 4
+         dot_plot, _c(""), _c(""), _c(""), _c(""), _c(""), _c("")],
+        [_c("", size=8), _P(dissent_text, dissent_style),                     # Row 5
+         _c(""), _c(""), _c(""), _c(""), _c(""), _c("")],
+        [_c(reason_label_buy, bold=True, size=8.5, color="#0D3B66"),           # Row 6
+         _c(reasons_text, size=9, color="#222"), _c(""), _c(""), _c(""), _c(""), _c(""), _c("")],
+        [_c("风险纪律", bold=True, size=8.5, color="#0D3B66"),                 # Row 7
+         _c(risk_text, size=9, color="#555"), _c(""), _c(""), _c(""), _c(""), _c(""), _c("")],
     ]
     col_widths = [14 * mm, 38 * mm, 17 * mm, 17 * mm, 17 * mm, 17 * mm, 17 * mm, 27 * mm]
     tbl = Table(data, colWidths=col_widths)
     tbl.setStyle(TableStyle([
-        # 第 1 行(表头) + 第 3 行(表头)
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F5F8FC")),
         ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#F5F8FC")),
-        # 合并前两列作为股票标识(第 1 行)
-        ("SPAN", (0, 0), (0, 1)),   # # rank 合并
-        ("SPAN", (1, 0), (1, 1)),   # 名称合并
-        # 理由行跨 7 列合并
-        ("SPAN", (1, 4), (-1, 4)),  # 买入理由
-        ("SPAN", (1, 5), (-1, 5)),  # 风险纪律
+        ("SPAN", (0, 0), (0, 1)),
+        ("SPAN", (1, 0), (1, 1)),
+        ("SPAN", (1, 4), (-1, 4)),   # Dot plot 跨整行
+        ("SPAN", (1, 5), (-1, 5)),   # 异议/共识 跨整行
+        ("SPAN", (1, 6), (-1, 6)),   # 买入理由
+        ("SPAN", (1, 7), (-1, 7)),   # 风险纪律
         ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#D0D0D0")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("VALIGN", (0, 4), (-1, 4), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ("LINEBEFORE", (0, 0), (0, -1), 2, colors.HexColor(level_color)),  # 左边彩色竖条
+        ("LINEBEFORE", (0, 0), (0, -1), 2, colors.HexColor(level_color)),
     ]))
     flow.append(tbl)
     flow.append(Spacer(1, 4))
