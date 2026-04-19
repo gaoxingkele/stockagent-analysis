@@ -56,11 +56,16 @@ def _compose_final_score(
     trading_plan: TradingPlan,
     risk_policy: RiskPolicy,
 ) -> tuple[float, dict[str, float]]:
-    """融合专家+Judge+Trader+PM 产出最终评分(v2 融合公式)。
+    """融合专家+Judge+Trader+PM 产出最终评分(v3 融合公式)。
 
-    改进点(相比 v1):
+    改进点(v3, 2026-04-19):
     1. Risk 映射拉伸: [38,73] → [20,85] (仓位跨度更大)
-    2. Judge 强信号放大: direction+confidence 双高时评分放大 ±8%
+    2. Judge 分重构 judge_adj 为辩论综合质量分, 避免 LLM 心理挡位扎堆:
+       - overall_score 基底 × 0.65
+       - expert_avg 融合 × 0.15 (借 Expert 分散度冲击 Judge 集中性)
+       - confidence 偏移 ±方向性(BUY 加/SELL 减)
+       - winning_points 条数 × 1.5 (胜方论据数量)
+       - key_reasons 文本量加成 (论据详尽度)
     3. 三层方向一致性奖励: Judge/Trader/PM 共识时 +5 或 -5
     4. 冲突惩罚: Judge vs Trader 方向相反时 -4(降低置信)
 
@@ -73,13 +78,29 @@ def _compose_final_score(
     j_dir = (investment_plan.direction or "HOLD").upper()
     j_conf = float(investment_plan.confidence or 0.5)
 
-    # 1) Judge 强信号放大: BUY/SELL + 高置信 → ±8%
-    if j_dir == "BUY" and j_conf >= 0.65:
-        judge_adj = min(100.0, judge_score_raw * 1.08)
-    elif j_dir == "SELL" and j_conf >= 0.65:
-        judge_adj = max(0.0, judge_score_raw * 0.92)
+    # 1) Judge 分重构 — 融合多维度避免 LLM 整齐挡位扎堆
+    # 基底: Judge overall_score 占 65%, Expert 冲击 15%, 剩 20% 给动态调节
+    base = judge_score_raw * 0.65 + expert_avg * 0.15
+
+    # 方向性置信偏移: conf=0.5→0, conf=0.75→+5, conf=0.85→+7
+    conf_offset = (j_conf - 0.5) * 20
+    if j_dir == "BUY":
+        direction_shift = conf_offset    # BUY 高置信 → +
+    elif j_dir == "SELL":
+        direction_shift = -conf_offset   # SELL 高置信 → -
     else:
-        judge_adj = judge_score_raw
+        direction_shift = conf_offset * 0.3  # HOLD 权重弱化
+
+    # 论据质量因子: 胜方论据数量(0-3) + 理由详尽度(字符数)
+    winning_points = investment_plan.winning_points or []
+    key_reasons = investment_plan.key_reasons or []
+    argument_bonus = 0.0
+    argument_bonus += min(len(winning_points), 3) * 1.5  # 0-4.5
+    reason_chars = sum(len(str(r)) for r in key_reasons)
+    argument_bonus += min(reason_chars / 80.0, 6.0)   # 0-6
+
+    judge_adj = base + direction_shift + argument_bonus
+    judge_adj = max(0.0, min(100.0, judge_adj))
 
     # 2) Risk 映射拉伸: 仓位 [0,1] → 分数 [20,80], 叠加 rating_bonus
     rating = (risk_policy.final_risk_rating or "中").strip()
