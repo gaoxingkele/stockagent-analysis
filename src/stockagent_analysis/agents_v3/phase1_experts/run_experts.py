@@ -19,17 +19,19 @@ def run_all_experts(
     bundle: ReportBundle,
     providers: dict[str, str] | None = None,
     parallel: bool = True,
+    run_dir: "Path | None" = None,
 ) -> dict[str, ExpertResult]:
     """并行执行 4 个专家角色。
 
     Args:
         bundle: Phase 0 产出的 6 份报告集合
         providers: 角色 → LLM provider 映射; 未提供则用默认:
-            structure_expert → grok
-            wave_expert → grok (复杂推理, 后续可换 opus)
-            intraday_t_expert → doubao (快速)
+            structure_expert → grok (vision, 需要 run_dir 生成 K 图)
+            wave_expert → grok
+            intraday_t_expert → doubao
             martingale_expert → grok
         parallel: True=并行, False=串行(调试用)
+        run_dir: v3 run 目录, StructureExpert 依赖它读 kline/ 并生成图
 
     Returns:
         {role: ExpertResult}
@@ -43,7 +45,7 @@ def run_all_experts(
     providers = providers or default_providers
 
     experts = [
-        StructureExpert(provider=providers.get("structure_expert", "grok")),
+        StructureExpert(provider=providers.get("structure_expert", "grok"), run_dir=run_dir),
         WaveExpert(provider=providers.get("wave_expert", "grok")),
         IntradayTExpert(provider=providers.get("intraday_t_expert", "doubao")),
         MartingaleExpert(provider=providers.get("martingale_expert", "grok")),

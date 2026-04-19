@@ -265,11 +265,22 @@ def run_analysis_v3(
     # ── Phase -1: 数据采集 ──
     ctx_path = run_dir / "data" / "analysis_context.json"
     if reuse_context_from:
-        src = Path(reuse_context_from) / "data" / "analysis_context.json"
+        src_dir = Path(reuse_context_from)
+        src = src_dir / "data" / "analysis_context.json"
         if src.exists():
             ctx = json.loads(src.read_text(encoding="utf-8"))
             ctx_path.write_text(json.dumps(ctx, ensure_ascii=False, indent=2), encoding="utf-8")
             logger.info("[v3] 复用已有 analysis_context from %s", reuse_context_from)
+            # 复用 kline 目录(StructureExpert 绘图依赖)
+            src_kline = src_dir / "data" / "kline"
+            dst_kline = run_dir / "data" / "kline"
+            if src_kline.exists() and not dst_kline.exists():
+                import shutil
+                try:
+                    shutil.copytree(src_kline, dst_kline)
+                    logger.info("[v3] 复用 kline 目录")
+                except Exception as e:
+                    logger.warning("[v3] kline 复制失败(非致命): %s", e)
         else:
             raise FileNotFoundError(f"复用路径不存在: {src}")
     else:
@@ -289,7 +300,7 @@ def run_analysis_v3(
 
     # ── Phase 1: 专业视角分析师(并行) ──
     logger.info("[v3] Phase 1: 4 专家并行分析")
-    experts = run_all_experts(bundle, providers=expert_providers, parallel=True)
+    experts = run_all_experts(bundle, providers=expert_providers, parallel=True, run_dir=run_dir)
     (run_dir / "data" / "phase1_experts.json").write_text(
         json.dumps({r: e.to_dict() for r, e in experts.items()}, ensure_ascii=False, indent=2),
         encoding="utf-8",
