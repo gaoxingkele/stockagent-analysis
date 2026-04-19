@@ -208,8 +208,13 @@ def build_portfolio_summary_pdf(
         "<font color='#3498DB'>●</font>短线做T  "
         "<font color='#F39C12'>●</font>马丁网格  "
         "<font color='#808080'>▽</font>均值  "
-        "<font color='#0D3B66'>▲</font>中位数   "
-        "异议专家(偏离中位±15 分以上)会在点阵图下方标注", legend_para))
+        "<font color='#0D3B66'>▲</font>中位数", legend_para))
+    flow.append(Paragraph(
+        "<b>分歧级别:</b>  "
+        "<font color='#27AE60'>✓ 共识良好</font> = 4 位专家分差 &lt; 15 分  |  "
+        "<font color='#E67E22'>◐ 同向分歧</font> = 有专家偏离中位但与辩论方向一致  |  "
+        "<font color='#C0392B'>⚠ 高分歧决策</font> = 辩论层判 BUY 但专家异议偏空(或反之), 建议降仓/等确认",
+        legend_para))
     flow.append(Spacer(1, 8))
 
     # ── 统计概览 ──
@@ -406,17 +411,52 @@ def _render_one_card(flow, r: dict, rank: int, st_h2, st_body, group: str):
     dot_plot = _make_dot_plot(expert_details, expert_avg, expert_median,
                               width=380, height=26) if expert_details else _c("-")
 
+    # 分析"方向冲突"的异议: 辩论层 BUY 但专家异议偏空 / 辩论层 SELL 但专家异议偏多
+    j_dir_upper = (ip.get("direction") or "HOLD").upper()
+    judge_adj_val = sc.get("judge_adj", 0)
+
+    conflict_dissent = []
+    aligned_dissent = []
+    for d in dissent:
+        ddir = d.get("direction", "")
+        if j_dir_upper == "BUY" and ddir == "偏空":
+            conflict_dissent.append(d)
+        elif j_dir_upper == "SELL" and ddir == "偏多":
+            conflict_dissent.append(d)
+        else:
+            aligned_dissent.append(d)
+
     # 异议标注
-    if dissent:
-        dissent_text = "⚠ 异议: " + " | ".join(
-            f"{d['role_cn']}({d['score']:.0f} → {d['direction']}{abs(d['deviation']):.0f}分)"
-            for d in dissent[:3]
+    if conflict_dissent:
+        # 高分歧决策警告(方向冲突)
+        parts = [f"⚠ 高分歧决策  辩论层判 {j_dir_upper}({judge_adj_val:.1f})"]
+        conflict_str = " / ".join(
+            f"{d['role_cn']}唱{d['direction'].replace('偏','')} {d['score']:.0f}(偏离中位{abs(d['deviation']):.0f})"
+            for d in conflict_dissent
         )
+        parts.append(f"但 {conflict_str}")
+        parts.append("→ 建议降仓/等确认")
+        dissent_text = "  ·  ".join(parts)
+        dissent_color = "#C0392B"    # 红
+        dissent_bold = True
+    elif aligned_dissent:
+        # 同向异议(不警告, 只提示)
+        dissent_text = "◐ 同向分歧: " + " | ".join(
+            f"{d['role_cn']}({d['score']:.0f},{d['direction']}{abs(d['deviation']):.0f})"
+            for d in aligned_dissent[:3]
+        ) + f"    σ={expert_std:.1f}"
+        dissent_color = "#E67E22"    # 橙
+        dissent_bold = False
     else:
-        dissent_text = f"专家共识良好  μ={expert_avg:.1f} / 中位={expert_median:.1f} / σ={expert_std:.1f}"
-    dissent_style = _PS("dissent", fontName=_CURRENT_BODY, fontSize=8,
-                        textColor=colors.HexColor("#C0392B") if dissent else colors.HexColor("#7F8C8D"),
-                        leading=11)
+        dissent_text = f"✓ 专家共识良好  μ={expert_avg:.1f} / 中位={expert_median:.1f} / σ={expert_std:.1f}"
+        dissent_color = "#27AE60"    # 绿
+        dissent_bold = False
+
+    dissent_style = _PS(
+        "dissent", fontName=_CURRENT_BOLD if dissent_bold else _CURRENT_BODY,
+        fontSize=8.5 if dissent_bold else 8, leading=12,
+        textColor=colors.HexColor(dissent_color),
+    )
 
     # 第 3 行: 买入/持有理由
     reason_label_buy = "买入理由" if group == "buy" else "核心判断" if group == "hold" else "Judge 点评"
