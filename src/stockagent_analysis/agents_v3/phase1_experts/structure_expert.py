@@ -16,9 +16,7 @@ from typing import Any
 from ...llm_client import LLMRouter
 from ...prompts_v3 import load_prompt
 from ..phase0_data import ReportBundle
-from ..kline_charts import (
-    generate_expert_charts, merge_charts_vertically, image_to_base64,
-)
+from ..kline_charts import generate_expert_charts, image_to_base64
 from .base_expert import BaseExpert, ExpertResult
 
 logger = logging.getLogger(__name__)
@@ -43,27 +41,19 @@ class StructureExpert(BaseExpert):
             logger.warning("[%s] run_dir 缺失, 降级到文本模式", self.role)
             return super().analyze(bundle, extra_context)
 
-        # 1) 生成图片
+        # 1) 生成合成大图(6 子图 2 列×3 主题, 一次出图)
         try:
-            charts = generate_expert_charts(self.run_dir, bundle.symbol, bundle.name,
-                                             timeframes=("day", "week"))
+            charts = generate_expert_charts(self.run_dir, bundle.symbol, bundle.name)
         except Exception as e:
             logger.warning("[%s] 绘图失败 %s, 降级文本模式", self.role, e)
             return super().analyze(bundle, extra_context)
 
-        day_path = charts.get("day")
-        week_path = charts.get("week")
-        if not (day_path and week_path):
-            logger.warning("[%s] 日周图缺, 降级文本模式", self.role)
+        merged_path = charts.get("merged")
+        if not merged_path or not Path(merged_path).exists():
+            logger.warning("[%s] 合成图缺失(kline csv 可能不存在), 降级文本模式", self.role)
             return super().analyze(bundle, extra_context)
-
-        # 2) 合成一张大图
-        merged_path = self.run_dir / "charts" / "expert" / "day_week_merged.png"
-        try:
-            merge_charts_vertically(day_path, week_path, merged_path)
-        except Exception as e:
-            logger.warning("[%s] 合成失败 %s, 降级", self.role, e)
-            return super().analyze(bundle, extra_context)
+        logger.info("[%s] 合成 K 图成功: %s (%d KB)",
+                    self.role, merged_path.name, merged_path.stat().st_size // 1024)
 
         # 3) 构造 prompt
         system = load_prompt(self.prompt_file)
@@ -74,10 +64,12 @@ class StructureExpert(BaseExpert):
             f"标的: {bundle.symbol} {bundle.name}\n"
             f"═══════════════════════════════\n\n"
             f"【客观量化报告】\n{report_text}\n\n"
-            f"【附图】\n上半部分为日线(100 根)K 图, 下半部分为周线(80 根)K 图。\n"
-            f"主图: K 线 + MA5/10/20/60 + 布林带 + Ichimoku 云 + SAR + 成交量\n"
-            f"副图: MACD (DIF/DEA/柱) + RSI(14) + 自动趋势线\n\n"
-            f"请先观察图像, 再结合量化报告, 按要求输出 JSON。\n"
+            f"【附图】\n图片是 2 列 × 3 主题的综合 K 技术图:\n"
+            f"  左列=日线(100 根), 右列=周线(80 根)\n"
+            f"  主题 1: K+MA+布林+成交量 / MACD      (趋势与动能)\n"
+            f"  主题 2: K+Ichimoku 云 / RSI          (云图与强度)\n"
+            f"  主题 3: K+SAR+趋势线 / MACD柱+RSI    (反转与综合)\n"
+            f"请先按【日线服从周线】优先级观察图像, 再结合量化报告, 输出 JSON。\n"
         )
 
         # 4) 调用 vision LLM
