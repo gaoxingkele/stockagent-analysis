@@ -46,7 +46,7 @@ def run_all_experts(
 
     experts = [
         StructureExpert(provider=providers.get("structure_expert", "grok"), run_dir=run_dir),
-        WaveExpert(provider=providers.get("wave_expert", "grok")),
+        WaveExpert(provider=providers.get("wave_expert", "grok"), run_dir=run_dir),
         IntradayTExpert(provider=providers.get("intraday_t_expert", "doubao")),
         MartingaleExpert(provider=providers.get("martingale_expert", "grok")),
     ]

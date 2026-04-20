@@ -100,6 +100,102 @@ def _rsi(close: pd.Series, n: int = 14) -> pd.Series:
     return 100 - (100 / (1 + rs))
 
 
+def _adx(df: pd.DataFrame, n: int = 14) -> pd.Series:
+    """ADX 趋势强度指标。"""
+    high, low, close = df["high"], df["low"], df["close"]
+    plus_dm = (high.diff()).clip(lower=0)
+    minus_dm = (-low.diff()).clip(lower=0)
+    mask = (high.diff() > -low.diff())
+    plus_dm = plus_dm.where(mask, 0)
+    minus_dm = minus_dm.where(~mask, 0)
+    tr = pd.concat([
+        (high - low),
+        (high - close.shift()).abs(),
+        (low - close.shift()).abs()
+    ], axis=1).max(axis=1)
+    atr = tr.rolling(n, min_periods=1).mean()
+    pdi = 100 * plus_dm.rolling(n, min_periods=1).mean() / atr.replace(0, np.nan)
+    mdi = 100 * minus_dm.rolling(n, min_periods=1).mean() / atr.replace(0, np.nan)
+    dx = 100 * (pdi - mdi).abs() / (pdi + mdi).replace(0, np.nan)
+    adx = dx.rolling(n, min_periods=1).mean()
+    return adx
+
+
+def _zigzag(df: pd.DataFrame, pct_threshold: float = 0.03) -> list[dict]:
+    """阈值法 ZigZag 摆动点识别。
+
+    返回 list of {idx, price, type('high'|'low'), ts}, 按时间排序。
+    pct_threshold: 反转阈值(默认 3%, 若波动率大可调大)。
+    """
+    if len(df) < 3:
+        return []
+    highs = df["high"].values
+    lows = df["low"].values
+    swings: list[dict] = []
+    # 初始方向: 看前 10 根的方向
+    initial_window = min(10, len(df))
+    if df["close"].iloc[initial_window - 1] >= df["close"].iloc[0]:
+        direction = 1  # 初始上升 → 找高点
+        last_ext_idx = int(np.argmax(highs[:initial_window]))
+        last_ext_price = highs[last_ext_idx]
+    else:
+        direction = -1
+        last_ext_idx = int(np.argmin(lows[:initial_window]))
+        last_ext_price = lows[last_ext_idx]
+
+    for i in range(len(df)):
+        if direction == 1:
+            # 上升阶段, 更新高点
+            if highs[i] > last_ext_price:
+                last_ext_idx = i
+                last_ext_price = highs[i]
+            # 从高点回落 pct_threshold → 确认高点, 转下降
+            elif (last_ext_price - lows[i]) / max(last_ext_price, 1e-6) >= pct_threshold:
+                swings.append({
+                    "idx": last_ext_idx, "price": float(last_ext_price),
+                    "type": "high", "ts": df["ts"].iloc[last_ext_idx],
+                })
+                direction = -1
+                last_ext_idx = i
+                last_ext_price = lows[i]
+        else:
+            # 下降阶段, 更新低点
+            if lows[i] < last_ext_price:
+                last_ext_idx = i
+                last_ext_price = lows[i]
+            elif (highs[i] - last_ext_price) / max(last_ext_price, 1e-6) >= pct_threshold:
+                swings.append({
+                    "idx": last_ext_idx, "price": float(last_ext_price),
+                    "type": "low", "ts": df["ts"].iloc[last_ext_idx],
+                })
+                direction = 1
+                last_ext_idx = i
+                last_ext_price = highs[i]
+
+    # 末尾未确认的极值也加入(供预测"正在发展中"的一浪)
+    swings.append({
+        "idx": last_ext_idx, "price": float(last_ext_price),
+        "type": "high" if direction == 1 else "low",
+        "ts": df["ts"].iloc[last_ext_idx],
+        "provisional": True,
+    })
+    return swings
+
+
+def _fit_trendline_through_points(points: list[tuple[int, float]]) -> tuple[float, float] | None:
+    """过多点拟合直线 y = a*x + b。"""
+    if len(points) < 2:
+        return None
+    x = np.array([p[0] for p in points])
+    y = np.array([p[1] for p in points])
+    if len(points) == 2:
+        a = (y[1] - y[0]) / max(x[1] - x[0], 1)
+        b = y[0] - a * x[0]
+    else:
+        a, b = np.polyfit(x, y, 1)
+    return float(a), float(b)
+
+
 # ─────────────────────────────────────────────────────────────────
 # 通用绘图工具
 # ─────────────────────────────────────────────────────────────────
@@ -240,24 +336,66 @@ def _plot_theme_reversal(ax_main, ax_sub, df: pd.DataFrame, tf_label: str) -> No
     sar = _sar(df)
     ax_main.scatter(x, sar, s=12, color="#444", marker=".", alpha=0.7, label="SAR")
 
-    # 自动趋势线: 近 30 根 close 线性回归
-    tl_n = min(30, len(df))
-    tl_x = x[-tl_n:]
-    tl_y = close.iloc[-tl_n:].values
-    if len(tl_x) >= 2:
-        a, b = np.polyfit(tl_x, tl_y, 1)
-        trend_dir = "上升" if a > 0 else "下降"
-        ax_main.plot(tl_x, a * tl_x + b, color="#0D3B66", linewidth=1.2,
-                     linestyle="-.", alpha=0.8, label=f"趋势线({trend_dir} a={a:.3f})")
+    # ── trendln 专业趋势线识别 ──
+    try:
+        import trendln
+        window = min(len(df), 60)
+        result = trendln.calc_support_resistance(
+            (df["high"], df["low"]),
+            extmethod=trendln.METHOD_NUMDIFF,
+            method=trendln.METHOD_NSQUREDLOGN,
+            window=window,
+            errpct=0.005,
+        )
+        # result[0] = support info, result[1] = resistance info
+        # 每个是 (extrema_indices, [main_slope, main_intercept], [candidate_lines])
 
-    # 近期高低点(水平支撑阻力)
+        # 主支撑线 (粗, 醒目绿色)
+        if result[0] and len(result[0]) > 1 and result[0][1]:
+            s_slope, s_intercept = float(result[0][1][0]), float(result[0][1][1])
+            xs = np.array([0, len(df) - 1])
+            ys = s_slope * xs + s_intercept
+            ax_main.plot(xs, ys, color="#00AA3F", linewidth=2.5, linestyle="-",
+                          alpha=0.95, label=f"支撑线(slope={s_slope:+.3f})")
+
+        # 主阻力线 (粗, 醒目红色)
+        if result[1] and len(result[1]) > 1 and result[1][1]:
+            r_slope, r_intercept = float(result[1][1][0]), float(result[1][1][1])
+            xs = np.array([0, len(df) - 1])
+            ys = r_slope * xs + r_intercept
+            ax_main.plot(xs, ys, color="#D00020", linewidth=2.5, linestyle="-",
+                          alpha=0.95, label=f"阻力线(slope={r_slope:+.3f})")
+
+        # 在极值点上画醒目标记
+        minima_idx = result[0][0] if result[0] else []
+        maxima_idx = result[1][0] if result[1] else []
+        for idx in minima_idx[-5:] if minima_idx else []:
+            if 0 <= idx < len(df):
+                ax_main.scatter(idx, df["low"].iloc[idx], s=60, marker="^",
+                                 color="#00AA3F", edgecolors="white", linewidths=1.2,
+                                 zorder=6)
+        for idx in maxima_idx[-5:] if maxima_idx else []:
+            if 0 <= idx < len(df):
+                ax_main.scatter(idx, df["high"].iloc[idx], s=60, marker="v",
+                                 color="#D00020", edgecolors="white", linewidths=1.2,
+                                 zorder=6)
+    except Exception as e:
+        logger.warning("[kline_charts] trendln 失败, 降级简单回归: %s", e)
+        # fallback: 简单 polyfit
+        tl_n = min(30, len(df))
+        tl_x = x[-tl_n:]
+        tl_y = close.iloc[-tl_n:].values
+        if len(tl_x) >= 2:
+            a, b = np.polyfit(tl_x, tl_y, 1)
+            ax_main.plot(tl_x, a * tl_x + b, color="#0D3B66", linewidth=2.0,
+                         linestyle="--", alpha=0.85, label=f"回归线")
+
+    # 近期高低点水平线(次要参考)
     if len(df) >= 20:
         recent_hi = df["high"].iloc[-20:].max()
         recent_lo = df["low"].iloc[-20:].min()
-        ax_main.axhline(recent_hi, color="#C41E3A", linewidth=0.6, linestyle="--", alpha=0.5)
-        ax_main.axhline(recent_lo, color="#27AE60", linewidth=0.6, linestyle="--", alpha=0.5)
-        ax_main.text(0, recent_hi, f" R:{recent_hi:.2f}", fontsize=7, color="#C41E3A", va="bottom")
-        ax_main.text(0, recent_lo, f" S:{recent_lo:.2f}", fontsize=7, color="#27AE60", va="top")
+        ax_main.axhline(recent_hi, color="#D00020", linewidth=0.5, linestyle=":", alpha=0.35)
+        ax_main.axhline(recent_lo, color="#00AA3F", linewidth=0.5, linestyle=":", alpha=0.35)
 
     latest = close.iloc[-1]
     ax_main.axhline(latest, color="#C41E3A", linewidth=0.6, linestyle=":", alpha=0.5)
@@ -382,6 +520,178 @@ def generate_merged_expert_chart(
 def image_to_base64(path: Path) -> tuple[str, str]:
     data = path.read_bytes()
     return base64.b64encode(data).decode("ascii"), "image/png"
+
+
+# ─────────────────────────────────────────────────────────────────
+# 波浪专家图 - 简洁布局 (不叠加 MA/Boll/Ichimoku/SAR)
+# ─────────────────────────────────────────────────────────────────
+
+def _plot_wave_theme(ax_main, ax_sub, df: pd.DataFrame, tf_label: str,
+                     zigzag_threshold: float = 0.04) -> None:
+    """波浪专家专用: K + ZigZag 摆动点(编号) + 斐波 + 前高低 / RSI+ADX 副图。"""
+    x = np.arange(len(df))
+    close = df["close"]
+
+    # --- 主图: 简洁 K 线(宽度稍大,更易看形态) ---
+    _draw_candles(ax_main, df, width=0.75)
+
+    # --- ZigZag 摆动点 ---
+    swings = _zigzag(df, pct_threshold=zigzag_threshold)
+    if swings:
+        # 画 ZigZag 连线(灰色虚线串起所有摆动点)
+        zz_x = [s["idx"] for s in swings]
+        zz_y = [s["price"] for s in swings]
+        ax_main.plot(zz_x, zz_y, color="#555", linewidth=1.2, linestyle="--",
+                      alpha=0.6, zorder=3)
+        # 编号摆动点(仅显示最近 6 个非 provisional)
+        confirmed = [s for s in swings if not s.get("provisional")]
+        recent = confirmed[-6:] if len(confirmed) >= 6 else confirmed
+        for i, s in enumerate(recent, 1):
+            col = "#D00020" if s["type"] == "high" else "#00AA3F"
+            marker = "v" if s["type"] == "high" else "^"
+            ax_main.scatter(s["idx"], s["price"], s=100, marker=marker,
+                             color=col, edgecolors="white", linewidths=1.5, zorder=7)
+            # 编号
+            dy = s["price"] * 0.015 * (1 if s["type"] == "high" else -1)
+            ax_main.annotate(f"{i}", xy=(s["idx"], s["price"]),
+                              xytext=(0, 10 if s["type"] == "high" else -15),
+                              textcoords="offset points",
+                              fontsize=10, fontweight="bold",
+                              color=col, ha="center",
+                              bbox=dict(boxstyle="circle,pad=0.2",
+                                       facecolor="white", edgecolor=col, alpha=0.9))
+        # 标注 provisional 末点(正在发展中的极值)
+        prov = [s for s in swings if s.get("provisional")]
+        if prov:
+            s = prov[-1]
+            col = "#FF6600"
+            ax_main.scatter(s["idx"], s["price"], s=120, marker="*",
+                             color=col, edgecolors="white", linewidths=1.5, zorder=7)
+            ax_main.annotate("?", xy=(s["idx"], s["price"]),
+                              xytext=(0, 12 if s["type"] == "high" else -16),
+                              textcoords="offset points",
+                              fontsize=10, fontweight="bold", color=col, ha="center")
+
+    # --- 斐波那契回撤位 (基于最近一次 ZigZag 高低点) ---
+    confirmed = [s for s in swings if not s.get("provisional")]
+    if len(confirmed) >= 2:
+        # 找最近的 swing high 和 swing low
+        recent_high = None
+        recent_low = None
+        for s in reversed(confirmed):
+            if s["type"] == "high" and recent_high is None:
+                recent_high = s
+            elif s["type"] == "low" and recent_low is None:
+                recent_low = s
+            if recent_high and recent_low:
+                break
+        if recent_high and recent_low:
+            hi = recent_high["price"]
+            lo = recent_low["price"]
+            # 斐波那契回撤位
+            fib_levels = [0.236, 0.382, 0.5, 0.618, 0.786]
+            span = hi - lo
+            for level in fib_levels:
+                # 从高点回撤 level
+                y_retrace = hi - span * level
+                ax_main.axhline(y_retrace, color="#0D3B66", linewidth=0.8,
+                                 linestyle=":", alpha=0.5)
+                ax_main.text(len(df) * 0.01, y_retrace,
+                              f"Fib {level*100:.1f}% ({y_retrace:.2f})",
+                              fontsize=7, color="#0D3B66", va="center", alpha=0.8)
+            # 高低点水平线加粗
+            ax_main.axhline(hi, color="#D00020", linewidth=1.0, linestyle="--", alpha=0.6)
+            ax_main.axhline(lo, color="#00AA3F", linewidth=1.0, linestyle="--", alpha=0.6)
+
+    # 最新价
+    latest = close.iloc[-1]
+    ax_main.axhline(latest, color="#C41E3A", linewidth=0.7, linestyle=":", alpha=0.55)
+    ax_main.annotate(f"{latest:.2f}", xy=(len(df) - 1, latest),
+                     xytext=(5, 0), textcoords="offset points",
+                     fontsize=9, color="#C41E3A", fontweight="bold", va="center")
+
+    ax_main.set_title(f"{tf_label} · 波浪识别主图 (K+ZigZag+斐波)",
+                       fontsize=10, fontweight="bold", loc="left")
+    ax_main.legend(loc="upper left", fontsize=7, framealpha=0.85)
+    ax_main.grid(True, alpha=0.2)
+    ax_main.set_ylabel("价格", fontsize=8)
+
+    # --- 副图: RSI + ADX 双线 ---
+    rsi = _rsi(close, 14)
+    ax_sub.plot(x, rsi, color="#8B008B", linewidth=1.3, label="RSI(14)")
+    ax_sub.axhline(70, color="#C41E3A", linewidth=0.5, linestyle="--", alpha=0.5)
+    ax_sub.axhline(30, color="#27AE60", linewidth=0.5, linestyle="--", alpha=0.5)
+    ax_sub.set_ylim(0, 100)
+    ax_sub.set_ylabel("RSI", fontsize=8, color="#8B008B")
+    ax_sub.tick_params(axis="y", labelcolor="#8B008B")
+
+    # ADX 叠加在右轴
+    try:
+        adx = _adx(df, 14)
+        ax_adx = ax_sub.twinx()
+        ax_adx.plot(x, adx, color="#FF8C00", linewidth=1.3, label="ADX(14)")
+        ax_adx.axhline(25, color="#FF8C00", linewidth=0.4, linestyle="--", alpha=0.4)
+        ax_adx.set_ylim(0, 80)
+        ax_adx.set_ylabel("ADX", fontsize=8, color="#FF8C00")
+        ax_adx.tick_params(axis="y", labelcolor="#FF8C00")
+
+        lines_1, labels_1 = ax_sub.get_legend_handles_labels()
+        lines_2, labels_2 = ax_adx.get_legend_handles_labels()
+        ax_sub.legend(lines_1 + lines_2, labels_1 + labels_2,
+                      loc="upper left", fontsize=7, ncol=2)
+    except Exception:
+        ax_sub.legend(loc="upper left", fontsize=7)
+    ax_sub.grid(True, alpha=0.2)
+
+
+def generate_wave_expert_chart(
+    run_dir: Path,
+    symbol: str,
+    name: str,
+    weekly_n: int = 100,
+    monthly_n: int = 60,
+) -> Path | None:
+    """波浪专家专用图: 周+月双周期, 简洁 K+ZigZag+斐波, 不叠加 MA/Boll。"""
+    run_dir = Path(run_dir)
+    kline_dir = run_dir / "data" / "kline"
+    df_week = _load_csv(kline_dir / "week.csv", weekly_n)
+    df_month = _load_csv(kline_dir / "month.csv", monthly_n)
+    if df_week is None or df_month is None:
+        logger.warning("[wave_charts] 缺数据 week=%s month=%s",
+                       df_week is not None, df_month is not None)
+        return None
+
+    fig = plt.figure(figsize=(18, 14), dpi=110)
+    # 2 行主+副, 2 列(周/月)
+    gs = fig.add_gridspec(
+        nrows=2, ncols=2,
+        height_ratios=[3.2, 1.2],
+        hspace=0.18, wspace=0.12,
+        top=0.93, bottom=0.06, left=0.05, right=0.96,
+    )
+
+    ax_wk_main = fig.add_subplot(gs[0, 0])
+    ax_wk_sub = fig.add_subplot(gs[1, 0], sharex=ax_wk_main)
+    ax_mt_main = fig.add_subplot(gs[0, 1])
+    ax_mt_sub = fig.add_subplot(gs[1, 1], sharex=ax_mt_main)
+
+    # 周线阈值 4%, 月线阈值 6%(大周期波动大)
+    _plot_wave_theme(ax_wk_main, ax_wk_sub, df_week, "周线", zigzag_threshold=0.04)
+    _plot_wave_theme(ax_mt_main, ax_mt_sub, df_month, "月线", zigzag_threshold=0.06)
+
+    _setup_xticks(ax_wk_main, ax_wk_sub, df_week, show_labels=True)
+    _setup_xticks(ax_mt_main, ax_mt_sub, df_month, show_labels=True)
+
+    fig.suptitle(
+        f"{symbol}  {name}  ·  艾略特波浪识别图 (周线左, 月线右)",
+        fontsize=14, fontweight="bold", y=0.98,
+    )
+
+    out = run_dir / "charts" / "expert" / "wave.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=110, bbox_inches="tight", pad_inches=0.2)
+    plt.close(fig)
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────
