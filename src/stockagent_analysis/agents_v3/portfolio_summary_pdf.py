@@ -22,6 +22,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
     Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak,
+    Image as RLImage, KeepTogether,
 )
 from reportlab.graphics.shapes import Drawing, Circle, Line, String, Rect, Polygon
 
@@ -144,10 +145,19 @@ def build_portfolio_summary_pdf(
     rows: list[dict[str, Any]],
     out_path: Path,
     title: str = "v3 组合汇总决策报告",
+    embed_charts: str = "buy_only",
 ) -> Path:
     """生成组合汇总 PDF。
 
-    rows 按本函数内部分区+排序(不要求预先排序)。
+    Args:
+        rows: final_decision_v3.json 列表
+        out_path: 输出 PDF 路径
+        title: PDF 标题
+        embed_charts: 图片嵌入模式
+            "all"      = 所有股票都插图(PDF 较大 ~60-100MB)
+            "buy_only" = 只 BUY 股票插图(默认, 平衡大小和信息量)
+            "top20"    = 仅分数 Top 20 插图
+            "none"     = 不插图(轻量版 ~500KB)
     """
     global _CURRENT_BODY, _CURRENT_BOLD
     body_font, bold_font = _register_fonts()
@@ -228,23 +238,26 @@ def build_portfolio_summary_pdf(
     sells = sorted([r for r in rows if r.get("final_decision") == "sell"],
                    key=lambda r: r["final_score"])
 
+    # 判断每只股票是否嵌入图片 (用 symbol 作 key 返回 True/False)
+    embed_set = _decide_embed_set(rows, embed_charts)
+
     if buys:
         flow.append(PageBreak())
         flow.append(Paragraph(f"一、BUY 买入建议 ({len(buys)} 只) · 按综合评分降序",
                               st_h1))
-        _render_stock_group(flow, buys, st_h2, st_body, "buy")
+        _render_stock_group(flow, buys, st_h2, st_body, "buy", embed_set)
 
     if holds:
         flow.append(PageBreak())
         flow.append(Paragraph(f"二、HOLD 观望 ({len(holds)} 只) · 按综合评分降序",
                               st_h1))
-        _render_stock_group(flow, holds, st_h2, st_body, "hold")
+        _render_stock_group(flow, holds, st_h2, st_body, "hold", embed_set)
 
     if sells:
         flow.append(PageBreak())
         flow.append(Paragraph(f"三、SELL 卖出/减仓建议 ({len(sells)} 只) · 按综合评分升序",
                               st_h1))
-        _render_stock_group(flow, sells, st_h2, st_body, "sell")
+        _render_stock_group(flow, sells, st_h2, st_body, "sell", embed_set)
 
     doc.build(flow)
     return out_path
@@ -324,13 +337,29 @@ def _format_reasons(reasons: list, max_items: int = 3, max_chars: int = 220) -> 
     return "\n".join(out)
 
 
-def _render_stock_group(flow, rows: list[dict], st_h2, st_body, group: str):
+def _decide_embed_set(rows: list[dict], mode: str) -> set[str]:
+    """根据 mode 决定哪些股票嵌入图片(返回 symbol 集合)。"""
+    if mode == "none":
+        return set()
+    if mode == "all":
+        return {r.get("symbol", "") for r in rows}
+    if mode == "buy_only":
+        return {r["symbol"] for r in rows if r.get("final_decision") == "buy"}
+    if mode == "top20":
+        sorted_rows = sorted(rows, key=lambda x: -x.get("final_score", 0))[:20]
+        return {r["symbol"] for r in sorted_rows}
+    return {r["symbol"] for r in rows if r.get("final_decision") == "buy"}  # 默认 buy_only
+
+
+def _render_stock_group(flow, rows: list[dict], st_h2, st_body, group: str,
+                         embed_set: set[str]):
     """渲染一组股票, 每只用一个紧凑 4 行卡片(复合表格)。"""
     for rank, r in enumerate(rows, 1):
-        _render_one_card(flow, r, rank, st_h2, st_body, group)
+        _render_one_card(flow, r, rank, st_h2, st_body, group, embed_set)
 
 
-def _render_one_card(flow, r: dict, rank: int, st_h2, st_body, group: str):
+def _render_one_card(flow, r: dict, rank: int, st_h2, st_body, group: str,
+                      embed_set: set[str] | None = None):
     symbol = r.get("symbol", "")
     name = r.get("name", "")
     sc = r.get("score_components") or {}
@@ -513,33 +542,92 @@ def _render_one_card(flow, r: dict, rank: int, st_h2, st_body, group: str):
         ("LINEBEFORE", (0, 0), (0, -1), 2, colors.HexColor(level_color)),
     ]))
     flow.append(tbl)
-    flow.append(Spacer(1, 4))
+
+    # ── 插入 LLM 识别图 (K 走势 merged.png + 波浪 wave.png) ──
+    symbol_key = r.get("symbol", "")
+    should_embed = embed_set is None or symbol_key in embed_set
+    run_dir_str = r.get("run_dir", "")
+    if should_embed and run_dir_str:
+        run_dir = Path(run_dir_str)
+        chart_dir = run_dir / "charts" / "expert"
+
+        merged_path = chart_dir / "merged.png"
+        wave_path = chart_dir / "wave.png"
+
+        # K 走势 6 子图大图: 原尺寸 18×21 in → 等比缩到宽 170mm, 高 ~198mm
+        if merged_path.exists():
+            try:
+                img_w = 170 * mm
+                img_h = img_w * (21.0 / 18.0)   # 约 198mm
+                cap = Paragraph(
+                    f"<b>【K 走势识别图】</b> 左日右周, 3 主题: K+MA+布林+量/MACD, "
+                    f"K+Ichimoku/RSI, K+SAR+趋势线/MACD+RSI",
+                    ParagraphStyle("cap_m", fontName=_CURRENT_BOLD, fontSize=8.5,
+                                    textColor=colors.HexColor("#0D3B66"),
+                                    leading=11, alignment=0),
+                )
+                img = RLImage(str(merged_path), width=img_w, height=img_h)
+                flow.append(Spacer(1, 4))
+                flow.append(KeepTogether([cap, Spacer(1, 2), img]))
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("[PDF] merged.png 插入失败 %s: %s",
+                                                      merged_path, e)
+
+        # 波浪识别图: 原尺寸 18×14 in → 宽 170mm 高 ~132mm
+        if wave_path.exists():
+            try:
+                img_w = 170 * mm
+                img_h = img_w * (14.0 / 18.0)   # 约 132mm
+                cap = Paragraph(
+                    f"<b>【波浪识别图】</b> 左周右月, K+ZigZag 摆动点(编号▲▼) + 斐波那契回撤 / RSI+ADX",
+                    ParagraphStyle("cap_w", fontName=_CURRENT_BOLD, fontSize=8.5,
+                                    textColor=colors.HexColor("#0D3B66"),
+                                    leading=11, alignment=0),
+                )
+                img = RLImage(str(wave_path), width=img_w, height=img_h)
+                flow.append(Spacer(1, 4))
+                flow.append(KeepTogether([cap, Spacer(1, 2), img]))
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("[PDF] wave.png 插入失败 %s: %s",
+                                                      wave_path, e)
+
+    flow.append(Spacer(1, 8))
 
 
 # ────────────────────────────────────────────────
 # CLI 入口
 # ────────────────────────────────────────────────
 
-def main_generate(since_str: str | None = None, out_path: Path | None = None) -> Path:
-    """命令行入口: 从 output/runs_v3 收集数据生成汇总 PDF。"""
+def main_generate(since_str: str | None = None, out_path: Path | None = None,
+                   embed_charts: str = "buy_only") -> Path:
+    """命令行入口: 从 output/runs_v3 收集数据生成汇总 PDF。
+
+    Args:
+        since_str: YYYY-MM-DD HH:MM 时间下限
+        out_path: 输出 PDF 路径
+        embed_charts: "all" / "buy_only" / "top20" / "none"
+    """
     if since_str:
         since = datetime.strptime(since_str, "%Y-%m-%d %H:%M")
     else:
-        since = datetime(2026, 4, 19, 10, 30)   # 本批 94 只开始时间
+        since = datetime(2026, 4, 19, 10, 30)
     if out_path is None:
         out_path = Path(f"output/portfolio_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
     runs_dir = Path("output/runs_v3")
     rows = _collect_all_results(runs_dir, since)
     if not rows:
         raise RuntimeError(f"未找到 {since} 之后的 v3 run")
-    print(f"收集到 {len(rows)} 只股票")
-    pdf = build_portfolio_summary_pdf(rows, out_path)
+    print(f"收集到 {len(rows)} 只股票, 图片嵌入模式={embed_charts}")
+    pdf = build_portfolio_summary_pdf(rows, out_path, embed_charts=embed_charts)
     print(f"PDF 生成: {pdf}  ({pdf.stat().st_size // 1024} KB)")
     return pdf
 
 
 if __name__ == "__main__":
     import sys
-    since = sys.argv[1] if len(sys.argv) > 1 else None
-    out = Path(sys.argv[2]) if len(sys.argv) > 2 else None
-    main_generate(since, out)
+    since = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] != "-" else None
+    out = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != "-" else None
+    mode = sys.argv[3] if len(sys.argv) > 3 else "buy_only"
+    main_generate(since, out, embed_charts=mode)
