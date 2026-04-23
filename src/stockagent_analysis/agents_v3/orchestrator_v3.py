@@ -291,6 +291,25 @@ def run_analysis_v3(
     if not name:
         name = (ctx.get("snapshot", {}) or {}).get("name", "")
 
+    # ── Tushare 高级数据增强 (真实筹码/主力资金/技术因子) ──
+    try:
+        from ..tushare_enrich import enrich_with_tushare
+        logger.info("[v3] Tushare 增强: 拉取 stk_factor_pro/cyq_perf/moneyflow...")
+        ts_enrich = enrich_with_tushare(symbol, run_dir=run_dir, use_cache=True)
+        # 并入 ctx.features 供 Phase 0 报告使用
+        if ts_enrich:
+            ctx.setdefault("features", {})
+            for key in ("tushare_factors", "tushare_cyq", "tushare_cyq_chips",
+                         "tushare_moneyflow", "tushare_holders"):
+                if key in ts_enrich:
+                    ctx["features"][key] = ts_enrich[key]
+            logger.info("[v3] Tushare 增强完成: %s",
+                        [k for k in ("tushare_factors","tushare_cyq","tushare_moneyflow","tushare_holders") if k in ts_enrich])
+            # 回写 analysis_context.json(含增强数据, 方便下游复用)
+            ctx_path.write_text(json.dumps(ctx, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning("[v3] Tushare 增强失败(非致命, 继续): %s", e)
+
     # ── Phase 0: 量化事实层 ──
     logger.info("[v3] Phase 0: 生成 6 份客观报告")
     bundle = build_all_reports(symbol, name, ctx)

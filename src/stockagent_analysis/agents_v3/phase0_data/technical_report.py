@@ -27,9 +27,59 @@ def build_technical_report(symbol: str, name: str, ctx: dict[str, Any]) -> str:
         f"- 60 日最大回撤: {fmt_pct(features.get('drawdown_60'))}",
         f"- 量比(5/20): {fmt_num(features.get('volume_ratio_5_20'))}",
         f"- 趋势强度: {fmt_pct(features.get('trend_strength'))}",
-        "",
-        "### 多周期技术指标",
     ]
+
+    # --- Tushare 预计算技术指标(qfq, 更权威) ---
+    tsf = features.get("tushare_factors") or {}
+    if tsf:
+        lines.append("")
+        lines.append("### Tushare 预计算指标 (qfq 前复权)")
+        lines.append(f"- 交易日: {tsf.get('trade_date')}  收盘: {fmt_num(tsf.get('close_qfq'))} ")
+        lines.append(
+            f"- 均线: MA5={fmt_num(tsf.get('ma5'))} / MA10={fmt_num(tsf.get('ma10'))} / "
+            f"MA20={fmt_num(tsf.get('ma20'))} / MA60={fmt_num(tsf.get('ma60'))} / "
+            f"MA90={fmt_num(tsf.get('ma90'))} / MA250={fmt_num(tsf.get('ma250'))}"
+        )
+        lines.append(
+            f"- EMA: 5={fmt_num(tsf.get('ema5'))} / 20={fmt_num(tsf.get('ema20'))} / "
+            f"60={fmt_num(tsf.get('ema60'))}"
+        )
+        lines.append(
+            f"- 布林带: 上={fmt_num(tsf.get('boll_upper'))} / 中={fmt_num(tsf.get('boll_mid'))} / "
+            f"下={fmt_num(tsf.get('boll_lower'))}"
+        )
+        lines.append(
+            f"- MACD: DIF={fmt_num(tsf.get('macd_dif'), 3)} DEA={fmt_num(tsf.get('macd_dea'), 3)} "
+            f"Hist={fmt_num(tsf.get('macd_hist'), 3)}"
+        )
+        lines.append(
+            f"- KDJ: K={fmt_num(tsf.get('kdj_k'), 1)} D={fmt_num(tsf.get('kdj_d'), 1)} "
+            f"J={fmt_num(tsf.get('kdj_j'), 1)}"
+        )
+        lines.append(
+            f"- RSI: 6日={fmt_num(tsf.get('rsi6'), 1)} / 12日={fmt_num(tsf.get('rsi12'), 1)} / "
+            f"24日={fmt_num(tsf.get('rsi24'), 1)}"
+        )
+        lines.append(
+            f"- DMI 趋势强度: ADX={fmt_num(tsf.get('dmi_adx'), 1)} (>25 趋势明显)  "
+            f"+DI={fmt_num(tsf.get('dmi_pdi'), 1)} / -DI={fmt_num(tsf.get('dmi_mdi'), 1)}"
+        )
+        lines.append(
+            f"- BIAS: 1={fmt_num(tsf.get('bias1'))} / 2={fmt_num(tsf.get('bias2'))} / "
+            f"3={fmt_num(tsf.get('bias3'))}"
+        )
+        lines.append(
+            f"- 其他: CCI={fmt_num(tsf.get('cci'))}  MFI={fmt_num(tsf.get('mfi'))}  "
+            f"WR={fmt_num(tsf.get('wr'))}  ATR={fmt_num(tsf.get('atr'), 3)}  "
+            f"TRIX={fmt_num(tsf.get('trix'), 3)}"
+        )
+        lines.append(
+            f"- 连续: 涨 {tsf.get('updays', 0):.0f} 日 / 跌 {tsf.get('downdays', 0):.0f} 日  "
+            f"(历史高 {tsf.get('topdays', 0):.0f} 日 / 低 {tsf.get('lowdays', 0):.0f} 日)"
+        )
+
+    lines.append("")
+    lines.append("### 多周期技术指标 (本地计算 · 日/周/月对比)")
 
     for tf in ("day", "week", "month"):
         td = kli.get(tf, {}) if isinstance(kli, dict) else {}
