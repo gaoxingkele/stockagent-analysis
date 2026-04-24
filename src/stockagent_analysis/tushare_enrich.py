@@ -413,6 +413,8 @@ def compute_quant_score(enrich: dict[str, Any]) -> dict[str, Any]:
             pass
 
     # 4. 股东户数变化%(首期→末期)
+    # guard: |pct| > 500% 视为异常(通常是新股首期披露基数极小,
+    #         如科创板/北交所新股上市首季披露 1000 户, 第二季 60 万户 → +59000%)
     holders = enrich.get("tushare_holders") or []
     if isinstance(holders, list) and len(holders) >= 2:
         try:
@@ -420,7 +422,10 @@ def compute_quant_score(enrich: dict[str, Any]) -> dict[str, Any]:
             last = float(holders[-1].get("holder_num") or 0)
             if first > 0:
                 pct = (last - first) / first * 100
-                if pct <= -5:
+                if abs(pct) > 500:
+                    # 异常数据,跳过不打分(新股基数过小导致的虚假信号)
+                    pass
+                elif pct <= -5:
                     _add("holders", +8.0, f"股东户数 {pct:+.1f}% (筹码集中利好)")
                 elif pct <= -2:
                     _add("holders", +4.0, f"股东户数 {pct:+.1f}% (轻度集中)")
