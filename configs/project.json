@@ -17,11 +17,13 @@
     "mode": "combined",
     "default_sources": [
       "tushare",
-      "akshare"
+      "akshare",
+      "tdx"
     ],
     "fallback_order": [
       "tushare",
-      "akshare"
+      "akshare",
+      "tdx"
     ]
   },
   "llm": {

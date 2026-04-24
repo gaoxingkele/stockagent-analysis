@@ -321,7 +321,7 @@ def run_analysis_v3(
         from ..config_loader import load_project_config
         _proj_root = Path(__file__).resolve().parent.parent.parent.parent
         _cfg = load_project_config(_proj_root)
-        _backend_cfg = _cfg.get("data_backend", {"mode": "multi", "default_sources": ["tdx", "akshare", "tushare"]})
+        _backend_cfg = _cfg.get("data_backend", {"mode": "multi", "default_sources": ["tushare", "akshare", "tdx"]})
         backend = DataBackend(mode=_backend_cfg["mode"],
                                default_sources=_backend_cfg["default_sources"])
         logger.info("[v3] Phase -1: 数据采集中(sources=%s)...", _backend_cfg["default_sources"])
