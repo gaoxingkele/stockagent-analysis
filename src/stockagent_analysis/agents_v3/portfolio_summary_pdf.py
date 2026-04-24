@@ -375,18 +375,22 @@ def _render_one_card(flow, r: dict, rank: int, st_h2, st_body, group: str,
     judge_adj = sc.get("judge_adj", 0)
     risk_mapped = sc.get("risk_mapped", 0)
     bonus = sc.get("consensus_bonus", 0)
+    quant_score = sc.get("quant_score")   # v3.1 量化分, 若无 Tushare 数据则为 None
 
-    # Row 1: 代码/名称/综合/量化/辩论/风控/等级
+    # Row 1: 代码/名称/综合/专家/辩论/风控/量化/等级
+    # (奖励 bonus 移到 dissent 行末尾显示; "量化"位改为展示 v3.1 quant_score)
     row1_header = [
         _c("#" + str(rank), size=8.5, color="#888", align=1),
         _c(f"{symbol}  {name}", bold=True, size=10.5, color="#111"),
         _c("综合", size=8, color="#666", align=1),
-        _c("量化", size=8, color="#666", align=1),
+        _c("专家", size=8, color="#666", align=1),
         _c("辩论", size=8, color="#666", align=1),
         _c("风控", size=8, color="#666", align=1),
-        _c("奖励", size=8, color="#666", align=1),
+        _c("量化", size=8, color="#666", align=1),
         _c("等级", size=8, color="#666", align=1),
     ]
+    quant_display = f"{quant_score:.1f}" if quant_score is not None else "-"
+    quant_color = _score_color(quant_score) if quant_score is not None else "#AAA"
     row1_vals = [
         _c("", size=7),   # 占位
         _c("", size=7),
@@ -394,7 +398,7 @@ def _render_one_card(flow, r: dict, rank: int, st_h2, st_body, group: str,
         _c(f"{expert_avg:.1f}", size=10, color=_score_color(expert_avg), align=1),
         _c(f"{judge_adj:.1f}", size=10, color=_score_color(judge_adj), align=1),
         _c(f"{risk_mapped:.1f}", size=10, color=_score_color(risk_mapped), align=1),
-        _c(f"{bonus:+.1f}" if bonus else "0", size=9, color="#888", align=1),
+        _c(quant_display, size=10, color=quant_color, align=1),
         _c(level_cn, bold=True, size=10, color=level_color, align=1),
     ]
     # 入场方案
@@ -480,6 +484,10 @@ def _render_one_card(flow, r: dict, rank: int, st_h2, st_body, group: str,
         dissent_text = f"✓ 专家共识良好  μ={expert_avg:.1f} / 中位={expert_median:.1f} / σ={expert_std:.1f}"
         dissent_color = "#27AE60"    # 绿
         dissent_bold = False
+
+    # 附加一致性奖励信息 (原独立列,现并入 dissent 行末尾)
+    if bonus:
+        dissent_text += f"  ·  一致性奖励 {bonus:+.1f}"
 
     dissent_style = _PS(
         "dissent", fontName=_CURRENT_BOLD if dissent_bold else _CURRENT_BODY,
