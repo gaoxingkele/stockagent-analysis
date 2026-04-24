@@ -249,16 +249,26 @@ def _section_executive_summary(flow, result, st_h1, st_body, body_font, bold_fon
     tp = result.get("trading_plan") or {}
     rp = result.get("risk_policy") or {}
 
-    # 评分拆解
+    # 评分拆解 - 根据公式版本动态选择权重
+    has_quant = sc.get("quant_score") is not None
+    if has_quant:
+        decomp = [
+            ("expert_consensus", 0.43, "FOMC 共识分(中位数-分歧惩罚)"),
+            ("judge_adj", 0.275, "Judge 仲裁分(强信号放大后)"),
+            ("risk_mapped", 0.155, "PM 风险映射分"),
+            ("quant_score", 0.14, "Tushare 量化 4 维(ADX/筹码/主力/股东)"),
+        ]
+    else:
+        decomp = [
+            ("expert_avg", 0.50, "4 位专家平均分"),
+            ("judge_adj",  0.32, "Judge 仲裁分(强信号放大后)"),
+            ("risk_mapped", 0.18, "PM 风险映射分"),
+        ]
     header = _cs(["分量", "评分", "权重", "加权贡献", "说明"], bold=True, size=9.5)
     rows = [header]
-    for key, w, desc in [
-        ("expert_avg", 0.50, "4 位专家平均分"),
-        ("judge_adj",  0.32, "Judge 仲裁分(强信号放大后)"),
-        ("risk_mapped", 0.18, "PM 风险映射分"),
-    ]:
+    for key, w, desc in decomp:
         v = float(sc.get(key, 0))
-        rows.append(_cs([key, f"{v:.2f}", f"{w:.2f}", f"{v*w:.2f}", desc], size=9))
+        rows.append(_cs([key, f"{v:.2f}", f"{w:.3f}", f"{v*w:.2f}", desc], size=9))
     bonus = float(sc.get("consensus_bonus", 0))
     rows.append(_cs(["一致性奖励", f"{bonus:+.2f}", "-", f"{bonus:+.2f}",
                         sc.get("bonus_reason", "")], size=9))
@@ -623,12 +633,19 @@ def _section_appendix(flow, result, st_h1, st_h2, st_body, body_font, bold_font)
     flow.append(Paragraph("附录 · 融合公式与架构说明", st_h1))
     cfg = result.get("config") or {}
 
-    flow.append(Paragraph("评分融合公式", st_h2))
+    flow.append(Paragraph("评分融合公式 (v3.1)", st_h2))
     formula = (
-        "<b>final = 0.50·expert_avg + 0.32·judge_adj + 0.18·risk_mapped + consensus_bonus</b><br/>"
-        "• expert_avg = 4 位 Phase 1 专家评分算术平均(0-100)<br/>"
-        "• judge_adj = Judge.overall_score × 1.08 (BUY+conf≥0.65) 或 ×0.92 (SELL+conf≥0.65), 否则原值<br/>"
+        "<b>final = 0.43·expert_consensus + 0.275·judge_adj + 0.155·risk_mapped "
+        "+ 0.14·quant_score + consensus_bonus</b><br/>"
+        "(若无 Tushare 数据则退化为 0.50/0.32/0.18 三因子 v3.0 公式)<br/>"
+        "• expert_consensus = FOMC 中位数 - 均值偏离惩罚(最多 -3)<br/>"
+        "• judge_adj = judge_raw×0.65 + expert_consensus×0.15 + 方向置信偏移 + 论据质量加成<br/>"
         "• risk_mapped = 20 + max_position_ratio × 60 + rating_bonus(低:+8/中:0/高:-10)<br/>"
+        "• <b>quant_score (新)</b> = 50 基准 + 4 维 Tushare 因子累加:<br/>"
+        "&nbsp;&nbsp;&nbsp;- ADX 趋势强度 [-8, +10]  (30+ 强趋势顺势/25+ 中趋势/20- 震荡)<br/>"
+        "&nbsp;&nbsp;&nbsp;- winner_rate 获利盘 [-10, +12]  (≤20% 底部/≥85% 顶部)<br/>"
+        "&nbsp;&nbsp;&nbsp;- 10 日主力资金 [-10, +10]  (±5000 万为分界, ±1000 万为次级)<br/>"
+        "&nbsp;&nbsp;&nbsp;- 股东户数季度变化 [-6, +8]  (-5% 集中利好/+5% 分散利空)<br/>"
         "• consensus_bonus = Judge+Trader 共识 BUY: +5, 共识 SELL: -5, 冲突: -4, HOLD: 0"
     )
     flow.append(Paragraph(formula, st_body))

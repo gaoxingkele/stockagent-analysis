@@ -328,6 +328,120 @@ def summarize_cyq(cyq_rows: list[dict]) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────
+# Quant Score - 4 维 deterministic 量化打分 (ADX/winner/mainflow/holders)
+# ─────────────────────────────────────────────────────────────────
+
+def compute_quant_score(enrich: dict[str, Any]) -> dict[str, Any]:
+    """基于 Tushare 增强数据打 4 维量化分(50 中性 ±30)。
+
+    因子设计:
+      1. ADX 趋势强度        范围 [-8, +10]   (阈值 20/25/30, 区分方向)
+      2. winner_rate 筹码     范围 [-10, +12] (<=20 深度套牢加分, >=85 顶部扣分)
+      3. sum_Nd_main_net      范围 [-10, +10] (超大+大单累计, 单位万元)
+      4. holder_num 变化%     范围 [-6, +8]   (同比减少=筹码集中利好)
+
+    有数据才打分的因子才累加; 缺数据则不参与不惩罚。
+    总偏移累加到 50 基准上, clamp 到 [0, 100]。
+
+    Returns:
+        {
+          "quant_score": float,           # 最终 0-100 分
+          "total_delta": float,           # 累计偏移
+          "adjustments": list[dict],      # 每个因子的 delta+reason
+          "has_data": bool,               # 是否至少命中一个因子
+        }
+    """
+    adjustments: list[dict] = []
+
+    def _add(factor: str, delta: float, reason: str):
+        adjustments.append({"factor": factor, "delta": round(delta, 2), "reason": reason})
+
+    # 1. ADX 趋势强度
+    tsf = enrich.get("tushare_factors") or {}
+    adx, pdi, mdi = tsf.get("dmi_adx"), tsf.get("dmi_pdi"), tsf.get("dmi_mdi")
+    if adx is not None and pdi is not None and mdi is not None:
+        try:
+            adx_f, pdi_f, mdi_f = float(adx), float(pdi), float(mdi)
+            up = pdi_f > mdi_f
+            if adx_f >= 30 and up:
+                _add("adx", +10.0, f"强趋势向上 ADX={adx_f:.1f} +DI>-DI")
+            elif adx_f >= 25 and up:
+                _add("adx", +6.0, f"趋势向上 ADX={adx_f:.1f}")
+            elif adx_f >= 25 and not up:
+                _add("adx", -8.0, f"强趋势向下 ADX={adx_f:.1f} -DI>+DI")
+            elif adx_f < 20:
+                _add("adx", -2.0, f"无趋势震荡 ADX={adx_f:.1f}")
+        except (ValueError, TypeError):
+            pass
+
+    # 2. winner_rate 筹码获利盘
+    cyq = enrich.get("tushare_cyq") or {}
+    wr = cyq.get("winner_rate")
+    if wr is not None:
+        try:
+            wr_f = float(wr)
+            if wr_f <= 20:
+                _add("winner_rate", +12.0, f"深度套牢 winner={wr_f:.1f}% (底部筹码利好)")
+            elif wr_f <= 35:
+                _add("winner_rate", +6.0, f"多数套牢 winner={wr_f:.1f}%")
+            elif wr_f >= 85:
+                _add("winner_rate", -10.0, f"获利盘过高 winner={wr_f:.1f}% (顶部风险)")
+            elif wr_f >= 75:
+                _add("winner_rate", -5.0, f"获利盘偏高 winner={wr_f:.1f}%")
+        except (ValueError, TypeError):
+            pass
+
+    # 3. N 日主力资金累计(大+超大单)
+    mf = enrich.get("tushare_moneyflow") or {}
+    main_net = None
+    for k, v in mf.items():
+        if k.startswith("sum_") and k.endswith("d_main_net"):
+            main_net = v
+            break
+    if main_net is not None:
+        try:
+            mn = float(main_net)
+            if mn >= 5000:
+                _add("main_net", +10.0, f"主力大幅净流入 {mn:.0f} 万")
+            elif mn >= 1000:
+                _add("main_net", +5.0, f"主力净流入 {mn:.0f} 万")
+            elif mn <= -5000:
+                _add("main_net", -10.0, f"主力大幅净流出 {mn:.0f} 万")
+            elif mn <= -1000:
+                _add("main_net", -5.0, f"主力净流出 {mn:.0f} 万")
+        except (ValueError, TypeError):
+            pass
+
+    # 4. 股东户数变化%(首期→末期)
+    holders = enrich.get("tushare_holders") or []
+    if isinstance(holders, list) and len(holders) >= 2:
+        try:
+            first = float(holders[0].get("holder_num") or 0)
+            last = float(holders[-1].get("holder_num") or 0)
+            if first > 0:
+                pct = (last - first) / first * 100
+                if pct <= -5:
+                    _add("holders", +8.0, f"股东户数 {pct:+.1f}% (筹码集中利好)")
+                elif pct <= -2:
+                    _add("holders", +4.0, f"股东户数 {pct:+.1f}% (轻度集中)")
+                elif pct >= 5:
+                    _add("holders", -6.0, f"股东户数 {pct:+.1f}% (筹码分散利空)")
+                elif pct >= 2:
+                    _add("holders", -3.0, f"股东户数 {pct:+.1f}% (轻度分散)")
+        except (ValueError, TypeError, AttributeError):
+            pass
+
+    total_delta = sum(a["delta"] for a in adjustments)
+    quant_score = max(0.0, min(100.0, 50.0 + total_delta))
+    return {
+        "quant_score": round(quant_score, 2),
+        "total_delta": round(total_delta, 2),
+        "adjustments": adjustments,
+        "has_data": bool(adjustments),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────
 # 主入口
 # ─────────────────────────────────────────────────────────────────
 

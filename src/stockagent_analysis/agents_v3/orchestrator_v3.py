@@ -55,21 +55,23 @@ def _compose_final_score(
     investment_plan: InvestmentPlan,
     trading_plan: TradingPlan,
     risk_policy: RiskPolicy,
+    ts_enrich: dict[str, Any] | None = None,
 ) -> tuple[float, dict[str, float]]:
     """融合专家+Judge+Trader+PM 产出最终评分(v3 融合公式)。
 
     改进点(v3, 2026-04-19):
     1. Risk 映射拉伸: [38,73] → [20,85] (仓位跨度更大)
-    2. Judge 分重构 judge_adj 为辩论综合质量分, 避免 LLM 心理挡位扎堆:
-       - overall_score 基底 × 0.65
-       - expert_avg 融合 × 0.15 (借 Expert 分散度冲击 Judge 集中性)
-       - confidence 偏移 ±方向性(BUY 加/SELL 减)
-       - winning_points 条数 × 1.5 (胜方论据数量)
-       - key_reasons 文本量加成 (论据详尽度)
+    2. Judge 分重构 judge_adj 为辩论综合质量分, 避免 LLM 心理挡位扎堆
     3. 三层方向一致性奖励: Judge/Trader/PM 共识时 +5 或 -5
     4. 冲突惩罚: Judge vs Trader 方向相反时 -4(降低置信)
 
-    融合系数: α=0.50·expert + β=0.32·judge_adj + γ=0.18·risk + bonus
+    改进点(v3.1, 2026-04-24, quant_score):
+    5. 引入 deterministic 量化分 quant_score (ADX/winner_rate/主力资金/股东户数)
+       权重选择: q=0.14 (sweep 显示 0.10 太温和/0.18 过激 → 0.14 最佳平衡)
+       其他三项按原 50:32:18 比例保留, 共占 0.86
+       - 有 Tushare 数据: final = 0.43·expert + 0.275·judge + 0.155·risk + 0.14·quant + bonus
+       - 无 Tushare 数据: 退化为原公式 0.50/0.32/0.18
+
     """
     # FOMC 点阵图模式: 收集 4 专家详情, 计算均值/中位数/分歧度/异议
     expert_details = []
@@ -178,11 +180,37 @@ def _compose_final_score(
         bonus = -4.0
         bonus_reason = f"Judge({j_dir}) vs Trader({t_dir}) 冲突"
 
-    # 4) 最终融合(用 FOMC 共识分替代均值)
-    final_raw = 0.50 * expert_consensus + 0.32 * judge_adj + 0.18 * risk_mapped + bonus
+    # 4) Quant 量化信号分(Tushare 4 维 deterministic)
+    quant_score = None
+    quant_info: dict[str, Any] = {}
+    if ts_enrich:
+        try:
+            from ..tushare_enrich import compute_quant_score
+            quant_info = compute_quant_score(ts_enrich)
+            if quant_info.get("has_data"):
+                quant_score = float(quant_info["quant_score"])
+        except Exception as e:
+            logger.warning("[v3] quant_score 计算失败(非致命): %s", e)
+
+    # 5) 最终融合
+    if quant_score is not None:
+        # 四因子: 0.43 + 0.275 + 0.155 + 0.14 = 1.00
+        # (其他三项按原 50:32:18 比例保留 0.86, quant 占 0.14)
+        final_raw = (
+            0.43 * expert_consensus
+            + 0.275 * judge_adj
+            + 0.155 * risk_mapped
+            + 0.14 * quant_score
+            + bonus
+        )
+        formula_used = "v3.1_quant"
+    else:
+        # 退化为原三因子公式
+        final_raw = 0.50 * expert_consensus + 0.32 * judge_adj + 0.18 * risk_mapped + bonus
+        formula_used = "v3.0_legacy"
     final = round(max(0.0, min(100.0, final_raw)), 2)
 
-    return final, {
+    components = {
         "expert_avg": round(expert_avg, 2),
         "expert_median": round(expert_median, 2),
         "expert_std": round(expert_std, 2),
@@ -195,7 +223,12 @@ def _compose_final_score(
         "consensus_bonus": round(bonus, 2),
         "bonus_reason": bonus_reason,
         "final_score": final,
+        "formula": formula_used,
     }
+    if quant_score is not None:
+        components["quant_score"] = round(quant_score, 2)
+        components["quant_components"] = quant_info
+    return final, components
 
 
 def _decide_level(final_score: float, trader_decision: str) -> tuple[str, str]:
@@ -284,18 +317,28 @@ def run_analysis_v3(
         else:
             raise FileNotFoundError(f"复用路径不存在: {src}")
     else:
-        backend = DataBackend()
-        logger.info("[v3] Phase -1: 数据采集中...")
-        ctx = backend.collect_and_save_context(symbol, name, str(run_dir))
+        # 从 project.json 加载 DataBackend 配置(和 v2 一致)
+        from ..config_loader import load_project_config
+        _proj_root = Path(__file__).resolve().parent.parent.parent.parent
+        _cfg = load_project_config(_proj_root)
+        _backend_cfg = _cfg.get("data_backend", {"mode": "multi", "default_sources": ["tdx", "akshare", "tushare"]})
+        backend = DataBackend(mode=_backend_cfg["mode"],
+                               default_sources=_backend_cfg["default_sources"])
+        logger.info("[v3] Phase -1: 数据采集中(sources=%s)...", _backend_cfg["default_sources"])
+        ctx = backend.collect_and_save_context(
+            symbol, name, str(run_dir),
+            preferred_sources=_backend_cfg.get("default_sources", []),
+        )
 
     if not name:
         name = (ctx.get("snapshot", {}) or {}).get("name", "")
 
     # ── Tushare 高级数据增强 (真实筹码/主力资金/技术因子) ──
+    ts_enrich: dict[str, Any] = {}
     try:
         from ..tushare_enrich import enrich_with_tushare
         logger.info("[v3] Tushare 增强: 拉取 stk_factor_pro/cyq_perf/moneyflow...")
-        ts_enrich = enrich_with_tushare(symbol, run_dir=run_dir, use_cache=True)
+        ts_enrich = enrich_with_tushare(symbol, run_dir=run_dir, use_cache=True) or {}
         # 并入 ctx.features 供 Phase 0 报告使用
         if ts_enrich:
             ctx.setdefault("features", {})
@@ -391,7 +434,9 @@ def run_analysis_v3(
 
     # ── Phase 5: 综合评分 + 最终决策 ──
     final_score, score_components = _compose_final_score(
-        experts, investment_plan, trading_plan, risk_policy)
+        experts, investment_plan, trading_plan, risk_policy,
+        ts_enrich=ts_enrich if ts_enrich else None,
+    )
     final_decision, decision_level = _decide_level(final_score, trading_plan.final_decision)
 
     result = {
@@ -493,7 +538,12 @@ def _build_markdown_report(result: dict[str, Any], bundle: ReportBundle,
         f"## 最终决策",
         f"- **综合评分**: {result['final_score']}",
         f"- **最终决策**: {result['final_decision'].upper()} ({result['decision_level']})",
-        f"- **评分拆解**: 专家均值 {sc['expert_avg']} × 0.5 + Judge {sc['judge_score']} × 0.3 + 风控 {sc['risk_mapped']} × 0.2",
+        (f"- **评分拆解**: 共识 {sc.get('expert_consensus', sc.get('expert_avg', 0))} × 0.43"
+         f" + Judge {sc.get('judge_adj', sc.get('judge_score', 0))} × 0.275"
+         f" + 风控 {sc.get('risk_mapped', 0)} × 0.155"
+         f" + 量化 {sc.get('quant_score', 'N/A')} × 0.14"
+         if sc.get("quant_score") is not None
+         else f"- **评分拆解**: 专家均值 {sc['expert_avg']} × 0.5 + Judge {sc['judge_score']} × 0.3 + 风控 {sc['risk_mapped']} × 0.2"),
         f"",
         f"## Phase 2 研究主管 investment_plan",
         f"- 方向: **{ip.get('direction')}**  置信度: {ip.get('confidence')}  胜方: {ip.get('winner')}",
