@@ -4,16 +4,25 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# 项目根目录 .env (web/app/config.py → web/app → web → project_root)
-_ROOT_ENV = Path(__file__).resolve().parent.parent.parent / ".env"
+# 项目根目录 (web/app/config.py → web/app → web → project_root)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_ROOT_ENV = _PROJECT_ROOT / ".env"
+_ROOT_ENV_CLOUBIC = _PROJECT_ROOT / ".env.cloubic"
+
+# 把根目录两个 .env 文件写入 os.environ, 供 stockagent_analysis 的
+# os.getenv() 调用直接读取 (pydantic-settings 只填自身字段, 不写 os.environ)
+# override=False: 系统已有的环境变量不被覆盖
+load_dotenv(_ROOT_ENV, override=False)
+load_dotenv(_ROOT_ENV_CLOUBIC, override=False)
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        # 先加载根目录 .env, 再加载 web/.env 作为覆盖(如不存在则忽略)
-        env_file=[str(_ROOT_ENV), ".env"],
+        # pydantic-settings 同步读一遍(供 settings.xxx 属性访问)
+        env_file=[str(_ROOT_ENV), str(_ROOT_ENV_CLOUBIC), ".env"],
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
