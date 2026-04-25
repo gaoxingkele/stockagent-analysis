@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.analyze') }}{% endblock %}
+{% block content %}
+<div class="grid gap-6 max-w-3xl mx-auto" x-data="{ symbols: '600519\n300750\n', preview: null, loading: false, force: {} }">
+  <h1 class="text-2xl font-semibold">{{ t('nav.analyze') }}</h1>
+
+  <div class="card p-6">
+    <label class="block text-sm text-text-muted mb-2">{{ t('analyze.symbols_input') }}</label>
+    <textarea x-model="symbols" rows="6" class="w-full font-mono text-sm" placeholder="600519&#10;300750&#10;002594"></textarea>
+    <div class="flex gap-2 mt-3">
+      <button @click="doPreview()" :disabled="loading" class="btn btn-ghost">{{ t('analyze.preview') }}</button>
+    </div>
+  </div>
+
+  <!-- 预览结果 -->
+  <div x-show="preview" class="card p-6" style="display:none">
+    <h3 class="text-base font-medium mb-3">扣分明细</h3>
+    <table class="w-full text-sm">
+      <thead><tr class="text-text-muted text-xs border-b border-line">
+        <th class="text-left py-2">代码</th><th class="text-left">类型</th><th class="text-left">扣分</th><th class="text-left">最近 LLM 评分</th><th class="text-left">操作</th>
+      </tr></thead>
+      <tbody>
+        <template x-for="item in (preview ? preview.items : [])" :key="item.symbol">
+          <tr class="border-b border-line/50">
+            <td class="py-2.5 font-mono" x-text="item.symbol"></td>
+            <td>
+              <span class="badge"
+                :class="item.type === 'full' ? 'badge-accent' : item.type === 'cache_hit' ? 'badge-warn' : 'badge-success'"
+                x-text="item.type === 'full' ? '{{ t('analyze.type_full') }}' : item.type === 'cache_hit' ? '{{ t('analyze.type_cache') }}' : '{{ t('analyze.type_quant') }}'"></span>
+            </td>
+            <td><span x-text="item.points + ' pt'"></span></td>
+            <td class="text-text-muted text-xs">
+              <span x-show="item.last_full_score" x-text="item.last_full_score?.toFixed(1)"></span>
+              <span x-show="!item.last_full_score" class="text-text-dim">从未评分</span>
+            </td>
+            <td>
+              <label x-show="item.type !== 'full' || item.type === 'cache_hit'" class="text-xs text-text-muted cursor-pointer">
+                <input type="checkbox" :checked="force[item.symbol]" @change="toggleForce(item.symbol)" class="mr-1">
+                {{ t('analyze.force_full') }}
+              </label>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+
+    <div class="mt-4 flex items-center justify-between border-t border-line pt-4">
+      <div class="text-sm">
+        共需 <span class="text-accent font-medium" x-text="preview.total_points + ' 积分'"></span>
+        <span class="text-text-muted">· 你有 <span x-text="preview.user_points"></span></span>
+      </div>
+      <button @click="submit()" :disabled="!preview.enough || loading" class="btn btn-primary">
+        <span x-show="preview.enough">{{ t('analyze.submit') }}</span>
+        <span x-show="!preview.enough" class="text-danger">积分不足</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+function getData() {
+  return Alpine.$data(document.querySelector('[x-data]'));
+}
+async function doPreview() {
+  const s = getData();
+  const symbols = s.symbols.split(/[\n,，\s]+/).filter(Boolean);
+  if (symbols.length === 0) return;
+  s.loading = true;
+  const force_full = Object.keys(s.force).filter(k => s.force[k]);
+  const r = await fetch('/api/analyze/preview', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({symbols, force_full})});
+  s.preview = await r.json();
+  s.loading = false;
+}
+function toggleForce(sym) {
+  const s = getData();
+  s.force[sym] = !s.force[sym];
+  doPreview();
+}
+async function submit() {
+  const s = getData();
+  s.loading = true;
+  const symbols = s.symbols.split(/[\n,，\s]+/).filter(Boolean);
+  const force_full = Object.keys(s.force).filter(k => s.force[k]);
+  const r = await fetch('/api/analyze', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({symbols, force_full})});
+  const d = await r.json();
+  if (r.ok) location.href = '/jobs/' + d.job_id;
+  else alert(d.detail || '提交失败');
+  s.loading = false;
+}
+</script>
+{% endblock %}

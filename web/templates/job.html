@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}任务 #{{ job_id }}{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto" x-data="jobView({{ job_id }})" x-init="load()">
+  <h1 class="text-2xl font-semibold mb-6">任务 #{{ job_id }}</h1>
+
+  <div class="card p-6 mb-6" x-show="job">
+    <div class="flex items-center justify-between">
+      <div>
+        <div class="text-sm text-text-muted">提交时间 · <span x-text="job?.created_at"></span></div>
+        <div class="mt-1">扣分 <span class="text-accent font-medium" x-text="job?.total_points_charged"></span> · 状态 <span class="badge badge-accent" x-text="job?.status"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 每只股票卡片 + SSE 实时进度 -->
+  <div class="space-y-4">
+    <template x-for="r in (job?.breakdown || [])" :key="r.id">
+      <div class="card p-5">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <span class="text-lg font-mono" x-text="r.symbol"></span>
+            <span class="badge"
+                  :class="r.type === 'full' ? 'badge-accent' : r.type === 'quant_only' ? 'badge-success' : 'badge-warn'"
+                  x-text="r.type"></span>
+            <span class="text-text-muted text-sm" x-text="r.is_cache_hit ? '(缓存)' : ''"></span>
+          </div>
+          <div class="text-right">
+            <span class="text-2xl font-semibold"
+                  :class="(r.final_score >= 70) ? 'text-success' : (r.final_score >= 50) ? 'text-warn' : 'text-danger'"
+                  x-text="r.final_score?.toFixed(1) || '...'"></span>
+            <div class="text-xs text-text-muted" x-text="r.decision_level || ''"></div>
+          </div>
+        </div>
+
+        <div class="progress mb-2"><div :style="`width:${r.progress_pct}%`"></div></div>
+        <div class="text-xs text-text-muted flex justify-between">
+          <span x-text="r.current_phase || 'queued'"></span>
+          <span x-text="r.progress_pct + '%'"></span>
+        </div>
+
+        <!-- SSE 实时事件流 -->
+        <div :id="'sse-log-' + r.id" class="mt-3 max-h-32 overflow-y-auto text-xs font-mono text-text-muted space-y-1"></div>
+
+        <div class="mt-3 flex gap-2" x-show="r.status === 'done' || r.status === 'failed'">
+          <a :href="'/results/' + r.id" class="btn btn-ghost text-xs">查看详情</a>
+        </div>
+
+        <div x-show="r.error_message" class="mt-3 text-xs text-danger" x-text="r.error_message"></div>
+      </div>
+    </template>
+  </div>
+</div>
+
+<script>
+function jobView(jobId) {
+  return {
+    job: null,
+    sources: {},
+    async load() {
+      const r = await fetch('/api/jobs/' + jobId, {credentials:'include'});
+      this.job = await r.json();
+      // 对未完成的开 SSE
+      this.job.breakdown.forEach(item => {
+        if (item.status === 'queued' || item.status === 'running') {
+          this.openSSE(item.id);
+        }
+      });
+      // 5s 刷一次
+      if (this.job.breakdown.some(x => x.status === 'queued' || x.status === 'running')) {
+        setTimeout(() => this.load(), 5000);
+      }
+    },
+    openSSE(resultId) {
+      if (this.sources[resultId]) return;
+      const es = new EventSource('/api/results/' + resultId + '/stream');
+      this.sources[resultId] = es;
+      const log = document.getElementById('sse-log-' + resultId);
+      es.addEventListener('progress', (e) => {
+        const d = JSON.parse(e.data);
+        if (log) {
+          const line = document.createElement('div');
+          line.textContent = `[${d.percent}%] ${d.message}`;
+          log.appendChild(line);
+          log.scrollTop = log.scrollHeight;
+        }
+      });
+      es.addEventListener('done', (e) => { es.close(); delete this.sources[resultId]; });
+      es.addEventListener('failed', (e) => { es.close(); delete this.sources[resultId]; });
+    },
+  };
+}
+</script>
+{% endblock %}

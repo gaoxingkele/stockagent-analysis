@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ symbol }} 走势{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6">
+  <h1 class="text-2xl font-semibold font-mono">{{ symbol }} <span class="text-text-muted text-base">评分走势</span></h1>
+
+  <div class="card p-6">
+    <div id="chart" style="height:400px"></div>
+  </div>
+</div>
+
+<script>
+async function loadHistory() {
+  const r = await fetch('/api/stocks/{{ symbol }}/history?limit=100', {credentials:'include'});
+  const d = await r.json();
+  const items = d.items;
+  const fullPoints = items.filter(x => x.type === 'full').map(x => [x.created_at, x.final_score]);
+  const quantPoints = items.filter(x => x.type === 'quant_only').map(x => [x.created_at, x.final_score]);
+
+  const chart = echarts.init(document.getElementById('chart'), 'dark');
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {trigger: 'axis'},
+    legend: {data: ['LLM 全量', '量化跟踪'], textStyle: {color: '#8A8F9A'}},
+    grid: {left: 50, right: 30, top: 40, bottom: 40},
+    xAxis: {type: 'time', axisLine: {lineStyle: {color: '#2A2F3D'}}},
+    yAxis: {type: 'value', min: 0, max: 100, axisLine: {lineStyle: {color: '#2A2F3D'}},
+            splitLine: {lineStyle: {color: '#1F2430'}}},
+    series: [
+      {name: 'LLM 全量', type: 'line', data: fullPoints, smooth: false,
+       itemStyle: {color: '#7B61FF'}, symbolSize: 8,
+       markLine: {data: [{yAxis: 70, lineStyle: {color: '#3FB950', type: 'dashed'}}]}},
+      {name: '量化跟踪', type: 'line', data: quantPoints, smooth: true,
+       itemStyle: {color: '#3FB950'}, symbolSize: 4, lineStyle: {width: 1}},
+    ],
+  });
+}
+loadHistory();
+</script>
+{% endblock %}

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{{ t('app.name') }}{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
+  <script src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            // Linear 风格基底
+            bg: { DEFAULT: '#0B0E14', card: '#10131A', hover: '#161A22' },
+            line: { DEFAULT: '#1F2430', strong: '#2A2F3D' },
+            text: { DEFAULT: '#E2E4EA', muted: '#8A8F9A', dim: '#5A5F6B' },
+            accent: { DEFAULT: '#7B61FF', hover: '#9075FF' },
+            success: '#3FB950',
+            warn: '#D29922',
+            danger: '#F85149',
+          },
+          fontFamily: {
+            sans: ['"Inter"', 'system-ui', '"PingFang SC"', '"Microsoft YaHei"', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: #0B0E14; color: #E2E4EA; font-feature-settings: 'cv11','ss01','ss03'; }
+    .card { background: #10131A; border: 1px solid #1F2430; border-radius: 12px; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 6px; font-size: 14px; font-weight: 500; transition: all .15s; }
+    .btn-primary { background: #7B61FF; color: #FFF; }
+    .btn-primary:hover { background: #9075FF; }
+    .btn-ghost { color: #E2E4EA; border: 1px solid #2A2F3D; }
+    .btn-ghost:hover { background: #161A22; }
+    input, textarea, select { background: #161A22; border: 1px solid #2A2F3D; border-radius: 6px; padding: 8px 12px; color: #E2E4EA; outline: none; }
+    input:focus, textarea:focus, select:focus { border-color: #7B61FF; }
+    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+    .badge-success { background: rgba(63,185,80,.12); color: #3FB950; }
+    .badge-warn { background: rgba(210,153,34,.12); color: #D29922; }
+    .badge-danger { background: rgba(248,81,73,.12); color: #F85149; }
+    .badge-accent { background: rgba(123,97,255,.12); color: #7B61FF; }
+    .progress { height: 4px; background: #1F2430; border-radius: 2px; overflow: hidden; }
+    .progress > div { height: 100%; background: linear-gradient(90deg, #7B61FF 0%, #9075FF 100%); transition: width .4s; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% if user %}
+  <nav class="border-b border-line bg-bg-card sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2">
+        <span class="text-lg font-semibold text-accent">▲</span>
+        <span class="text-sm font-medium">{{ t('app.name') }}</span>
+      </a>
+      <div class="flex items-center gap-1 text-sm">
+        <a href="/" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.dashboard') }}</a>
+        <a href="/analyze" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.analyze') }}</a>
+        <a href="/me/jobs" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.jobs') }}</a>
+        <a href="/me/transactions" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.transactions') }}</a>
+        <a href="/share" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.share') }}</a>
+        <a href="/system/health" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.health') }}</a>
+        {% if user.is_admin %}
+        <a href="/admin" class="px-3 py-1.5 rounded hover:bg-bg-hover text-warn">{{ t('nav.admin') }}</a>
+        {% endif %}
+      </div>
+      <div class="flex items-center gap-3 text-sm">
+        <span class="text-text-muted">{{ user.points }} pt</span>
+        <span class="text-text-muted">{{ user.phone[:3] }}****{{ user.phone[-4:] }}</span>
+        <select onchange="setLang(this.value)" class="text-xs py-1 px-2">
+          <option value="zh-CN" {% if lang=='zh-CN' %}selected{% endif %}>简体</option>
+          <option value="en-US" {% if lang=='en-US' %}selected{% endif %}>EN</option>
+          <option value="zh-TW" {% if lang=='zh-TW' %}selected{% endif %}>繁體</option>
+        </select>
+        <a href="#" onclick="logout()" class="text-text-muted hover:text-danger">{{ t('nav.logout') }}</a>
+      </div>
+    </div>
+  </nav>
+  {% endif %}
+
+  <main class="max-w-7xl mx-auto px-6 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script>
+    async function logout() {
+      await fetch('/api/auth/logout', {method: 'POST', credentials: 'include'});
+      location.href = '/login';
+    }
+    async function setLang(lang) {
+      await fetch('/api/i18n/set/' + lang, {method: 'POST', credentials: 'include'});
+      location.reload();
+    }
+    // 全局 fetch wrapper 自动带 cookie
+    window.api = async (url, options = {}) => {
+      const r = await fetch(url, {credentials: 'include', headers: {'Content-Type': 'application/json'}, ...options});
+      if (r.status === 401) { location.href = '/login'; return; }
+      return r;
+    };
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ result.symbol }} {{ result.name or '' }}{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-6">
+  <!-- 头部 -->
+  <div class="card p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-semibold font-mono">{{ result.symbol }}</h1>
+        <div class="text-text-muted mt-1">{{ result.name or '' }}
+          <span class="badge badge-accent ml-2">{{ result.analysis_type }}</span>
+          {% if result.is_cache_hit %}<span class="badge badge-warn ml-1">缓存命中</span>{% endif %}
+        </div>
+      </div>
+      <div class="text-right">
+        <div class="text-5xl font-semibold
+          {% if result.final_score and result.final_score >= 70 %}text-success
+          {% elif result.final_score and result.final_score >= 50 %}text-warn
+          {% else %}text-danger{% endif %}">
+          {{ "%.1f" % result.final_score if result.final_score else '-' }}
+        </div>
+        <div class="text-text-muted mt-1">{{ t('decision.' + (result.decision_level or 'hold')) }}</div>
+      </div>
+    </div>
+  </div>
+
+  {% if result.score_components_json %}
+  <div class="card p-6">
+    <h2 class="text-base font-medium mb-4">评分拆解 ({{ result.score_components_json.get('formula', 'v3.1_quant') }})</h2>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div>
+        <div class="text-text-muted text-xs">{{ t('result.expert_consensus') }}</div>
+        <div class="text-2xl font-semibold mt-1">{{ result.score_components_json.get('expert_consensus', '-') }}</div>
+      </div>
+      <div>
+        <div class="text-text-muted text-xs">{{ t('result.judge_adj') }}</div>
+        <div class="text-2xl font-semibold mt-1">{{ result.score_components_json.get('judge_adj', '-') }}</div>
+      </div>
+      <div>
+        <div class="text-text-muted text-xs">{{ t('result.risk_mapped') }}</div>
+        <div class="text-2xl font-semibold mt-1">{{ result.score_components_json.get('risk_mapped', '-') }}</div>
+      </div>
+      <div>
+        <div class="text-text-muted text-xs">{{ t('result.quant_score') }}</div>
+        <div class="text-2xl font-semibold mt-1 text-accent">{{ result.score_components_json.get('quant_score', '-') }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if result.quant_components_json and result.quant_components_json.get('adjustments') %}
+  <div class="card p-6">
+    <h2 class="text-base font-medium mb-4">量化 4 维明细</h2>
+    <div class="space-y-2">
+      {% for adj in result.quant_components_json['adjustments'] %}
+      <div class="flex items-center justify-between p-3 bg-bg-hover rounded">
+        <span class="text-sm font-mono text-text-muted">{{ adj['factor'] }}</span>
+        <span class="text-sm">{{ adj['reason'] }}</span>
+        <span class="text-base font-semibold {% if adj['delta'] > 0 %}text-success{% else %}text-danger{% endif %}">{{ "%+.1f" % adj['delta'] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if result.expert_scores_json %}
+  <div class="card p-6">
+    <h2 class="text-base font-medium mb-4">4 专家 FOMC</h2>
+    <pre class="text-xs text-text-muted overflow-auto">{{ result.expert_scores_json | tojson(indent=2) }}</pre>
+  </div>
+  {% endif %}
+
+  <!-- 走势链接 -->
+  <div class="card p-6">
+    <a href="/stock/{{ result.symbol }}/history" class="text-accent hover:underline">查看 {{ result.symbol }} 评分走势 →</a>
+  </div>
+</div>
+{% endblock %}

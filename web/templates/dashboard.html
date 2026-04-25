@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.dashboard') }}{% endblock %}
+{% block content %}
+<div class="grid gap-6">
+  <!-- 顶部数据卡片 -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="card p-5">
+      <div class="text-text-muted text-xs">{{ t('dashboard.points') }}</div>
+      <div class="text-3xl font-semibold mt-1">{{ user.points }}</div>
+      <div class="text-text-muted text-xs mt-2">邀请码: <code class="text-accent">{{ user.invite_code }}</code></div>
+    </div>
+    <div class="card p-5">
+      <div class="text-text-muted text-xs">已邀请</div>
+      <div class="text-3xl font-semibold mt-1">{{ user.invite_count }} 人</div>
+      <div class="text-text-muted text-xs mt-2">累计获 <span class="text-success">{{ user.invite_earned_points }}</span> 积分</div>
+    </div>
+    <div class="card p-5">
+      <div class="text-text-muted text-xs">系统状态</div>
+      <div class="text-3xl font-semibold mt-1 text-success">●</div>
+      <div class="text-text-muted text-xs mt-2"><a href="/system/health" class="hover:text-accent">手动检测 →</a></div>
+    </div>
+  </div>
+
+  <!-- 最近任务 -->
+  <div class="card">
+    <div class="px-5 py-4 border-b border-line flex items-center justify-between">
+      <h2 class="text-base font-medium">{{ t('dashboard.recent_jobs') }}</h2>
+      <a href="/analyze" class="btn btn-primary text-xs">+ 新建分析</a>
+    </div>
+    <div id="jobs-list" hx-get="/api/jobs?limit=10" hx-trigger="load" hx-swap="innerHTML" class="p-5 text-text-muted text-sm">
+      {{ t('common.loading') }}
+    </div>
+  </div>
+</div>
+
+<script>
+document.body.addEventListener('htmx:afterRequest', (e) => {
+  if (e.detail.target.id === 'jobs-list' && e.detail.xhr.status === 200) {
+    const data = JSON.parse(e.detail.xhr.responseText);
+    const html = data.items.length === 0 ? '<p class="text-text-dim">暂无任务</p>' :
+      `<table class="w-full text-sm">
+        <thead><tr class="text-text-muted text-xs border-b border-line">
+          <th class="text-left py-2">#</th><th class="text-left">股票数</th><th class="text-left">扣分</th><th class="text-left">状态</th><th class="text-left">时间</th>
+        </tr></thead><tbody>${data.items.map(j => `
+          <tr class="border-b border-line/50 hover:bg-bg-hover cursor-pointer" onclick="location.href='/jobs/${j.id}'">
+            <td class="py-2.5">#${j.id}</td>
+            <td>${j.symbols_count}</td>
+            <td>${j.total_points_charged} pt</td>
+            <td><span class="badge ${j.status==='done'?'badge-success':j.status==='failed'?'badge-danger':j.status==='running'?'badge-accent':'badge-warn'}">${j.status}</span></td>
+            <td class="text-text-muted">${new Date(j.created_at).toLocaleString('zh-CN')}</td>
+          </tr>`).join('')}</tbody></table>`;
+    e.detail.target.innerHTML = html;
+  }
+});
+</script>
+{% endblock %}

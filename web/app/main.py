@@ -59,7 +59,7 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=str(settings.web_root / "static")), name="static")
 
 # 路由注册
-from .routers import admin, admin_logs, analysis, auth, healthcheck, i18n, users   # noqa: E402
+from .routers import admin, admin_logs, analysis, auth, healthcheck, i18n, pages, users   # noqa: E402
 app.include_router(auth.router)
 app.include_router(i18n.router)
 app.include_router(users.router)
@@ -67,33 +67,10 @@ app.include_router(analysis.router)
 app.include_router(healthcheck.router)
 app.include_router(admin.router)
 app.include_router(admin_logs.router)
+app.include_router(pages.router)   # SSR 页面路由放最后
 
 
 # === 临时路由 (P0 阶段, 后续 P2-P8 拆到 routers/) ===
-
-@app.get("/")
-async def root():
-    return JSONResponse({
-        "app": settings.app_name,
-        "version": "0.1.0",
-        "status": "ready",
-        "phase": "P1 数据库 schema 完成",
-        "tables_count": 11,
-        "admin_phone": f"{settings.admin_phone[:3]}****{settings.admin_phone[-4:]}",
-        "next_phases": [
-            "P2 认证 + i18n",
-            "P3 积分 + 邀请",
-            "P4 双模式分析核心",
-            "P5 SSE 进度推送",
-            "P6 健康检查",
-            "P7 日志",
-            "P8 前端互动 HTML",
-            "P9 部署",
-            "P10 订阅自动跟踪",
-            "P11 推送渠道",
-        ],
-    })
-
 
 @app.get("/health")
 async def health():

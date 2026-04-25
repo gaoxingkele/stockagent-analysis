@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.share') }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+  <h1 class="text-2xl font-semibold">🎁 邀请好友</h1>
+
+  <div class="card p-6">
+    <div class="text-sm text-text-muted">{{ t('share.my_invite_code') }}</div>
+    <div class="text-4xl font-mono font-semibold text-accent mt-2 tracking-wider">{{ user.invite_code }}</div>
+    <div class="text-xs text-text-muted mt-3">分享链接</div>
+    <div class="flex gap-2 mt-1">
+      <input id="invite-url" type="text" readonly value="{{ base_url }}/invite/{{ user.invite_code }}" class="flex-1 text-sm">
+      <button onclick="copyUrl()" class="btn btn-ghost text-sm">{{ t('share.copy') }}</button>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4">
+    <div class="card p-5">
+      <div class="text-text-muted text-xs">{{ t('share.invitees') }}</div>
+      <div class="text-2xl font-semibold mt-1">{{ user.invite_count }} 人</div>
+    </div>
+    <div class="card p-5">
+      <div class="text-text-muted text-xs">{{ t('share.earned_points') }}</div>
+      <div class="text-2xl font-semibold mt-1 text-success">{{ user.invite_earned_points }}</div>
+    </div>
+  </div>
+
+  <div class="card p-6">
+    <p class="text-sm text-text-muted">分享规则:</p>
+    <ul class="text-sm mt-2 space-y-1 text-text">
+      <li>• 朋友通过你的邀请码注册, <strong class="text-success">他得 150 积分, 你得 100 积分</strong></li>
+      <li>• 无限层级, 只奖励直接邀请人</li>
+      <li>• 累计邀请越多, 进入排行榜</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+function copyUrl() {
+  const el = document.getElementById('invite-url');
+  el.select();
+  document.execCommand('copy');
+  alert('已复制');
+}
+</script>
+{% endblock %}

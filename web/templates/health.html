@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.health') }}{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-6" x-data="healthView()" x-init="loadHistory()">
+  <h1 class="text-2xl font-semibold">🩺 系统健康检查</h1>
+
+  <div class="card p-6">
+    <button @click="run()" :disabled="running" class="btn btn-primary">
+      <span x-show="!running">▶ 立即检测</span>
+      <span x-show="running">检测中...</span>
+    </button>
+    <p class="text-xs text-text-muted mt-2">手动触发. 工作日 9:00-16:00 每小时自动检测一次.</p>
+  </div>
+
+  <!-- 实时输出 -->
+  <div x-show="items.length > 0" class="card">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+      <h3 class="text-base font-medium">检测结果</h3>
+      <span class="text-sm text-text-muted">
+        通过 <span class="text-success" x-text="passed"></span> / <span x-text="items.length"></span>
+        · 失败 <span class="text-danger" x-text="failed"></span>
+      </span>
+    </div>
+    <div class="divide-y divide-line">
+      <template x-for="item in items" :key="item.name">
+        <div class="px-5 py-3 flex items-center gap-4">
+          <span class="w-4">
+            <span x-show="item.status === 'ok'" class="text-success">✓</span>
+            <span x-show="item.status === 'fail' || item.status === 'timeout'" class="text-danger">✗</span>
+          </span>
+          <span class="font-mono text-sm flex-1" x-text="item.name"></span>
+          <span class="text-xs text-text-muted" x-text="item.latency_ms + 'ms'"></span>
+          <span class="text-xs text-text-muted truncate max-w-md" x-text="item.info || (item.data ? JSON.stringify(item.data) : item.error || '')"></span>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- 大盘快照 -->
+  <div x-show="market && Object.keys(market).length > 0" class="card p-5">
+    <h3 class="text-base font-medium mb-3">📈 大盘快照</h3>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <template x-for="(v, k) in market" :key="k">
+        <div class="border border-line rounded p-3">
+          <div class="text-text-muted text-xs" x-text="k"></div>
+          <div class="text-xl font-semibold mt-1" x-text="v.current?.toFixed(2)"></div>
+          <div class="text-xs mt-1" :class="v.pct_chg >= 0 ? 'text-success' : 'text-danger'">
+            <span x-text="(v.pct_chg >= 0 ? '+' : '') + v.pct_chg?.toFixed(2) + '%'"></span>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- 历史 -->
+  <div class="card p-5">
+    <h3 class="text-base font-medium mb-3">最近 24 小时</h3>
+    <div x-show="history.length === 0" class="text-text-muted text-sm">暂无历史</div>
+    <table x-show="history.length > 0" class="w-full text-sm">
+      <thead><tr class="text-text-muted text-xs border-b border-line">
+        <th class="text-left py-2">触发</th><th class="text-left">通过/总</th><th class="text-left">失败</th><th class="text-left">耗时</th><th class="text-left">时间</th>
+      </tr></thead>
+      <tbody>
+        <template x-for="h in history" :key="h.id">
+          <tr class="border-b border-line/50">
+            <td class="py-2"><span class="badge" :class="h.trigger_type === 'manual' ? 'badge-accent' : 'badge-warn'" x-text="h.trigger_type"></span></td>
+            <td><span class="text-success" x-text="h.passed"></span> / <span x-text="h.total"></span></td>
+            <td><span :class="h.failed > 0 ? 'text-danger' : 'text-text-muted'" x-text="h.failed"></span></td>
+            <td class="text-text-muted" x-text="h.duration_ms + 'ms'"></td>
+            <td class="text-text-muted text-xs" x-text="new Date(h.created_at).toLocaleString('zh-CN')"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function healthView() {
+  return {
+    running: false,
+    items: [],
+    market: {},
+    history: [],
+    es: null,
+    get passed() { return this.items.filter(x => x.status === 'ok').length; },
+    get failed() { return this.items.filter(x => x.status !== 'ok').length; },
+    async loadHistory() {
+      const r = await fetch('/api/healthcheck/history?limit=10', {credentials:'include'});
+      this.history = (await r.json()).items;
+    },
+    async run() {
+      this.running = true;
+      this.items = [];
+      this.market = {};
+      const r = await fetch('/api/healthcheck/run', {method:'POST', credentials:'include'});
+      const d = await r.json();
+      const checkId = d.check_id;
+      // SSE 订阅
+      this.es = new EventSource('/api/healthcheck/' + checkId + '/stream');
+      this.es.addEventListener('check_item', (e) => {
+        const obj = JSON.parse(e.data);
+        this.items.push(obj.item);
+        if (obj.item.name === 'market.indices' && obj.item.status === 'ok') {
+          this.market = obj.item.data;
+        }
+      });
+      this.es.addEventListener('summary', (e) => {
+        this.es.close(); this.es = null; this.running = false;
+        this.loadHistory();
+      });
+      this.es.onerror = () => { this.es?.close(); this.running = false; };
+    },
+  };
+}
+</script>
+{% endblock %}
