@@ -14,11 +14,11 @@ if errorlevel 1 (
   docker run -d --restart=always -p 6379:6379 --name redis redis:7-alpine
 )
 
-REM 启动 ngrok 后台 (HTTP 8000)
+REM 启动 ngrok 后台 (HTTP 9000)
 where ngrok >nul 2>&1
 if not errorlevel 1 (
   echo [%TIME%] Starting ngrok tunnel...
-  start /min cmd /c "ngrok http 8000"
+  start /min cmd /c "ngrok http 9000"
 )
 
 REM 数据库迁移
@@ -30,7 +30,7 @@ if errorlevel 1 (
 alembic upgrade head
 
 REM 启动 uvicorn
-echo [%TIME%] Starting uvicorn on port 8000...
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+echo [%TIME%] Starting uvicorn on port 9000...
+python -m uvicorn app.main:app --host 0.0.0.0 --port 9000
 
 pause

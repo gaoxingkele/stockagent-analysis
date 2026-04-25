@@ -47,16 +47,16 @@ alembic upgrade head
 
 ```powershell
 # 开发模式
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 9000 --reload
 
 # 生产模式
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 9000
 
 # 公网映射
-ngrok http 8000
+ngrok http 9000
 ```
 
-访问 http://localhost:8000
+访问 http://localhost:9000
 
 ### 5. 服务化 (开机自启)
 
@@ -98,7 +98,7 @@ web/
 # 方式 A: 双击 startup.bat
 # 方式 B: NSSM 注册成 Windows 服务
 nssm install stockagent-web "D:\aicoding\stockagent-analysis\web\venv\Scripts\python.exe"
-nssm set stockagent-web AppParameters "-m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+nssm set stockagent-web AppParameters "-m uvicorn app.main:app --host 0.0.0.0 --port 9000"
 nssm set stockagent-web AppDirectory "D:\aicoding\stockagent-analysis\web"
 nssm start stockagent-web
 ```

@@ -20,11 +20,11 @@ class Settings(BaseSettings):
     app_env: Literal["development", "production"] = "development"
     debug: bool = True
     secret_key: str = "change-me-in-production-32-chars-minimum"
-    base_url: str = "http://localhost:8000"
+    base_url: str = "http://localhost:9000"
 
     # === 服务器 ===
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = 9000
 
     # === 数据库 ===
     database_url: str = "sqlite+aiosqlite:///./data/app.db"
