@@ -49,6 +49,11 @@ app = FastAPI(
 # 静态资源
 app.mount("/static", StaticFiles(directory=str(settings.web_root / "static")), name="static")
 
+# 路由注册
+from .routers import auth, i18n   # noqa: E402
+app.include_router(auth.router)
+app.include_router(i18n.router)
+
 
 # === 临时路由 (P0 阶段, 后续 P2-P8 拆到 routers/) ===
 

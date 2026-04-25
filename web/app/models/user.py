@@ -36,6 +36,9 @@ class User(Base, TimestampMixin):
     # 偏好
     language: Mapped[str] = mapped_column(String(8), default="zh-CN", nullable=False)
 
+    # 密码 (仅 admin 必须设, 普通用户为 NULL 走验证码登录)
+    password_hash: Mapped[str | None] = mapped_column(String(128))
+
     # 邀请相关
     invite_code: Mapped[str | None] = mapped_column(String(8), unique=True, index=True)
     invited_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
