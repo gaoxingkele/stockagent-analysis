@@ -106,13 +106,14 @@ def _check_tushare_holdernumber() -> dict:
 
 
 async def _check_akshare() -> dict:
-    """AKShare 拉一只股票快照。"""
+    """AKShare 联通性 (Sina 接口, East Money 在国内常被拦截)。"""
     def _pull():
         import akshare as ak
-        df = ak.stock_zh_a_spot_em()
+        # Sina 实时指数快照轻量, 用作连通性探针
+        df = ak.stock_zh_index_spot_sina()
         if df is None or df.empty:
-            raise RuntimeError("akshare 实时快照空")
-        return {"total_stocks": len(df)}
+            raise RuntimeError("akshare/sina 实时快照空")
+        return {"indices_count": len(df), "source": "sina"}
     return await asyncio.to_thread(_pull)
 
 
@@ -156,20 +157,34 @@ async def _check_llm_provider(name: str, env_key: str, base_url: str | None = No
 
 
 async def _check_market_index() -> dict:
-    """大盘指数快照 (akshare)。"""
+    """大盘指数快照 (Sina 优先, EM 备选)。"""
+    _NAMES = ("上证指数", "深证成指", "创业板指", "沪深300", "中证500", "上证50",
+              "上证综指", "深证综指")
     def _pull():
         import akshare as ak
-        df = ak.stock_zh_index_spot_em(symbol="沪深重要指数")
+        # Sina 接口稳定, 字段名: 名称/最新价/涨跌幅/代码
+        df = None
+        try:
+            df = ak.stock_zh_index_spot_sina()
+        except Exception:
+            df = None
         if df is None or df.empty:
-            raise RuntimeError("指数空")
+            # 备选 East Money
+            df = ak.stock_zh_index_spot_em(symbol="沪深重要指数")
+            if df is None or df.empty:
+                raise RuntimeError("两个数据源都返回空")
         result = {}
         for _, row in df.iterrows():
             name = row.get("名称") or row.get("name", "")
-            if name in ("上证指数", "深证成指", "创业板指", "沪深300", "中证500", "上证50"):
-                result[name] = {
-                    "current": float(row.get("最新价") or row.get("current", 0)),
-                    "pct_chg": float(row.get("涨跌幅") or 0),
-                }
+            if name in _NAMES:
+                try:
+                    cur = float(row.get("最新价") or row.get("current") or 0)
+                    pct = float(row.get("涨跌幅") or row.get("pct_chg") or 0)
+                except (TypeError, ValueError):
+                    continue
+                result[name] = {"current": cur, "pct_chg": pct}
+        if not result:
+            raise RuntimeError("未匹配到目标指数")
         return result
     return await asyncio.to_thread(_pull)
 
