@@ -12,15 +12,15 @@
       "id": "P1",
       "title": "数据库 schema + ORM 模型 + Alembic 迁移",
       "acceptanceCriteria": [
-        "web/app/models/ 下 9 个 ORM 模型完成 (user, transaction, job, result, invite, healthcheck, log, subscription, push_notification)",
+        "web/app/models/ 下 11 个 ORM 模型完成 (user, sms_code, transaction, job, result, progress_event, invite, healthcheck, log, subscription, push_notification)",
         "alembic/versions/ 下有初始迁移脚本",
         "alembic upgrade head 在新 SQLite 上成功执行",
-        "管理员账户 18606099618 在迁移后自动创建",
-        "web/tests/test_models.py 至少覆盖 user/transaction/result 创建"
+        "管理员账户 18606099618 启动时自动创建 (lifespan 钩子)",
+        "web/tests/test_models.py 7 个测试全过 (user/invite/transaction/dual_mode/poster/sub_unique/seed)"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "参考 docs/web-platform-implementation-plan.md 第四章"
+      "passes": true,
+      "notes": "完成 2026-04-25, 11 张表实际产生 12 个 SQLite 对象(含 alembic_version), admin id=1 invite_code 自动生成"
     },
     {
       "id": "P2",

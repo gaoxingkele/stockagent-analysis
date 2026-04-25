@@ -9,8 +9,14 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from .core.db import init_engine, get_session_factory
+from .services.seed import ensure_admin_user
+
+# 触发模型注册
+from . import models  # noqa: F401
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=getattr(logging, settings.log_level, logging.INFO))
 
 
 @asynccontextmanager
@@ -18,9 +24,17 @@ async def lifespan(app: FastAPI):
     """应用启动/关闭钩子。"""
     logger.info("[startup] %s 启动 env=%s base_url=%s",
                 settings.app_name, settings.app_env, settings.base_url)
-    # TODO P1: 初始化数据库 (Alembic 自动迁移 + 种子数据)
+
+    # P1: 初始化数据库 + 自动创建 admin
+    init_engine(echo=settings.debug)
+    factory = get_session_factory()
+    async with factory() as session:
+        admin = await ensure_admin_user(session)
+        logger.info("[startup] admin ready: id=%d invite_code=%s", admin.id, admin.invite_code)
+
     # TODO P2: 启动 Redis 连接池
     # TODO P6: 启动健康检查定时任务
+
     yield
     logger.info("[shutdown] %s 关闭", settings.app_name)
 
@@ -44,16 +58,20 @@ async def root():
         "app": settings.app_name,
         "version": "0.1.0",
         "status": "ready",
-        "phase": "P0 项目骨架",
+        "phase": "P1 数据库 schema 完成",
+        "tables_count": 11,
+        "admin_phone": f"{settings.admin_phone[:3]}****{settings.admin_phone[-4:]}",
         "next_phases": [
-            "P1 数据库 schema",
             "P2 认证 + i18n",
             "P3 积分 + 邀请",
-            "P4-P5 分析核心 + SSE",
+            "P4 双模式分析核心",
+            "P5 SSE 进度推送",
             "P6 健康检查",
             "P7 日志",
             "P8 前端互动 HTML",
             "P9 部署",
+            "P10 订阅自动跟踪",
+            "P11 推送渠道",
         ],
     })
 
