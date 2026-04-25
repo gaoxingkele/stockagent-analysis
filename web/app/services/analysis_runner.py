@@ -25,6 +25,7 @@ from ..models import (
     TransactionReason, User,
 )
 from .points_service import deduct_points, refund_points
+from .progress_service import emit_done, emit_failed, emit_progress
 
 logger = logging.getLogger(__name__)
 
@@ -260,18 +261,20 @@ async def _do_quant_only(db: AsyncSession, rec: AnalysisResult):
     """quant_only: 拉 Tushare + 算 quant_score + 入库。10s 内完成。"""
     from stockagent_analysis.tushare_enrich import compute_quant_score, enrich_with_tushare
 
-    rec.current_phase = "fetching_tushare"
-    rec.progress_pct = 30
-    await db.commit()
+    await emit_progress(db, rec.id, phase_id="fetching_tushare", percent=20,
+                         message=f"正在拉取 {rec.symbol} 最新数据...")
 
     # 阻塞 IO 放到线程池
     ts_enrich = await asyncio.to_thread(
         enrich_with_tushare, rec.symbol, run_dir=None, use_cache=True,
     )
 
-    rec.current_phase = "computing_quant"
-    rec.progress_pct = 70
-    await db.commit()
+    await emit_progress(db, rec.id, phase_id="computing_quant", percent=70,
+                         message="正在计算 4 维量化指标...",
+                         data={
+                             "adx": (ts_enrich or {}).get("tushare_factors", {}).get("dmi_adx"),
+                             "winner_rate": (ts_enrich or {}).get("tushare_cyq", {}).get("winner_rate"),
+                         } if ts_enrich else None)
 
     quant_info = compute_quant_score(ts_enrich or {})
     score = float(quant_info.get("quant_score", 50.0))
@@ -296,27 +299,54 @@ async def _do_quant_only(db: AsyncSession, rec: AnalysisResult):
     rec.current_phase = "done"
     rec.finished_at = datetime.now(timezone.utc)
     await db.commit()
+
+    await emit_progress(db, rec.id, phase_id="done", percent=100,
+                         message=f"量化评分完成: {score:.1f} ({level})",
+                         data={"quant_score": score, "level": level,
+                               "adjustments": quant_info.get("adjustments")})
+    await emit_done(db, rec.id, final_score=score, decision_level=level,
+                    extra={"quant_score": score, "type": "quant_only"})
+
     logger.info("[quant_only] %s done: score=%.1f level=%s", rec.symbol, score, level)
 
 
 async def _do_full(db: AsyncSession, rec: AnalysisResult):
-    """full: 调用现有 v3.1 流水线 + progress_cb。"""
+    """full: 调用现有 v3.1 流水线 + 粗粒度 SSE 进度。"""
     from stockagent_analysis.agents_v3.orchestrator_v3 import run_analysis_v3
 
-    rec.current_phase = "phase_-1_data"
-    rec.progress_pct = 5
-    await db.commit()
+    await emit_progress(db, rec.id, phase_id="phase_-1_data", percent=5,
+                         message=f"正在采集 {rec.symbol} 数据...")
 
-    # 简化: 直接同步调用 (放线程池避免阻塞 event loop)
-    # 进度回调 P5 阶段会接 SSE; 当前先用粗粒度 phase 标记
-    def _progress_cb(phase: str, pct: int, msg: str, data: dict | None = None):
-        # 注意: 这里在线程池, 不能直接 await
-        # P5 改造时会改用 asyncio.run_coroutine_threadsafe
-        pass
+    # 在线程池跑 (无法实时回调 SSE; 用主进程定时刷新进度)
+    # 简化: 启动一个后台 polling 任务定时往 SSE 推 "still running"
+    loop = asyncio.get_event_loop()
+    cancel_event = asyncio.Event()
 
-    result = await asyncio.to_thread(
-        run_analysis_v3, rec.symbol, name="", debate_rounds=4, risk_rounds=3,
-    )
+    async def _heartbeat():
+        phases = [
+            ("phase_0_data", 10, "数据采集完成, 生成 6 份报告"),
+            ("phase_1_experts", 30, "4 专家并行分析中..."),
+            ("phase_2_debate", 55, "多空辩论 4 轮 + Judge 仲裁..."),
+            ("phase_3_trader", 75, "首席交易员产出方案..."),
+            ("phase_4_risk", 90, "风控三辩论 + PM 拍板..."),
+        ]
+        idx = 0
+        while not cancel_event.is_set() and idx < len(phases):
+            await asyncio.sleep(60)   # 大约每分钟推一次
+            if cancel_event.is_set(): break
+            phase, pct, msg = phases[idx]
+            await emit_progress(db, rec.id, phase_id=phase, percent=pct, message=msg)
+            idx += 1
+
+    hb_task = asyncio.create_task(_heartbeat())
+
+    try:
+        result = await asyncio.to_thread(
+            run_analysis_v3, rec.symbol, name="", debate_rounds=4, risk_rounds=3,
+        )
+    finally:
+        cancel_event.set()
+        hb_task.cancel()
 
     sc = result.get("score_components", {})
     rec.run_dir = str(result.get("run_dir", ""))
@@ -335,6 +365,13 @@ async def _do_full(db: AsyncSession, rec: AnalysisResult):
     rec.current_phase = "done"
     rec.finished_at = datetime.now(timezone.utc)
     await db.commit()
+
+    await emit_progress(db, rec.id, phase_id="done", percent=100,
+                         message=f"分析完成: {rec.final_score:.1f} ({rec.decision_level})")
+    await emit_done(db, rec.id, final_score=rec.final_score,
+                    decision_level=rec.decision_level,
+                    extra={"quant_score": rec.quant_score, "type": "full"})
+
     logger.info("[full] %s done: score=%.1f level=%s",
                 rec.symbol, rec.final_score, rec.decision_level)
 
@@ -351,6 +388,7 @@ async def _mark_failed_and_refund(db: AsyncSession, rec: AnalysisResult, err: st
     user = user_res.scalar_one_or_none()
     if user is None:
         return
+    refunded_amount = 0
     try:
         await refund_points(
             db, user, rec.points_charged,
@@ -359,7 +397,14 @@ async def _mark_failed_and_refund(db: AsyncSession, rec: AnalysisResult, err: st
         )
         rec.status = ResultStatus.refunded
         await db.commit()
+        refunded_amount = rec.points_charged
         logger.warning("[analysis] 已退款: user=%d result=%d amount=%d",
                        user.id, rec.id, rec.points_charged)
     except Exception as e:
         logger.error("[analysis] 退款失败 user=%d: %s", user.id, e)
+
+    # 推 SSE 失败事件 + 退款金额
+    try:
+        await emit_failed(db, rec.id, error=err, refunded=refunded_amount)
+    except Exception as e:
+        logger.error("[analysis] 推送失败事件失败: %s", e)

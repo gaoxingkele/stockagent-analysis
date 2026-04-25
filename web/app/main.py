@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .core.db import init_engine, get_session_factory
+from .core.redis import close_redis, init_redis
 from .services.seed import ensure_admin_user
 
 # 触发模型注册
@@ -26,16 +27,19 @@ async def lifespan(app: FastAPI):
                 settings.app_name, settings.app_env, settings.base_url)
 
     # P1: 初始化数据库 + 自动创建 admin
-    init_engine(echo=settings.debug)
+    init_engine(echo=False)
     factory = get_session_factory()
     async with factory() as session:
         admin = await ensure_admin_user(session)
         logger.info("[startup] admin ready: id=%d invite_code=%s", admin.id, admin.invite_code)
 
-    # TODO P2: 启动 Redis 连接池
+    # P5: Redis (失败自动 fallback in-memory)
+    await init_redis()
+
     # TODO P6: 启动健康检查定时任务
 
     yield
+    await close_redis()
     logger.info("[shutdown] %s 关闭", settings.app_name)
 
 

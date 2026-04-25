@@ -15,10 +15,12 @@ from ..schemas.analysis import (
     AnalyzePreviewItem, AnalyzePreviewResponse, AnalyzeRequest,
     JobBriefResponse, ResultDetailResponse,
 )
+from ..core.redis import subscribe_progress
 from ..services.analysis_runner import (
     determine_analysis_type, find_latest_full_score, submit_analysis,
 )
 from ..services.points_service import InsufficientPointsError
+from ..services.progress_service import list_progress_events
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +219,53 @@ async def get_result_detail(
         created_at=rec.created_at, finished_at=rec.finished_at,
         run_dir=rec.run_dir,
     )
+
+
+@router.get("/results/{result_id}/stream")
+async def stream_progress(
+    result_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """SSE 实时进度推送。先回放历史事件, 再订阅新事件。"""
+    from sse_starlette.sse import EventSourceResponse
+
+    res = await db.execute(select(AnalysisResult).where(AnalysisResult.id == result_id))
+    rec = res.scalar_one_or_none()
+    if rec is None:
+        raise HTTPException(404, "结果不存在")
+    if rec.user_id != user.id and not user.is_admin:
+        raise HTTPException(403, "无权查看")
+
+    async def event_generator():
+        # 1. 回放历史
+        history = await list_progress_events(db, result_id)
+        for h in history:
+            yield {"event": "progress", "data": __import__("json").dumps(h, ensure_ascii=False)}
+
+        # 2. 已完成 → 直接发 done 事件并结束
+        if rec.status.value in ("done", "failed", "refunded"):
+            yield {
+                "event": rec.status.value,
+                "data": __import__("json").dumps({
+                    "result_id": rec.id,
+                    "final_score": rec.final_score,
+                    "decision_level": rec.decision_level,
+                    "error": rec.error_message,
+                }, ensure_ascii=False),
+            }
+            return
+
+        # 3. 实时订阅
+        async for evt in subscribe_progress(result_id):
+            yield {
+                "event": evt.get("type", "message"),
+                "data": __import__("json").dumps(evt, ensure_ascii=False),
+            }
+            if evt.get("type") in ("done", "failed"):
+                break
+
+    return EventSourceResponse(event_generator())
 
 
 @router.get("/stocks/{symbol}/history")
