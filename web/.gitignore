@@ -1,0 +1,28 @@
+# 数据 + 日志
+data/*.db
+data/*.db-journal
+logs/*.log
+logs/*.log.*
+
+# 配置
+.env
+
+# 虚拟环境
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 编辑器
+.vscode/
+.idea/
+
+# 临时
+*.tmp
+*.swp
+*~
