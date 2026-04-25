@@ -6,10 +6,14 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# 项目根目录 .env (web/app/config.py → web/app → web → project_root)
+_ROOT_ENV = Path(__file__).resolve().parent.parent.parent / ".env"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # 先加载根目录 .env, 再加载 web/.env 作为覆盖(如不存在则忽略)
+        env_file=[str(_ROOT_ENV), ".env"],
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

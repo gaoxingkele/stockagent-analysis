@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}{{ t('app.name') }}{% endblock %}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-  <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
-  <script src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <script src="/static/vendor/tailwindcss.js"></script>
+  <script src="/static/vendor/htmx.min.js"></script>
+  <script src="/static/vendor/htmx-sse.js"></script>
+  <script src="/static/vendor/alpinejs.min.js" defer></script>
+  <script src="/static/vendor/echarts.min.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
