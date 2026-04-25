@@ -20,14 +20,18 @@ router = APIRouter(tags=["pages"])
 templates = Jinja2Templates(directory=str(settings.web_root / "templates"))
 
 
-def _ctx(request, user, lang, **extra):
-    """统一的模板上下文。"""
+def _ctx(user, lang, **extra):
+    """模板上下文(不含 request, 由 TemplateResponse 单独传)。"""
     return {
-        "request": request, "user": user, "lang": lang,
+        "user": user, "lang": lang,
         "t": lambda key, **kw: _t(key, lang, **kw),
         "base_url": settings.base_url,
         **extra,
     }
+
+
+def _render(request, name, user, lang, **extra):
+    return templates.TemplateResponse(request, name, _ctx(user, lang, **extra))
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -38,7 +42,7 @@ async def index(
 ):
     if user is None:
         return RedirectResponse("/login")
-    return templates.TemplateResponse("dashboard.html", _ctx(request, user, lang))
+    return _render(request, "dashboard.html", user, lang)
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -47,8 +51,7 @@ async def login_page(
     lang: Annotated[str, Depends(get_lang)],
     invite_code: str | None = None,
 ):
-    return templates.TemplateResponse("login.html",
-        _ctx(request, None, lang, invite_code=invite_code))
+    return _render(request, "login.html", None, lang, invite_code=invite_code)
 
 
 @router.get("/invite/{code}", response_class=HTMLResponse)
@@ -67,7 +70,7 @@ async def analyze_page(
 ):
     if user is None:
         return RedirectResponse("/login")
-    return templates.TemplateResponse("analyze.html", _ctx(request, user, lang))
+    return _render(request, "analyze.html", user, lang)
 
 
 @router.get("/jobs/{job_id}", response_class=HTMLResponse)
@@ -78,7 +81,7 @@ async def job_page(
 ):
     if user is None:
         return RedirectResponse("/login")
-    return templates.TemplateResponse("job.html", _ctx(request, user, lang, job_id=job_id))
+    return _render(request, "job.html", user, lang, job_id=job_id)
 
 
 @router.get("/results/{result_id}", response_class=HTMLResponse)
@@ -96,7 +99,7 @@ async def result_page(
         raise HTTPException(404, "结果不存在")
     if rec.user_id != user.id and not user.is_admin:
         raise HTTPException(403)
-    return templates.TemplateResponse("result.html", _ctx(request, user, lang, result=rec))
+    return _render(request, "result.html", user, lang, result=rec)
 
 
 @router.get("/stock/{symbol}/history", response_class=HTMLResponse)
@@ -107,8 +110,7 @@ async def stock_history_page(
 ):
     if user is None:
         return RedirectResponse("/login")
-    return templates.TemplateResponse("stock_history.html",
-        _ctx(request, user, lang, symbol=symbol.upper()))
+    return _render(request, "stock_history.html", user, lang, symbol=symbol.upper())
 
 
 @router.get("/share", response_class=HTMLResponse)
@@ -119,7 +121,7 @@ async def share_page(
 ):
     if user is None:
         return RedirectResponse("/login")
-    return templates.TemplateResponse("share.html", _ctx(request, user, lang))
+    return _render(request, "share.html", user, lang)
 
 
 @router.get("/me/jobs", response_class=HTMLResponse)
@@ -130,7 +132,7 @@ async def my_jobs_page(
 ):
     if user is None:
         return RedirectResponse("/login")
-    return templates.TemplateResponse("dashboard.html", _ctx(request, user, lang))
+    return _render(request, "dashboard.html", user, lang)
 
 
 @router.get("/me/transactions", response_class=HTMLResponse)
@@ -141,7 +143,7 @@ async def my_transactions_page(
 ):
     if user is None:
         return RedirectResponse("/login")
-    return templates.TemplateResponse("dashboard.html", _ctx(request, user, lang))
+    return _render(request, "dashboard.html", user, lang)
 
 
 @router.get("/system/health", response_class=HTMLResponse)
@@ -152,7 +154,7 @@ async def health_page(
 ):
     if user is None:
         return RedirectResponse("/login")
-    return templates.TemplateResponse("health.html", _ctx(request, user, lang))
+    return _render(request, "health.html", user, lang)
 
 
 @router.get("/admin", response_class=HTMLResponse)
@@ -163,4 +165,4 @@ async def admin_page(
 ):
     if user is None or not user.is_admin:
         return RedirectResponse("/login")
-    return templates.TemplateResponse("dashboard.html", _ctx(request, user, lang))
+    return _render(request, "dashboard.html", user, lang)
