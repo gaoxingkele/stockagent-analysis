@@ -18,6 +18,13 @@ _ROOT_ENV_CLOUBIC = _PROJECT_ROOT / ".env.cloubic"
 load_dotenv(_ROOT_ENV, override=False)
 load_dotenv(_ROOT_ENV_CLOUBIC, override=False)
 
+# akshare/东方财富推送服务器走直连, 不经本地代理(避免 ProxyError)
+import os as _os
+_no_proxy = _os.getenv("NO_PROXY", "")
+_eastmoney = "push2.eastmoney.com,push2his.eastmoney.com"
+if _eastmoney not in _no_proxy:
+    _os.environ["NO_PROXY"] = f"{_no_proxy},{_eastmoney}".strip(",")
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(

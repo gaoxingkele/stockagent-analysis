@@ -181,6 +181,9 @@ async def _to_thread(fn):
     return await asyncio.to_thread(fn)
 
 
+# 这些检查失败时标记 warn 而非 fail (外部网络依赖, 不影响核心功能)
+WARN_ONLY_CHECKS = {"akshare.spot", "market.indices", "tdx.connect"}
+
 CHECK_DEFINITIONS = [
     ("tushare.pro_init",       lambda: _to_thread(_check_tushare_pro_connect)),
     ("tushare.daily",          lambda: _to_thread(_check_tushare_daily)),
@@ -221,6 +224,9 @@ async def run_full_healthcheck(
 
     for coro in asyncio.as_completed(tasks):
         item = await coro
+        # warn-only 检查失败降级为 warn, 不计入 failed
+        if item["status"] == "fail" and item["name"] in WARN_ONLY_CHECKS:
+            item = {**item, "status": "warn"}
         items.append(item)
         if hc_record_id is not None and stream:
             await publish_progress(hc_record_id, {"type": "check_item", "item": item})
@@ -229,7 +235,8 @@ async def run_full_healthcheck(
             market = item.get("data") or {}
 
     passed = sum(1 for x in items if x["status"] == "ok")
-    failed = len(items) - passed
+    warned = sum(1 for x in items if x["status"] == "warn")
+    failed = len(items) - passed - warned
     duration_ms = sum(x.get("latency_ms", 0) for x in items)
 
     rec = HealthCheck(
