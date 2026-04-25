@@ -10,14 +10,16 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .core.db import init_engine, get_session_factory
+from .core.logging_config import setup_logging
 from .core.redis import close_redis, init_redis
 from .services.seed import ensure_admin_user
 
 # 触发模型注册
 from . import models  # noqa: F401
 
+# P7: 配置日志
+setup_logging()
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=getattr(logging, settings.log_level, logging.INFO))
 
 
 @asynccontextmanager
@@ -57,13 +59,14 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=str(settings.web_root / "static")), name="static")
 
 # 路由注册
-from .routers import admin, analysis, auth, healthcheck, i18n, users   # noqa: E402
+from .routers import admin, admin_logs, analysis, auth, healthcheck, i18n, users   # noqa: E402
 app.include_router(auth.router)
 app.include_router(i18n.router)
 app.include_router(users.router)
 app.include_router(analysis.router)
 app.include_router(healthcheck.router)
 app.include_router(admin.router)
+app.include_router(admin_logs.router)
 
 
 # === 临时路由 (P0 阶段, 后续 P2-P8 拆到 routers/) ===
