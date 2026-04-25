@@ -155,16 +155,31 @@ def fetch_cyq_chips(ts_code: str) -> dict | None:
 
 
 def fetch_moneyflow(ts_code: str, days: int = 10) -> list[dict] | None:
-    """资金流 4 档分层(小/中/大/超大单)。"""
+    """资金流 4 档分层。优先 moneyflow_dc (含 rate 字段), fallback 旧接口。"""
     pro = _get_pro()
     if not pro:
         return None
+    # moneyflow_dc: buy_xxx_amount 已是净值(买-卖), 含 rate 字段
+    try:
+        df = pro.moneyflow_dc(ts_code=ts_code, limit=days)
+        if df is not None and not df.empty:
+            df = df.sort_values("trade_date")
+            rows = df.to_dict(orient="records")
+            for r in rows:
+                r["_source"] = "dc"
+            return rows
+    except Exception as e:
+        logger.debug("[tushare_enrich] moneyflow_dc 不可用 %s, 回退旧接口: %s", ts_code, e)
+    # fallback: 旧接口(buy/sell 分开)
     try:
         df = pro.moneyflow(ts_code=ts_code, limit=days)
         if df is None or df.empty:
             return None
         df = df.sort_values("trade_date")
-        return df.to_dict(orient="records")
+        rows = df.to_dict(orient="records")
+        for r in rows:
+            r["_source"] = "legacy"
+        return rows
     except Exception as e:
         logger.warning("[tushare_enrich] moneyflow 失败 %s: %s", ts_code, e)
         return None
@@ -255,44 +270,98 @@ def summarize_factors(factor_rows: list[dict]) -> dict:
 
 
 def summarize_moneyflow(mf_rows: list[dict]) -> dict:
-    """汇总 5/10 日主力资金分层。"""
+    """汇总资金流分层，含 3日MA平滑 + 主力/散户背离信号。
+
+    DC版: buy_xxx_amount 已是净值, 含 rate 字段
+    旧版: 需要 buy - sell 计算净值
+    """
     if not mf_rows:
         return {}
 
-    def _sum(key: str) -> float:
-        return sum(float(r.get(key, 0) or 0) for r in mf_rows)
-
-    latest = mf_rows[-1]
+    source = mf_rows[0].get("_source", "legacy")
     n = len(mf_rows)
+    latest = mf_rows[-1]
 
-    # 最新一日
-    latest_net = float(latest.get("net_mf_amount", 0) or 0)
-    latest_elg = float(latest.get("buy_elg_amount", 0) or 0) - float(latest.get("sell_elg_amount", 0) or 0)
-    latest_lg = float(latest.get("buy_lg_amount", 0) or 0) - float(latest.get("sell_lg_amount", 0) or 0)
-    latest_md = float(latest.get("buy_md_amount", 0) or 0) - float(latest.get("sell_md_amount", 0) or 0)
-    latest_sm = float(latest.get("buy_sm_amount", 0) or 0) - float(latest.get("sell_sm_amount", 0) or 0)
+    def _net_cat(r: dict, cat: str) -> float:
+        if source == "dc":
+            return float(r.get(f"buy_{cat}_amount", 0) or 0)
+        return float(r.get(f"buy_{cat}_amount", 0) or 0) - float(r.get(f"sell_{cat}_amount", 0) or 0)
 
-    # N 日累计
-    total_net = _sum("net_mf_amount")
-    total_elg_net = _sum("buy_elg_amount") - _sum("sell_elg_amount")
-    total_lg_net = _sum("buy_lg_amount") - _sum("sell_lg_amount")
-    main_net_total = total_elg_net + total_lg_net   # 主力 = 大+超大
+    def _rate_cat(r: dict, cat: str) -> float | None:
+        if source == "dc":
+            v = r.get(f"buy_{cat}_amount_rate")
+            return float(v) if v is not None else None
+        return None
+
+    # 逐日序列
+    daily_main, daily_retail = [], []
+    daily_main_rate, daily_retail_rate = [], []
+    for r in mf_rows:
+        elg, lg, sm = _net_cat(r, "elg"), _net_cat(r, "lg"), _net_cat(r, "sm")
+        daily_main.append(elg + lg)
+        daily_retail.append(sm)
+        r_elg, r_lg = _rate_cat(r, "elg"), _rate_cat(r, "lg")
+        r_sm = _rate_cat(r, "sm")
+        daily_main_rate.append((r_elg + r_lg) if r_elg is not None and r_lg is not None else None)
+        daily_retail_rate.append(r_sm)
+
+    def _ma(series: list, window: int = 3) -> float | None:
+        vals = [x for x in series[-window:] if x is not None]
+        return round(sum(vals) / len(vals), 4) if vals else None
+
+    # 连续主力净流入天数(从最新日往前)
+    consecutive_main_days = 0
+    for v in reversed(daily_main):
+        if v > 0:
+            consecutive_main_days += 1
+        else:
+            break
+
+    # 近3日方向一致性 → 背离信号
+    main_pos = sum(1 for v in daily_main[-3:] if v > 0)
+    retail_pos = sum(1 for v in daily_retail[-3:] if v > 0)
+    main_trend = "inflow" if main_pos >= 2 else "outflow"
+    retail_trend = "inflow" if retail_pos >= 2 else "outflow"
+
+    if main_trend == "inflow" and retail_trend == "outflow":
+        divergence = "smart_accumulating"   # 主力吸筹, 散户出货
+    elif main_trend == "outflow" and retail_trend == "inflow":
+        divergence = "distribution"         # 主力派发, 散户接盘 → 高危
+    elif main_trend == "inflow":
+        divergence = "consensus_buy"
+    elif main_trend == "outflow":
+        divergence = "consensus_sell"
+    else:
+        divergence = "neutral"
+
+    # N日累计
+    total_net_key = "net_amount" if source == "dc" else "net_mf_amount"
+    total_net = sum(float(r.get(total_net_key, 0) or 0) for r in mf_rows)
+    total_main = sum(daily_main)
 
     return {
         "days": n,
+        "source": source,
         "trade_date_latest": str(latest.get("trade_date", "")),
-        # 最新一日(单位: 万元, Tushare 默认)
-        "latest_net_total": round(latest_net, 2),
-        "latest_super_large_net": round(latest_elg, 2),   # 超大单净流入
-        "latest_large_net": round(latest_lg, 2),           # 大单净流入
-        "latest_medium_net": round(latest_md, 2),          # 中单净流入
-        "latest_small_net": round(latest_sm, 2),           # 小单净流入
-        "latest_main_net": round(latest_elg + latest_lg, 2),   # 主力单(大+超大)
-        # N 日累计
+        # 最新一日
+        "latest_main_net": round(daily_main[-1], 2),
+        "latest_retail_net": round(daily_retail[-1], 2),
+        "latest_super_large_net": round(_net_cat(latest, "elg"), 2),
+        "latest_large_net": round(_net_cat(latest, "lg"), 2),
+        "latest_medium_net": round(_net_cat(latest, "md"), 2),
+        # 3日MA平滑(主力净 / 散户净 / rate)
+        "main_net_ma3": _ma(daily_main, 3),
+        "retail_net_ma3": _ma(daily_retail, 3),
+        "main_rate_ma3": _ma(daily_main_rate, 3),    # 主力净流入率%, None if legacy
+        "retail_rate_ma3": _ma(daily_retail_rate, 3),
+        # N日累计
         f"sum_{n}d_net_total": round(total_net, 2),
-        f"sum_{n}d_main_net": round(main_net_total, 2),
-        f"sum_{n}d_super_large_net": round(total_elg_net, 2),
-        f"sum_{n}d_large_net": round(total_lg_net, 2),
+        f"sum_{n}d_main_net": round(total_main, 2),
+        # 信号
+        "divergence": divergence,
+        "consecutive_main_days": consecutive_main_days,
+        "main_trend": main_trend,
+        "retail_trend": retail_trend,
     }
 
 
@@ -332,24 +401,19 @@ def summarize_cyq(cyq_rows: list[dict]) -> dict:
 # ─────────────────────────────────────────────────────────────────
 
 def compute_quant_score(enrich: dict[str, Any]) -> dict[str, Any]:
-    """基于 Tushare 增强数据打 4 维量化分(50 中性 ±30)。
+    """基于 Tushare 增强数据打量化分(50 中性 ±30)。
 
     因子设计:
-      1. ADX 趋势强度        范围 [-8, +10]   (阈值 20/25/30, 区分方向)
-      2. winner_rate 筹码     范围 [-10, +12] (<=20 深度套牢加分, >=85 顶部扣分)
-      3. sum_Nd_main_net      范围 [-10, +10] (超大+大单累计, 单位万元)
-      4. holder_num 变化%     范围 [-6, +8]   (同比减少=筹码集中利好)
+      1. ADX 趋势强度           [-8, +10]
+      2. winner_rate 筹码获利盘  [-10, +12]
+      3. 主力资金 (3日MA rate优先, 绝对量fallback)
+         3a. 背离信号            [-12, +8]   主力派发/吸筹
+         3b. 强度/rate          [-10, +10]
+         3c. 连续性             [0, +5]
+      4. 股东户数变化%           [-6, +8]
 
-    有数据才打分的因子才累加; 缺数据则不参与不惩罚。
-    总偏移累加到 50 基准上, clamp 到 [0, 100]。
-
-    Returns:
-        {
-          "quant_score": float,           # 最终 0-100 分
-          "total_delta": float,           # 累计偏移
-          "adjustments": list[dict],      # 每个因子的 delta+reason
-          "has_data": bool,               # 是否至少命中一个因子
-        }
+    有数据才打分; 缺数据不参与不惩罚。
+    总偏移累加到 50 基准上, clamp [0, 100]。
     """
     adjustments: list[dict] = []
 
@@ -391,26 +455,73 @@ def compute_quant_score(enrich: dict[str, Any]) -> dict[str, Any]:
         except (ValueError, TypeError):
             pass
 
-    # 3. N 日主力资金累计(大+超大单)
+    # 3. 主力资金(3日MA + 背离信号)
     mf = enrich.get("tushare_moneyflow") or {}
-    main_net = None
-    for k, v in mf.items():
-        if k.startswith("sum_") and k.endswith("d_main_net"):
-            main_net = v
-            break
-    if main_net is not None:
+    divergence = mf.get("divergence", "neutral")
+    consecutive_main = int(mf.get("consecutive_main_days", 0) or 0)
+    main_rate_ma3 = mf.get("main_rate_ma3")   # 主力净流入率% 3日MA, DC版才有
+    main_net_ma3 = mf.get("main_net_ma3")     # 主力净流入额(万) 3日MA
+
+    # 3a. 背离信号(最高优先级, 主力行为先行指标)
+    if divergence == "distribution":
+        _add("mf_divergence", -12.0, "主力派发+散户接盘 (高危顶部特征)")
+    elif divergence == "smart_accumulating":
+        _add("mf_divergence", +8.0, "主力吸筹+散户出货 (底部建仓特征)")
+    elif divergence == "consensus_buy":
+        _add("mf_divergence", +3.0, "主力散户同向净流入")
+    elif divergence == "consensus_sell":
+        _add("mf_divergence", -5.0, "主力散户同向净流出")
+
+    # 3b. 趋势强度 — rate优先(跨市值可比), 绝对量fallback
+    if main_rate_ma3 is not None:
         try:
-            mn = float(main_net)
-            if mn >= 5000:
-                _add("main_net", +10.0, f"主力大幅净流入 {mn:.0f} 万")
-            elif mn >= 1000:
-                _add("main_net", +5.0, f"主力净流入 {mn:.0f} 万")
-            elif mn <= -5000:
-                _add("main_net", -10.0, f"主力大幅净流出 {mn:.0f} 万")
-            elif mn <= -1000:
-                _add("main_net", -5.0, f"主力净流出 {mn:.0f} 万")
+            r = float(main_rate_ma3)
+            if r >= 3.0:
+                _add("mf_strength", +10.0, f"主力强力净流入率 {r:.1f}%/日(MA3)")
+            elif r >= 1.0:
+                _add("mf_strength", +5.0, f"主力净流入率 {r:.1f}%/日(MA3)")
+            elif r <= -3.0:
+                _add("mf_strength", -10.0, f"主力强力净流出率 {r:.1f}%/日(MA3)")
+            elif r <= -1.0:
+                _add("mf_strength", -5.0, f"主力净流出率 {r:.1f}%/日(MA3)")
         except (ValueError, TypeError):
             pass
+    elif main_net_ma3 is not None:
+        try:
+            mn = float(main_net_ma3)
+            if mn >= 5000:
+                _add("mf_strength", +10.0, f"主力大幅净流入(MA3) {mn:.0f}万")
+            elif mn >= 1000:
+                _add("mf_strength", +5.0, f"主力净流入(MA3) {mn:.0f}万")
+            elif mn <= -5000:
+                _add("mf_strength", -10.0, f"主力大幅净流出(MA3) {mn:.0f}万")
+            elif mn <= -1000:
+                _add("mf_strength", -5.0, f"主力净流出(MA3) {mn:.0f}万")
+        except (ValueError, TypeError):
+            pass
+    else:
+        # 兼容旧版 sum_Nd_main_net
+        for k, v in mf.items():
+            if k.startswith("sum_") and k.endswith("d_main_net"):
+                try:
+                    mn = float(v)
+                    if mn >= 5000:
+                        _add("mf_strength", +10.0, f"主力大幅净流入 {mn:.0f}万")
+                    elif mn >= 1000:
+                        _add("mf_strength", +5.0, f"主力净流入 {mn:.0f}万")
+                    elif mn <= -5000:
+                        _add("mf_strength", -10.0, f"主力大幅净流出 {mn:.0f}万")
+                    elif mn <= -1000:
+                        _add("mf_strength", -5.0, f"主力净流出 {mn:.0f}万")
+                except (ValueError, TypeError):
+                    pass
+                break
+
+    # 3c. 连续性加分(持续建仓更可信)
+    if consecutive_main >= 5:
+        _add("mf_consecutive", +5.0, f"主力连续净流入 {consecutive_main} 日")
+    elif consecutive_main >= 3:
+        _add("mf_consecutive", +3.0, f"主力连续净流入 {consecutive_main} 日")
 
     # 4. 股东户数变化%(首期→末期)
     # guard: |pct| > 500% 视为异常(通常是新股首期披露基数极小,

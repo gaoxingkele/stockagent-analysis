@@ -101,6 +101,9 @@ class MarketContext:
     etf_states: list[TrendState] = field(default_factory=list)
     # 视觉分析摘要(大盘+ETF)
     vision_summary: str = ""
+    # 全市场资金流方向信号
+    mkt_flow_signal: str = "neutral"   # distribution/smart_money_buying/consensus_buy/consensus_sell/neutral
+    mkt_flow_detail: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -112,6 +115,8 @@ class MarketContext:
             "sector_heats": [asdict(s) for s in self.sector_heats],
             "etf_states": [asdict(s) for s in self.etf_states],
             "vision_summary": self.vision_summary,
+            "mkt_flow_signal": self.mkt_flow_signal,
+            "mkt_flow_detail": self.mkt_flow_detail,
         }
 
 
@@ -280,6 +285,71 @@ def _compute_market_score(index_states: list[TrendState]) -> tuple[float, str, s
 
 
 # ── 指数/ETF K线获取(走多级降级链) ─────────────────────────────────────
+
+def _get_mkt_moneyflow_signal(days: int = 5) -> dict:
+    """拉全市场 moneyflow_mkt_dc, 5日MA计算主力/散户方向。
+
+    返回: {"signal": str, "detail": str, "score_adj": float}
+    signal 值: distribution / smart_money_buying / consensus_buy / consensus_sell / neutral
+    score_adj: 建议对 market_score 的微调量(-5 ~ +5)
+    """
+    try:
+        from .tushare_enrich import _get_pro
+        pro = _get_pro()
+        if not pro:
+            return {"signal": "neutral", "detail": "", "score_adj": 0}
+        df = pro.moneyflow_mkt_dc(limit=days)
+        if df is None or df.empty:
+            return {"signal": "neutral", "detail": "", "score_adj": 0}
+        df = df.sort_values("trade_date")
+        rows = df.to_dict(orient="records")
+
+        # 逐日主力(ELG+LG)净流入 和 散户(SM)净流入
+        daily_main = [
+            float(r.get("buy_elg_amount", 0) or 0) + float(r.get("buy_lg_amount", 0) or 0)
+            for r in rows
+        ]
+        daily_retail = [float(r.get("buy_sm_amount", 0) or 0) for r in rows]
+
+        # 5日MA
+        main_ma5 = sum(daily_main) / len(daily_main)
+        retail_ma5 = sum(daily_retail) / len(daily_retail)
+
+        # 近3日方向一致性
+        main_pos = sum(1 for v in daily_main[-3:] if v > 0)
+        retail_pos = sum(1 for v in daily_retail[-3:] if v > 0)
+        main_trend = "inflow" if main_pos >= 2 else "outflow"
+        retail_trend = "inflow" if retail_pos >= 2 else "outflow"
+
+        unit = 1e8  # 转亿
+        if main_trend == "outflow" and retail_trend == "inflow":
+            signal = "distribution"
+            detail = f"大盘主力净流出(5日均{main_ma5/unit:.0f}亿), 散户仍在承接"
+            score_adj = -5.0
+        elif main_trend == "inflow" and retail_trend == "outflow":
+            signal = "smart_money_buying"
+            detail = f"大盘主力净流入(5日均{main_ma5/unit:.0f}亿), 散户减仓"
+            score_adj = +4.0
+        elif main_trend == "inflow":
+            signal = "consensus_buy"
+            detail = f"市场整体净流入(主力5日均{main_ma5/unit:.0f}亿)"
+            score_adj = +2.0
+        else:
+            signal = "consensus_sell"
+            detail = f"市场整体净流出(主力5日均{main_ma5/unit:.0f}亿)"
+            score_adj = -3.0
+
+        return {
+            "signal": signal,
+            "detail": detail,
+            "score_adj": score_adj,
+            "main_ma5": round(main_ma5, 2),
+            "retail_ma5": round(retail_ma5, 2),
+        }
+    except Exception as e:
+        logger.debug("[market_context] mkt_moneyflow_signal 失败: %s", e)
+        return {"signal": "neutral", "detail": "", "score_adj": 0}
+
 
 def _fetch_index_daily(code_with_market: str, days: int = 120) -> pd.DataFrame | None:
     """获取指数日线数据。
@@ -876,6 +946,7 @@ class MarketContextAnalyzer:
         self._concept_ranking: list[dict] | None = None
         self._etf_cache: dict[str, TrendState] = {}  # etf_code → TrendState
         self._index_dfs: dict[str, pd.DataFrame] = {}  # code → df (for chart gen)
+        self._mkt_flow: dict | None = None  # 全市场资金流信号缓存
 
     def analyze_market_indices(self) -> list[TrendState]:
         """分析6大宽基指数趋势状态(带缓存)。"""
@@ -942,15 +1013,40 @@ class MarketContextAnalyzer:
                 run_dir, index_states, etf_states, llm_routers
             )
 
+        # 5. 全市场资金流信号(会话级缓存, 失败不阻断)
+        with self._lock:
+            if self._mkt_flow is None:
+                self._mkt_flow = _get_mkt_moneyflow_signal(days=5)
+        mkt_flow = self._mkt_flow or {}
+        mkt_flow_signal = mkt_flow.get("signal", "neutral")
+        mkt_flow_detail = mkt_flow.get("detail", "")
+
+        # 资金流信号对 market_score 的微调(±5分, 不触发单独 phase 翻转)
+        score_adj = float(mkt_flow.get("score_adj", 0))
+        adj_score = max(0.0, min(100.0, market_score + score_adj))
+        if adj_score >= 65:
+            adj_phase, adj_phase_cn = "offensive", "进攻"
+        elif adj_score <= 35:
+            adj_phase, adj_phase_cn = "defensive", "防守"
+        else:
+            adj_phase, adj_phase_cn = "balanced", "平衡"
+        if score_adj != 0:
+            logger.info(
+                "[market_context] 大盘资金流=%s adj=%+.1f → score %.1f→%.1f phase=%s",
+                mkt_flow_signal, score_adj, market_score, adj_score, adj_phase,
+            )
+
         ctx = MarketContext(
             generated_at=datetime.now().isoformat(),
             index_states=index_states,
-            market_score=market_score,
-            market_phase=phase,
-            market_phase_cn=phase_cn,
+            market_score=adj_score,
+            market_phase=adj_phase,
+            market_phase_cn=adj_phase_cn,
             sector_heats=sector_heats,
             etf_states=etf_states,
             vision_summary=vision_summary,
+            mkt_flow_signal=mkt_flow_signal,
+            mkt_flow_detail=mkt_flow_detail,
         )
         return ctx
 
@@ -1139,6 +1235,17 @@ def market_context_summary(ctx: MarketContext) -> str:
                 etf_lines.append(f"{s.code}={s.state_cn}(5日{s.ret_5d:+.1f}%)")
         if etf_lines:
             parts.append("关联ETF: " + " | ".join(etf_lines))
+
+    # 全市场资金流信号
+    _flow_cn = {
+        "distribution": "主力派发+散户接盘(高危)",
+        "smart_money_buying": "主力净流入+散户减仓(积极)",
+        "consensus_buy": "主力散户同向净流入",
+        "consensus_sell": "主力散户同向净流出",
+    }.get(ctx.mkt_flow_signal, "")
+    if _flow_cn:
+        detail = f" — {ctx.mkt_flow_detail}" if ctx.mkt_flow_detail else ""
+        parts.append(f"大盘资金流: {_flow_cn}{detail}")
 
     # 视觉研判
     if ctx.vision_summary:
