@@ -1,4 +1,4 @@
-"""pytest 全局配置 - 内存 SQLite + 异步 fixture。"""
+"""pytest 全局配置 - 内存 SQLite + 异步 fixture + 屏蔽外部 IO。"""
 from __future__ import annotations
 
 import sys
@@ -13,6 +13,18 @@ sys.path.insert(0, str(WEB_ROOT))
 
 from app.core.db import Base, init_engine, get_session_factory   # noqa: E402
 import app.models   # noqa: F401  触发模型注册
+
+
+@pytest.fixture(autouse=True)
+def _no_external_run(monkeypatch):
+    """全局屏蔽真实 _run_one (避免测试时联网拉 Tushare/跑 LLM)。"""
+    async def fake_run_one(*args, **kwargs):
+        return None
+    try:
+        from app.services import analysis_runner
+        monkeypatch.setattr(analysis_runner, "_run_one", fake_run_one)
+    except ImportError:
+        pass
 
 
 @pytest_asyncio.fixture
