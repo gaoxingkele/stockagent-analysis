@@ -231,29 +231,37 @@ def _compose_final_score(
     return final, components
 
 
-def _decide_level(final_score: float, trader_decision: str) -> tuple[str, str]:
-    """根据融合分与 Trader 决策确定最终等级。
+def _decide_level(
+    final_score: float,
+    trader_decision: str,
+    market_phase: str = "balanced",
+) -> tuple[str, str]:
+    """根据融合分、Trader 决策与市场环境确定最终等级。
 
-    阈值重新校准 (去极端化后分布拉开):
-    - ≥80     → strong_buy
-    - 72-79.9 → weak_buy (若 Trader=SELL 则 hold)
-    - 62-71.9 → hold
-    - 52-61.9 → watch (hold 偏悲观,持有者可开始减)
-    - 42-51.9 → weak_sell
-    - <42     → strong_sell
+    方案 B: 评分不动, 市场阶段调节阈值 (±4分):
+    - offensive(进攻): 阈值 -4 (更易出 buy 信号)
+    - defensive(防守): 阈值 +4 (更难出 buy 信号)
+    - balanced(平衡):  不变
 
-    Returns: (final_decision, decision_level)
+    基准阈值: strong_buy=80 / weak_buy=72 / hold=62 / watch_sell=52 / weak_sell=42
     """
+    _shift = {"offensive": -4, "defensive": 4}.get(market_phase, 0)
+    t_strong = 80 + _shift
+    t_weak   = 72 + _shift
+    t_hold   = 62 + _shift
+    t_watch  = 52 + _shift
+    t_wsell  = 42 + _shift
+
     td = (trader_decision or "HOLD").upper()
-    if final_score >= 80:
+    if final_score >= t_strong:
         return "buy", "strong_buy"
-    if final_score >= 72:
+    if final_score >= t_weak:
         return ("buy", "weak_buy") if td != "SELL" else ("hold", "hold")
-    if final_score >= 62:
+    if final_score >= t_hold:
         return "hold", "hold"
-    if final_score >= 52:
+    if final_score >= t_watch:
         return "hold", "watch_sell"
-    if final_score >= 42:
+    if final_score >= t_wsell:
         return "sell", "weak_sell"
     return "sell", "strong_sell"
 
@@ -437,7 +445,11 @@ def run_analysis_v3(
         experts, investment_plan, trading_plan, risk_policy,
         ts_enrich=ts_enrich if ts_enrich else None,
     )
-    final_decision, decision_level = _decide_level(final_score, trading_plan.final_decision)
+    _mkt_phase = (ctx.get("features", {}).get("market_context", {}) or {}).get("market_phase", "balanced")
+    final_decision, decision_level = _decide_level(final_score, trading_plan.final_decision, _mkt_phase)
+    if _mkt_phase != "balanced":
+        _shift = {"offensive": -4, "defensive": 4}.get(_mkt_phase, 0)
+        logger.info("[v3] 市场阶段=%s 阈值偏移%+d → %s(%s)", _mkt_phase, _shift, final_decision, decision_level)
 
     result = {
         "version": "v3",

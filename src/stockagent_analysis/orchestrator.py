@@ -984,29 +984,8 @@ def run_analysis(
             flush=True,
         )
 
-    # ── 市场环境调节 ──
+    # 方案B: 市场环境只调整决策阈值, 不改评分
     _mkt_ctx_data = analysis_context.get("features", {}).get("market_context", {})
-    if _mkt_ctx_data:
-        try:
-            from .market_context import MarketContext, TrendState, SectorHeat, compute_market_adjustment
-            _mkt_ctx_obj = MarketContext(
-                market_score=float(_mkt_ctx_data.get("market_score", 50)),
-                market_phase=_mkt_ctx_data.get("market_phase", "balanced"),
-                market_phase_cn=_mkt_ctx_data.get("market_phase_cn", "平衡"),
-                sector_heats=[SectorHeat(**s) for s in _mkt_ctx_data.get("sector_heats", [])],
-                etf_states=[TrendState(**s) for s in _mkt_ctx_data.get("etf_states", [])],
-            )
-            _mkt_adj = compute_market_adjustment(_mkt_ctx_obj, final_score)
-            if abs(_mkt_adj) > 0.5:
-                _pre_adj = final_score
-                final_score = max(0, min(100, final_score + _mkt_adj))
-                print(
-                    f"[市场环境] 大盘={_mkt_ctx_obj.market_phase_cn}({_mkt_ctx_obj.market_score:.0f}) "
-                    f"调节={_mkt_adj:+.1f} → {_pre_adj:.1f}→{final_score:.1f}",
-                    flush=True,
-                )
-        except Exception as _e:
-            manager_logger.warning("market context adjustment failed: %s", _e)
 
     # 基于市场状态动态调整阈值
     _regime = analysis_context.get("features", {}).get("market_regime", {}).get("regime", "unknown")
