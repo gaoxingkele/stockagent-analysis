@@ -36,9 +36,12 @@ async def lifespan(app: FastAPI):
     # P5: Redis (失败自动 fallback in-memory)
     await init_redis()
 
-    # TODO P6: 启动健康检查定时任务
+    # P6: APScheduler 健康检查定时
+    from .tasks.scheduler import init_scheduler, shutdown_scheduler
+    init_scheduler()
 
     yield
+    await shutdown_scheduler()
     await close_redis()
     logger.info("[shutdown] %s 关闭", settings.app_name)
 
@@ -54,11 +57,12 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=str(settings.web_root / "static")), name="static")
 
 # 路由注册
-from .routers import admin, analysis, auth, i18n, users   # noqa: E402
+from .routers import admin, analysis, auth, healthcheck, i18n, users   # noqa: E402
 app.include_router(auth.router)
 app.include_router(i18n.router)
 app.include_router(users.router)
 app.include_router(analysis.router)
+app.include_router(healthcheck.router)
 app.include_router(admin.router)
 
 
