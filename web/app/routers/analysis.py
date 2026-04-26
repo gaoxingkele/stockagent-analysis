@@ -161,6 +161,43 @@ async def get_job(
     }
 
 
+@router.post("/jobs/repair-status")
+async def repair_job_status(
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """修复历史卡住状态的 job: 子 result 全完成但 job 仍是 running 的, 重算状态。"""
+    from datetime import datetime, timezone
+    from ..models import JobStatus
+    res = await db.execute(
+        select(AnalysisJob).where(
+            AnalysisJob.user_id == user.id,
+            AnalysisJob.status.in_((JobStatus.pending, JobStatus.running)),
+        )
+    )
+    fixed = 0
+    for job in res.scalars().all():
+        rs = await db.execute(select(AnalysisResult).where(AnalysisResult.job_id == job.id))
+        rows = list(rs.scalars().all())
+        if not rows:
+            continue
+        pending = sum(1 for r in rows if r.status in (ResultStatus.queued, ResultStatus.running))
+        done = sum(1 for r in rows if r.status == ResultStatus.done)
+        bad = sum(1 for r in rows if r.status in (ResultStatus.failed, ResultStatus.refunded))
+        if pending > 0:
+            continue
+        if done == len(rows):
+            job.status = JobStatus.done
+        elif done > 0 and bad > 0:
+            job.status = JobStatus.partial_done
+        else:
+            job.status = JobStatus.failed
+        job.finished_at = datetime.now(timezone.utc)
+        fixed += 1
+    await db.commit()
+    return {"repaired": fixed}
+
+
 @router.get("/jobs")
 async def my_jobs(
     user: Annotated[User, Depends(get_current_user)],
@@ -176,16 +213,40 @@ async def my_jobs(
         .order_by(desc(AnalysisJob.created_at)).limit(limit).offset(offset)
     )
     jobs = list(res.scalars().all())
+    job_ids = [j.id for j in jobs]
+
+    # 一次拉所有 job 的子 result, 按 job 分组聚合 done/failed 计数 + 股票列表
+    breakdowns: dict[int, list[AnalysisResult]] = {jid: [] for jid in job_ids}
+    if job_ids:
+        rs = await db.execute(
+            select(AnalysisResult).where(AnalysisResult.job_id.in_(job_ids))
+            .order_by(AnalysisResult.id)
+        )
+        for r in rs.scalars().all():
+            breakdowns.setdefault(r.job_id, []).append(r)
+
+    items = []
+    for j in jobs:
+        rows = breakdowns.get(j.id, [])
+        done = sum(1 for r in rows if r.status == ResultStatus.done)
+        failed = sum(1 for r in rows if r.status in (ResultStatus.failed, ResultStatus.refunded))
+        symbols = [
+            {"symbol": r.symbol, "name": r.name or "",
+             "status": r.status.value, "final_score": r.final_score}
+            for r in rows
+        ]
+        items.append({
+            "id": j.id, "symbols_count": j.symbols_count,
+            "total_points_charged": j.total_points_charged,
+            "status": j.status.value,
+            "created_at": j.created_at.isoformat(),
+            "finished_at": j.finished_at.isoformat() if j.finished_at else None,
+            "done_count": done, "failed_count": failed,
+            "symbols": symbols,
+        })
+
     return {
-        "items": [
-            {
-                "id": j.id, "symbols_count": j.symbols_count,
-                "total_points_charged": j.total_points_charged,
-                "status": j.status.value,
-                "created_at": j.created_at.isoformat(),
-                "finished_at": j.finished_at.isoformat() if j.finished_at else None,
-            } for j in jobs
-        ],
+        "items": items,
         "total": int(total or 0), "limit": limit, "offset": offset,
     }
 
@@ -266,6 +327,40 @@ async def stream_progress(
                 break
 
     return EventSourceResponse(event_generator())
+
+
+@router.get("/stocks/{symbol}/kline")
+async def stock_kline(
+    symbol: str,
+    user: Annotated[User, Depends(get_current_user)],
+    days: int = Query(180, ge=20, le=720),
+):
+    """OHLC + 成交量, 供 ECharts 蜡烛图。"""
+    import asyncio
+    def _fetch():
+        from stockagent_analysis.tushare_enrich import _get_pro
+        pro = _get_pro()
+        if pro is None:
+            raise HTTPException(503, "Tushare 未初始化")
+        from datetime import date, timedelta
+        end = date.today().strftime("%Y%m%d")
+        start = (date.today() - timedelta(days=days * 2)).strftime("%Y%m%d")
+        df = pro.daily(ts_code=symbol.upper(), start_date=start, end_date=end)
+        if df is None or df.empty:
+            return []
+        df = df.sort_values("trade_date").tail(days)
+        return [
+            {
+                "date": str(r.trade_date),
+                "open": float(r.open), "close": float(r.close),
+                "low": float(r.low),   "high": float(r.high),
+                "volume": float(r.vol or 0),
+                "pct_chg": float(r.pct_chg or 0),
+            }
+            for r in df.itertuples()
+        ]
+    rows = await asyncio.to_thread(_fetch)
+    return {"symbol": symbol.upper(), "rows": rows}
 
 
 @router.get("/stocks/{symbol}/history")

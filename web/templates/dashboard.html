@@ -25,7 +25,10 @@
   <div class="card">
     <div class="px-5 py-4 border-b border-line flex items-center justify-between">
       <h2 class="text-base font-medium">{{ t('dashboard.recent_jobs') }}</h2>
-      <a href="/analyze" class="btn btn-primary text-xs">+ 新建分析</a>
+      <div class="flex gap-2">
+        <button onclick="repairJobs()" class="btn btn-ghost text-xs" title="修复卡在 running 的历史任务">↻ 修复状态</button>
+        <a href="/analyze" class="btn btn-primary text-xs">+ 新建分析</a>
+      </div>
     </div>
     <div id="jobs-list" hx-get="/api/jobs?limit=10" hx-trigger="load" hx-swap="innerHTML" class="p-5 text-text-muted text-sm">
       {{ t('common.loading') }}
@@ -34,21 +37,58 @@
 </div>
 
 <script>
+function symbolBadge(s) {
+  const cls = s.status === 'done' ? 'badge-success' :
+              s.status === 'failed' || s.status === 'refunded' ? 'badge-danger' :
+              s.status === 'running' ? 'badge-accent' : 'badge-warn';
+  const score = s.final_score != null ? ` <span class="opacity-60">${s.final_score.toFixed ? s.final_score.toFixed(1) : s.final_score}</span>` : '';
+  const tip = s.name ? `${s.symbol} ${s.name}` : s.symbol;
+  return `<span class="badge ${cls} mr-1 mb-1" title="${tip}">${s.symbol}${s.name ? ' ' + s.name : ''}${score}</span>`;
+}
+
+async function repairJobs() {
+  const r = await fetch('/api/jobs/repair-status', {method: 'POST', credentials: 'include'});
+  const d = await r.json();
+  alert(`已修复 ${d.repaired} 个任务状态`);
+  location.reload();
+}
+
 document.body.addEventListener('htmx:afterRequest', (e) => {
   if (e.detail.target.id === 'jobs-list' && e.detail.xhr.status === 200) {
     const data = JSON.parse(e.detail.xhr.responseText);
     const html = data.items.length === 0 ? '<p class="text-text-dim">暂无任务</p>' :
       `<table class="w-full text-sm">
         <thead><tr class="text-text-muted text-xs border-b border-line">
-          <th class="text-left py-2">#</th><th class="text-left">股票数</th><th class="text-left">扣分</th><th class="text-left">状态</th><th class="text-left">时间</th>
-        </tr></thead><tbody>${data.items.map(j => `
+          <th class="text-left py-2">#</th>
+          <th class="text-left">进度</th>
+          <th class="text-left">股票</th>
+          <th class="text-left">扣分</th>
+          <th class="text-left">状态</th>
+          <th class="text-left">时间</th>
+        </tr></thead><tbody>${data.items.map(j => {
+          const total = j.symbols_count;
+          const done = j.done_count != null ? j.done_count : 0;
+          const failed = j.failed_count != null ? j.failed_count : 0;
+          const progressPct = total > 0 ? Math.round((done + failed) / total * 100) : 0;
+          const progressColor = failed > 0 ? 'bg-danger' : 'bg-success';
+          const symbolsHtml = (j.symbols || []).map(symbolBadge).join('');
+          const statusBadge = j.status==='done'?'badge-success':
+                              j.status==='failed'?'badge-danger':
+                              j.status==='partial_done'?'badge-warn':
+                              j.status==='running'?'badge-accent':'badge-warn';
+          return `
           <tr class="border-b border-line/50 hover:bg-bg-hover cursor-pointer" onclick="location.href='/jobs/${j.id}'">
-            <td class="py-2.5">#${j.id}</td>
-            <td>${j.symbols_count}</td>
-            <td>${j.total_points_charged} pt</td>
-            <td><span class="badge ${j.status==='done'?'badge-success':j.status==='failed'?'badge-danger':j.status==='running'?'badge-accent':'badge-warn'}">${j.status}</span></td>
-            <td class="text-text-muted">${new Date(j.created_at).toLocaleString('zh-CN')}</td>
-          </tr>`).join('')}</tbody></table>`;
+            <td class="py-2.5 align-top"><span class="text-text-muted">#${j.id}</span></td>
+            <td class="align-top">
+              <div class="font-mono text-xs">${done}/${total}${failed > 0 ? ' <span class="text-danger">⚠ '+failed+'</span>' : ''}</div>
+              <div class="w-20 h-1 bg-line rounded mt-1 overflow-hidden"><div class="${progressColor} h-full" style="width:${progressPct}%"></div></div>
+            </td>
+            <td class="align-top max-w-md"><div class="flex flex-wrap">${symbolsHtml || '<span class="text-text-dim">-</span>'}</div></td>
+            <td class="align-top">${j.total_points_charged} pt</td>
+            <td class="align-top"><span class="badge ${statusBadge}">${j.status}</span></td>
+            <td class="text-text-muted text-xs align-top">${new Date(j.created_at).toLocaleString('zh-CN')}</td>
+          </tr>`;
+        }).join('')}</tbody></table>`;
     e.detail.target.innerHTML = html;
   }
 });

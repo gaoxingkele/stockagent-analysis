@@ -221,7 +221,11 @@ async def submit_analysis(
             auto_commit=False,
         )
 
-    job.status = JobStatus.running if any(r.status == ResultStatus.queued for r in results) else JobStatus.done
+    if any(r.status == ResultStatus.queued for r in results):
+        job.status = JobStatus.running
+    else:
+        job.status = JobStatus.done
+        job.finished_at = datetime.now(timezone.utc)
     await db.commit()
 
     # 异步触发未完成的(非缓存)
@@ -235,6 +239,33 @@ async def submit_analysis(
 
 # ─────────────── 异步执行 ───────────────
 
+async def _aggregate_job_status(db: AsyncSession, job_id: int) -> None:
+    """根据子 result 状态聚合 job.status; 全完成时回填 finished_at。"""
+    job_res = await db.execute(select(AnalysisJob).where(AnalysisJob.id == job_id))
+    job = job_res.scalar_one_or_none()
+    if job is None:
+        return
+    rs = await db.execute(select(AnalysisResult).where(AnalysisResult.job_id == job_id))
+    rows = list(rs.scalars().all())
+    if not rows:
+        return
+    pending = sum(1 for r in rows if r.status in (ResultStatus.queued, ResultStatus.running))
+    done = sum(1 for r in rows if r.status == ResultStatus.done)
+    bad = sum(1 for r in rows if r.status in (ResultStatus.failed, ResultStatus.refunded))
+    if pending > 0:
+        job.status = JobStatus.running
+    elif done == len(rows):
+        job.status = JobStatus.done
+        job.finished_at = datetime.now(timezone.utc)
+    elif done > 0 and bad > 0:
+        job.status = JobStatus.partial_done
+        job.finished_at = datetime.now(timezone.utc)
+    else:
+        job.status = JobStatus.failed
+        job.finished_at = datetime.now(timezone.utc)
+    await db.commit()
+
+
 async def _run_one(factory, result_id: int, a_type: AnalysisType, symbol: str):
     """单只股票异步执行 (在新 session 里)。"""
     async with factory() as db:
@@ -243,6 +274,7 @@ async def _run_one(factory, result_id: int, a_type: AnalysisType, symbol: str):
         rec = res.scalar_one_or_none()
         if rec is None:
             return
+        job_id = rec.job_id
         rec.status = ResultStatus.running
         rec.current_phase = "starting"
         await db.commit()
@@ -255,6 +287,11 @@ async def _run_one(factory, result_id: int, a_type: AnalysisType, symbol: str):
         except Exception as e:
             logger.exception("[analysis] %s failed: %s", symbol, e)
             await _mark_failed_and_refund(db, rec, str(e))
+        finally:
+            try:
+                await _aggregate_job_status(db, job_id)
+            except Exception as e:
+                logger.error("[analysis] aggregate job status failed: %s", e)
 
 
 async def _do_quant_only(db: AsyncSession, rec: AnalysisResult):

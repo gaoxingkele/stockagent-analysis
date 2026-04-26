@@ -1,16 +1,20 @@
 {% extends "base.html" %}
 {% block title %}{{ result.symbol }} {{ result.name or '' }}{% endblock %}
 {% block content %}
-<div class="max-w-5xl mx-auto space-y-6">
+<div class="max-w-6xl mx-auto space-y-6" x-data="resultView()" x-init="init()">
+
   <!-- 头部 -->
   <div class="card p-6">
-    <div class="flex items-center justify-between">
+    <div class="flex items-start justify-between gap-6">
       <div>
         <h1 class="text-3xl font-semibold font-mono">{{ result.symbol }}</h1>
         <div class="text-text-muted mt-1">{{ result.name or '' }}
           <span class="badge badge-accent ml-2">{{ result.analysis_type }}</span>
           {% if result.is_cache_hit %}<span class="badge badge-warn ml-1">缓存命中</span>{% endif %}
         </div>
+        {% if result.trader_decision %}
+        <div class="mt-3 text-sm text-text-muted">交易员观点: <span class="text-text">{{ result.trader_decision }}</span></div>
+        {% endif %}
       </div>
       <div class="text-right">
         <div class="text-5xl font-semibold
@@ -21,6 +25,22 @@
         </div>
         <div class="text-text-muted mt-1">{{ t('decision.' + (result.decision_level or 'hold')) }}</div>
       </div>
+    </div>
+  </div>
+
+  <!-- K 线图 (TradingView / ECharts 切换) -->
+  <div class="card">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+      <h2 class="text-base font-medium">📈 K 线图</h2>
+      <div class="flex items-center gap-1 bg-bg rounded p-0.5">
+        <button @click="chartProvider='tv'; renderChart()" :class="chartProvider==='tv' ? 'bg-accent text-white' : 'text-text-muted'" class="px-3 py-1 text-xs rounded">TradingView</button>
+        <button @click="chartProvider='echarts'; renderChart()" :class="chartProvider==='echarts' ? 'bg-accent text-white' : 'text-text-muted'" class="px-3 py-1 text-xs rounded">ECharts</button>
+      </div>
+    </div>
+    <div class="relative">
+      <div x-show="chartProvider==='tv'" id="tv_chart_{{ result.symbol|replace('.', '_') }}" style="height: 480px;"></div>
+      <div x-show="chartProvider==='echarts'" id="echarts_kline" style="height: 480px;"></div>
+      <div x-show="chartLoading" class="absolute inset-0 flex items-center justify-center bg-bg-card/60 text-text-muted text-sm">加载中...</div>
     </div>
   </div>
 
@@ -48,6 +68,45 @@
   </div>
   {% endif %}
 
+  {% if result.expert_scores_json %}
+  {% set details = result.expert_scores_json.get('details') if result.expert_scores_json.get('details') else result.expert_scores_json %}
+  <div class="card p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-base font-medium">🎓 4 专家 FOMC 评议</h2>
+      {% if details is iterable and details is not string %}
+      {% set scores = details | map(attribute='score') | list %}
+      {% if scores %}
+      <span class="text-sm text-text-muted">均值 <span class="text-text font-semibold">{{ "%.1f" % (scores|sum / scores|length) }}</span></span>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% if details is iterable and details is not string and details and (details[0] is mapping) %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {% for exp in details %}
+      {% set score = exp.score|float if exp.score else 0 %}
+      {% set color = 'text-success' if score >= 75 else ('text-warn' if score >= 60 else 'text-danger') %}
+      {% set bar = 'bg-success' if score >= 75 else ('bg-warn' if score >= 60 else 'bg-danger') %}
+      <div class="border border-line rounded-lg p-4 hover:bg-bg-hover transition">
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium truncate">{{ exp.role_cn or exp.role }}</div>
+            <div class="text-xs text-text-muted font-mono mt-0.5">{{ exp.role }}</div>
+          </div>
+          <div class="text-2xl font-semibold {{ color }}">{{ "%.1f" % score }}</div>
+        </div>
+        <div class="progress mt-3"><div style="width: {{ score }}%" class="{{ bar }}"></div></div>
+        {% if exp.summary %}
+        <div class="text-xs text-text-muted mt-2 line-clamp-2">{{ exp.summary }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <pre class="text-xs text-text-muted overflow-auto bg-bg rounded p-3">{{ details | tojson(indent=2) }}</pre>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% if result.quant_components_json and result.quant_components_json.get('adjustments') %}
   <div class="card p-6">
     <h2 class="text-base font-medium mb-4">量化 4 维明细</h2>
@@ -55,18 +114,11 @@
       {% for adj in result.quant_components_json['adjustments'] %}
       <div class="flex items-center justify-between p-3 bg-bg-hover rounded">
         <span class="text-sm font-mono text-text-muted">{{ adj['factor'] }}</span>
-        <span class="text-sm">{{ adj['reason'] }}</span>
+        <span class="text-sm flex-1 mx-4 truncate">{{ adj['reason'] }}</span>
         <span class="text-base font-semibold {% if adj['delta'] > 0 %}text-success{% else %}text-danger{% endif %}">{{ "%+.1f" % adj['delta'] }}</span>
       </div>
       {% endfor %}
     </div>
-  </div>
-  {% endif %}
-
-  {% if result.expert_scores_json %}
-  <div class="card p-6">
-    <h2 class="text-base font-medium mb-4">4 专家 FOMC</h2>
-    <pre class="text-xs text-text-muted overflow-auto">{{ result.expert_scores_json | tojson(indent=2) }}</pre>
   </div>
   {% endif %}
 
@@ -75,4 +127,114 @@
     <a href="/stock/{{ result.symbol }}/history" class="text-accent hover:underline">查看 {{ result.symbol }} 评分走势 →</a>
   </div>
 </div>
+
+<script>
+const SYMBOL = "{{ result.symbol }}";
+
+function resultView() {
+  return {
+    chartProvider: 'tv',
+    chartLoading: false,
+    klineRows: null,
+    echartInst: null,
+    tvWidget: null,
+    init() {
+      this.$nextTick(() => this.renderChart());
+    },
+    async fetchKline() {
+      if (this.klineRows) return this.klineRows;
+      this.chartLoading = true;
+      try {
+        const r = await fetch(`/api/stocks/${SYMBOL}/kline?days=180`, {credentials: 'include'});
+        if (!r.ok) throw new Error('kline 加载失败');
+        const d = await r.json();
+        this.klineRows = d.rows || [];
+        return this.klineRows;
+      } finally {
+        this.chartLoading = false;
+      }
+    },
+    renderChart() {
+      if (this.chartProvider === 'tv') this.renderTV();
+      else this.renderEcharts();
+    },
+    renderTV() {
+      const containerId = 'tv_chart_' + SYMBOL.replace('.', '_');
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      el.innerHTML = '';
+      // TradingView 公开 widget; A 股代码映射 (.SH→SSE, .SZ→SZSE)
+      const code = SYMBOL.replace('.SH', '').replace('.SZ', '');
+      const ex = SYMBOL.endsWith('.SH') ? 'SSE' : SYMBOL.endsWith('.SZ') ? 'SZSE' : '';
+      const tvSymbol = ex ? `${ex}:${code}` : SYMBOL;
+      const sc = document.createElement('script');
+      sc.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+      sc.async = true;
+      sc.innerHTML = JSON.stringify({
+        autosize: true, symbol: tvSymbol, interval: 'D',
+        timezone: 'Asia/Shanghai', theme: 'dark', style: '1', locale: 'zh_CN',
+        enable_publishing: false, hide_legend: false,
+        allow_symbol_change: false, save_image: false,
+        container_id: containerId,
+      });
+      el.appendChild(sc);
+    },
+    async renderEcharts() {
+      const rows = await this.fetchKline();
+      if (!rows || !rows.length) {
+        document.getElementById('echarts_kline').innerHTML = '<div class="p-8 text-center text-text-muted">无 K 线数据</div>';
+        return;
+      }
+      if (!this.echartInst) {
+        this.echartInst = echarts.init(document.getElementById('echarts_kline'), 'dark');
+        window.addEventListener('resize', () => this.echartInst && this.echartInst.resize());
+      }
+      const dates  = rows.map(r => r.date);
+      const ohlc   = rows.map(r => [r.open, r.close, r.low, r.high]);
+      const vols   = rows.map((r, i) => ({
+        value: r.volume,
+        itemStyle: { color: r.close >= r.open ? '#3FB950' : '#F85149' }
+      }));
+      const ma = (n) => rows.map((_, i) => {
+        if (i < n - 1) return null;
+        let s = 0; for (let k = i - n + 1; k <= i; k++) s += rows[k].close;
+        return +(s / n).toFixed(2);
+      });
+      this.echartInst.setOption({
+        backgroundColor: 'transparent',
+        animation: false,
+        legend: { data: ['K线','MA5','MA20','MA60'], textStyle: { color: '#8A8F9A' }, top: 0 },
+        tooltip: { trigger: 'axis', axisPointer: { type: 'cross' }, backgroundColor: '#10131A', borderColor: '#2A2F3D' },
+        axisPointer: { link: [{xAxisIndex: 'all'}] },
+        grid: [
+          { left: 50, right: 20, top: 40, height: 280 },
+          { left: 50, right: 20, top: 350, height: 90 },
+        ],
+        xAxis: [
+          { type: 'category', data: dates, scale: true, boundaryGap: false,
+            axisLine: { lineStyle: { color: '#2A2F3D' }}, splitLine: { show: false }, axisLabel: { color: '#8A8F9A' }},
+          { type: 'category', gridIndex: 1, data: dates, scale: true, boundaryGap: false,
+            axisLine: { lineStyle: { color: '#2A2F3D' }}, axisLabel: { show: false }, axisTick: { show: false }},
+        ],
+        yAxis: [
+          { scale: true, splitLine: { lineStyle: { color: '#1F2430' }}, axisLabel: { color: '#8A8F9A' }},
+          { gridIndex: 1, splitNumber: 2, axisLine: { lineStyle: { color: '#2A2F3D' }}, axisLabel: { color: '#8A8F9A' }, splitLine: { show: false }},
+        ],
+        dataZoom: [
+          { type: 'inside', xAxisIndex: [0,1], start: 70, end: 100 },
+          { type: 'slider', xAxisIndex: [0,1], top: 450, height: 20, start: 70, end: 100, textStyle: { color: '#8A8F9A' }},
+        ],
+        series: [
+          { name: 'K线', type: 'candlestick', data: ohlc,
+            itemStyle: { color: '#F85149', color0: '#3FB950', borderColor: '#F85149', borderColor0: '#3FB950' }},
+          { name: 'MA5',  type: 'line', data: ma(5),  smooth: true, lineStyle: { width: 1, color: '#7B61FF'}, showSymbol: false },
+          { name: 'MA20', type: 'line', data: ma(20), smooth: true, lineStyle: { width: 1, color: '#D29922'}, showSymbol: false },
+          { name: 'MA60', type: 'line', data: ma(60), smooth: true, lineStyle: { width: 1, color: '#3FB950'}, showSymbol: false },
+          { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: vols },
+        ],
+      });
+    },
+  }
+}
+</script>
 {% endblock %}
