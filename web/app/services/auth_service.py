@@ -74,10 +74,17 @@ async def register_or_get_user(
     return user, True
 
 
+def _expire_minutes(remember_me: bool) -> int:
+    if remember_me:
+        return settings.jwt_remember_me_days * 24 * 60
+    return settings.jwt_access_token_expire_minutes
+
+
 async def login_with_code(
     db: AsyncSession, phone: str, code: str, invite_code: str | None = None,
-) -> tuple[User, str]:
-    """验证码登录。新手机号自动注册。返回 (user, jwt_token)。"""
+    *, remember_me: bool = False,
+) -> tuple[User, str, int]:
+    """验证码登录。新手机号自动注册。返回 (user, jwt_token, expire_minutes)。"""
     if not await verify_sms_code(db, phone, code):
         raise AuthError("验证码错误或已过期")
 
@@ -86,13 +93,15 @@ async def login_with_code(
     user.last_login_at = datetime.now(timezone.utc)
     await db.commit()
 
-    token = encode_token(user.id, is_admin=user.is_admin)
-    return user, token
+    minutes = _expire_minutes(remember_me)
+    token = encode_token(user.id, is_admin=user.is_admin, expire_minutes=minutes)
+    return user, token, minutes
 
 
 async def login_with_password(
     db: AsyncSession, phone: str, password: str,
-) -> tuple[User, str]:
+    *, remember_me: bool = False,
+) -> tuple[User, str, int]:
     """管理员密码登录。仅 admin 可用。"""
     res = await db.execute(select(User).where(User.phone == phone))
     user = res.scalar_one_or_none()
@@ -106,5 +115,6 @@ async def login_with_password(
     user.last_login_at = datetime.now(timezone.utc)
     await db.commit()
 
-    token = encode_token(user.id, is_admin=user.is_admin)
-    return user, token
+    minutes = _expire_minutes(remember_me)
+    token = encode_token(user.id, is_admin=user.is_admin, expire_minutes=minutes)
+    return user, token, minutes

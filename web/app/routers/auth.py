@@ -49,8 +49,9 @@ async def verify_code(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     try:
-        user, token = await login_with_code(
+        user, token, minutes = await login_with_code(
             db, body.phone, body.code, invite_code=body.invite_code,
+            remember_me=body.remember_me,
         )
     except AuthError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
@@ -58,12 +59,12 @@ async def verify_code(
     # 同时种 Cookie 方便 SSR 页面
     response.set_cookie(
         "access_token", token,
-        max_age=settings.jwt_access_token_expire_minutes * 60,
+        max_age=minutes * 60,
         httponly=True, samesite="lax",
     )
     return TokenResponse(
         access_token=token,
-        expires_in=settings.jwt_access_token_expire_minutes * 60,
+        expires_in=minutes * 60,
         user=UserPublic.from_orm(user),
     )
 
@@ -74,18 +75,20 @@ async def password_login(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     try:
-        user, token = await login_with_password(db, body.phone, body.password)
+        user, token, minutes = await login_with_password(
+            db, body.phone, body.password, remember_me=body.remember_me,
+        )
     except AuthError as e:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(e))
 
     response.set_cookie(
         "access_token", token,
-        max_age=settings.jwt_access_token_expire_minutes * 60,
+        max_age=minutes * 60,
         httponly=True, samesite="lax",
     )
     return TokenResponse(
         access_token=token,
-        expires_in=settings.jwt_access_token_expire_minutes * 60,
+        expires_in=minutes * 60,
         user=UserPublic.from_orm(user),
     )
 

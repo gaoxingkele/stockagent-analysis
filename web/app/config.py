@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 120
     jwt_refresh_token_expire_days: int = 7
+    jwt_remember_me_days: int = 30          # "保持登录"勾选后的 token + cookie 有效期
 
     # === 健康检查定时 ===
     healthcheck_cron_enabled: bool = True

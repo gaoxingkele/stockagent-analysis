@@ -27,7 +27,11 @@
                 class="btn btn-ghost text-xs whitespace-nowrap">{{ t('login.send_code') }}</button>
       </div>
       <label class="block text-sm text-text-muted mb-1">{{ t('login.invite_code') }}</label>
-      <input x-model="inviteCode" type="text" maxlength="8" class="w-full mb-4 uppercase" placeholder="A123456">
+      <input x-model="inviteCode" type="text" maxlength="8" class="w-full mb-3 uppercase" placeholder="A123456">
+      <label class="flex items-center gap-2 mb-4 text-sm text-text-muted cursor-pointer select-none">
+        <input type="checkbox" x-model="rememberMe" class="w-4 h-4 accent-accent">
+        <span>保持 30 天免登录</span>
+      </label>
       <button type="button" @click="verifyCode()" :disabled="loading"
               class="btn btn-primary w-full justify-center">
         <span x-show="!loading">{{ t('login.submit') }}</span>
@@ -40,8 +44,12 @@
       <label class="block text-sm text-text-muted mb-1">{{ t('login.phone') }}</label>
       <input x-model="phone" type="tel" maxlength="11" class="w-full mb-3" placeholder="管理员手机号">
       <label class="block text-sm text-text-muted mb-1">{{ t('login.password') }}</label>
-      <input x-model="password" type="password" class="w-full mb-4"
+      <input x-model="password" type="password" class="w-full mb-3"
              @keyup.enter="passwordLogin()" placeholder="管理员密码">
+      <label class="flex items-center gap-2 mb-4 text-sm text-text-muted cursor-pointer select-none">
+        <input type="checkbox" x-model="rememberMe" class="w-4 h-4 accent-accent">
+        <span>保持 30 天免登录</span>
+      </label>
       <button type="button" @click="passwordLogin()" :disabled="loading"
               class="btn btn-primary w-full justify-center">
         <span x-show="!loading">{{ t('login.submit') }}</span>
@@ -66,6 +74,7 @@ function loginPage() {
     code: '',
     password: '',
     inviteCode: new URLSearchParams(location.search).get('invite_code') || '',
+    rememberMe: localStorage.getItem('remember_me') === '1',
     loading: false,
     msg: '',
     ok: false,
@@ -114,12 +123,14 @@ function loginPage() {
             phone: this.phone,
             code: this.code,
             invite_code: this.inviteCode || null,
+            remember_me: this.rememberMe,
           }),
         });
         const d = await r.json();
         if (r.ok) {
           this.msg = '✓ 登录成功, 跳转中...';
           this.ok = true;
+          localStorage.setItem('remember_me', this.rememberMe ? '1' : '0');
           setTimeout(() => location.href = '/', 500);
         } else {
           this.msg = d.detail || '登录失败';
@@ -145,12 +156,14 @@ function loginPage() {
           body: JSON.stringify({
             phone: this.phone,
             password: this.password,
+            remember_me: this.rememberMe,
           }),
         });
         const d = await r.json();
         if (r.ok) {
           this.msg = '✓ 登录成功, 跳转中...';
           this.ok = true;
+          localStorage.setItem('remember_me', this.rememberMe ? '1' : '0');
           setTimeout(() => location.href = '/', 500);
         } else {
           this.msg = d.detail || '登录失败';

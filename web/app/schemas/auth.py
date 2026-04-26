@@ -19,11 +19,13 @@ class VerifyCodeRequest(BaseModel):
     phone: str = Field(..., min_length=11, max_length=11)
     code: str = Field(..., min_length=4, max_length=8)
     invite_code: str | None = Field(default=None, max_length=8)
+    remember_me: bool = False
 
 
 class PasswordLoginRequest(BaseModel):
     phone: str = Field(..., min_length=11, max_length=11)
     password: str = Field(..., min_length=6, max_length=64)
+    remember_me: bool = False
 
 
 class TokenResponse(BaseModel):
