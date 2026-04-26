@@ -225,11 +225,28 @@ async def my_jobs(
         for r in rs.scalars().all():
             breakdowns.setdefault(r.job_id, []).append(r)
 
+    from datetime import datetime, timezone
+    from ..models import JobStatus
+
     items = []
+    auto_fixed = False
     for j in jobs:
         rows = breakdowns.get(j.id, [])
         done = sum(1 for r in rows if r.status == ResultStatus.done)
         failed = sum(1 for r in rows if r.status in (ResultStatus.failed, ResultStatus.refunded))
+        pending = sum(1 for r in rows if r.status in (ResultStatus.queued, ResultStatus.running))
+
+        # 自动修复: 子 result 全完成但 job 仍是 pending/running, 实时聚合状态
+        if rows and pending == 0 and j.status in (JobStatus.pending, JobStatus.running):
+            if done == len(rows):
+                j.status = JobStatus.done
+            elif done > 0 and failed > 0:
+                j.status = JobStatus.partial_done
+            else:
+                j.status = JobStatus.failed
+            j.finished_at = datetime.now(timezone.utc)
+            auto_fixed = True
+
         symbols = [
             {"symbol": r.symbol, "name": r.name or "",
              "status": r.status.value, "final_score": r.final_score}
@@ -244,6 +261,9 @@ async def my_jobs(
             "done_count": done, "failed_count": failed,
             "symbols": symbols,
         })
+
+    if auto_fixed:
+        await db.commit()
 
     return {
         "items": items,
