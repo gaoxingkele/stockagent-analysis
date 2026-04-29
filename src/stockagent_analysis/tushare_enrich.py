@@ -411,6 +411,11 @@ def compute_quant_score(enrich: dict[str, Any]) -> dict[str, Any]:
          3b. 强度/rate          [-10, +10]
          3c. 连续性             [0, +5]
       4. 股东户数变化%           [-6, +8]
+      5. 市值×PE 分层因子(2026-04-29 加, 来自 102 万样本回测):
+         5a. ma_ratio_60 反转/动量(按市值段反向)  [-6, +6]
+         5b. mfi_14 动量(仅大盘 / 中盘正向)       [-3, +5]
+         5c. sump_20 累计涨幅(按市值段反向)       [-5, +5]
+         5d. ht_trendmode(全段反向)               [-3, +3]
 
     有数据才打分; 缺数据不参与不惩罚。
     总偏移累加到 50 基准上, clamp [0, 100]。
@@ -545,6 +550,106 @@ def compute_quant_score(enrich: dict[str, Any]) -> dict[str, Any]:
                 elif pct >= 2:
                     _add("holders", -3.0, f"股东户数 {pct:+.1f}% (轻度分散)")
         except (ValueError, TypeError, AttributeError):
+            pass
+
+    # 5. 市值×因子 分层规则 (来自 2026-04-29 全因子回测, Q5-Q1 胜率差 ≥10pp)
+    # mv 段: 小盘<100亿反转 / 中盘 100-1000 弱反转 / 大盘≥1000亿动量
+    total_mv_wan = tsf.get("total_mv")    # 单位: 万元
+    if total_mv_wan is not None:
+        try:
+            mv_bil = float(total_mv_wan) / 1e4   # 转亿元
+            close = tsf.get("close_qfq")
+            ma60 = tsf.get("ma60")
+            ma120 = tsf.get("ma250") or tsf.get("ma90")  # 用 250 或 90 替代
+            mfi = tsf.get("mfi")
+            rsi24 = tsf.get("rsi24")
+            trix = tsf.get("trix")
+
+            # 5a. ma_ratio_60 = close/MA60 - 1 → 偏离均线
+            if close and ma60 and ma60 > 0:
+                ma_ratio = close / ma60 - 1
+                if mv_bil < 100:   # 小盘反转: 偏离少利好, 偏离多利空
+                    if ma_ratio < -0.04:
+                        _add("layer_ma_ratio60", +6.0,
+                             f"小盘股({mv_bil:.0f}亿)偏离60均线{ma_ratio*100:+.1f}% (跌透反弹利好,Q1胜率61.7%)")
+                    elif ma_ratio > 0.10:
+                        _add("layer_ma_ratio60", -6.0,
+                             f"小盘股({mv_bil:.0f}亿)偏离60均线{ma_ratio*100:+.1f}% (涨多必跌,Q5胜率45.7%)")
+                    elif ma_ratio > 0.04:
+                        _add("layer_ma_ratio60", -3.0,
+                             f"小盘股({mv_bil:.0f}亿)偏离60均线{ma_ratio*100:+.1f}% (轻度高位)")
+                elif mv_bil >= 1000:   # 大盘动量: 偏离多利好
+                    if ma_ratio > 0.04:
+                        _add("layer_ma_ratio60", +5.0,
+                             f"大盘股({mv_bil:.0f}亿)偏离60均线{ma_ratio*100:+.1f}% (强者恒强,IC=+0.090)")
+                    elif ma_ratio < -0.04:
+                        _add("layer_ma_ratio60", -3.0,
+                             f"大盘股({mv_bil:.0f}亿)偏离60均线{ma_ratio*100:+.1f}% (弱势)")
+
+            # 5b. mfi_14 — 大盘 / 中盘动量 (Q5-Q1 大盘+6.6pp / 中大盘+4.7pp)
+            if mfi is not None:
+                try:
+                    mfi_f = float(mfi)
+                    if mv_bil >= 300:
+                        if mfi_f >= 75:
+                            _add("layer_mfi", +5.0, f"中大盘({mv_bil:.0f}亿) MFI={mfi_f:.0f} (动量强,大盘Q5胜率52.2%)")
+                        elif mfi_f >= 60:
+                            _add("layer_mfi", +3.0, f"中大盘({mv_bil:.0f}亿) MFI={mfi_f:.0f}")
+                    elif mv_bil < 100:
+                        # 小盘反向: MFI 高反而是顶部
+                        if mfi_f >= 80:
+                            _add("layer_mfi", -3.0, f"小盘股 MFI={mfi_f:.0f} 偏高 (Q5-Q1=-8.9pp)")
+                except (ValueError, TypeError):
+                    pass
+
+            # 5c. RSI24 — 大盘动量 (1000亿+ Q5-Q1=+1.8pp, 大盘 IC=+0.114)
+            if rsi24 is not None and mv_bil >= 1000:
+                try:
+                    rsi_f = float(rsi24)
+                    if rsi_f >= 65:
+                        _add("layer_rsi24", +4.0, f"大盘股({mv_bil:.0f}亿) RSI24={rsi_f:.0f} (强者恒强,IC=+0.114)")
+                    elif rsi_f >= 55:
+                        _add("layer_rsi24", +2.0, f"大盘股 RSI24={rsi_f:.0f}")
+                    elif rsi_f <= 35:
+                        _add("layer_rsi24", -2.0, f"大盘股 RSI24={rsi_f:.0f} (弱势)")
+                except (ValueError, TypeError):
+                    pass
+
+            # 5d. TRIX — 全市场反向 (小盘 Q5-Q1=-16.5pp, 大盘动量 Q5-Q1=-4.1pp 但 IC 反转)
+            # 简化为: 小盘 trix>0 利空, 大盘不参与 (IC 区分力弱)
+            if trix is not None and mv_bil < 100:
+                try:
+                    trix_f = float(trix)
+                    if trix_f > 0.5:
+                        _add("layer_trix", -3.0, f"小盘股 TRIX={trix_f:.2f} >0 (反转风险)")
+                    elif trix_f < -0.5:
+                        _add("layer_trix", +3.0, f"小盘股 TRIX={trix_f:.2f} <0 (反弹利好)")
+                except (ValueError, TypeError):
+                    pass
+        except (ValueError, TypeError):
+            pass
+
+    # 6. PE × ATR 分层 — PE 0-15 价值股波动正向, PE 100+ 题材股波动反向
+    pe_ttm = tsf.get("pe_ttm")
+    atr_pct = None
+    try:
+        atr_v = tsf.get("atr")
+        close_v = tsf.get("close_qfq")
+        if atr_v and close_v and float(close_v) > 0:
+            atr_pct = float(atr_v) / float(close_v)
+    except (ValueError, TypeError):
+        pass
+
+    if pe_ttm is not None and atr_pct is not None:
+        try:
+            pe_f = float(pe_ttm)
+            if 0 < pe_f < 15:   # 低估值价值股, 波动正向 (Q5-Q1=-3.4pp 实际反向但弱, 用作弱信号)
+                if atr_pct > 0.04:
+                    _add("layer_pe_atr", +2.0, f"低PE({pe_f:.0f})价值股波动率{atr_pct*100:.1f}% (启动信号弱+)")
+            elif pe_f >= 100 or pe_f < 0:   # 高估值/亏损股, 波动反向 (Q5-Q1=-19.7pp 强反转)
+                if atr_pct > 0.05:
+                    _add("layer_pe_atr", -4.0, f"高PE/亏损股波动率{atr_pct*100:.1f}% (Q5胜率仅41%,反转风险)")
+        except (ValueError, TypeError):
             pass
 
     total_delta = sum(a["delta"] for a in adjustments)
