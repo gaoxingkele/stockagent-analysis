@@ -50,12 +50,65 @@ def _make_run_dir(symbol: str, name: str) -> Path:
     return run
 
 
+def _render_sparse_layered_md(sparse_info: dict) -> str:
+    """把 sparse_layered_score 输出渲染成 markdown, 供 LLM context 注入."""
+    if not sparse_info or sparse_info.get("n_active", 0) == 0:
+        return ""
+
+    score = sparse_info.get("layered_score", 50)
+    n_active = sparse_info.get("n_active", 0)
+    n_silent = sparse_info.get("n_silent", 0)
+    K = sparse_info.get("conflict_K", 0)
+    conf = sparse_info.get("confidence", "?")
+    sum_delta = sparse_info.get("sum_delta", 0)
+    ctx = sparse_info.get("context", {})
+    gates = sparse_info.get("gates_applied", [])
+
+    lines = [
+        "## 分层因子激活情况 (sparse_layered, 基于 102 万样本回测)",
+        "",
+        f"**综合分: {score:.1f}** (基线 50, Δ={sum_delta:+.1f}) | 激活 **{n_active} 因子** / 静默 {n_silent} | "
+        f"DS 冲突度 K={K:.3f} | 信号一致性 **{conf}**",
+        "",
+        f"**上下文**: 市值={ctx.get('mv_seg', '?')} · PE={ctx.get('pe_seg', '?')} · "
+        f"行业={ctx.get('industry', '?')} · ETF 持有={ctx.get('etf_held', False)}",
+        "",
+    ]
+
+    if sparse_info.get("active_factors"):
+        lines.append("**激活因子** (Q 桶 / 在该上下文胜率 vs Q3 中位基线 / 调整 delta):")
+        lines.append("")
+        lines.append("| 因子 | Q 桶 | 该桶胜率 | Q3 基线 | 方向 | delta |")
+        lines.append("|---|---|---|---|---|---|")
+        for f in sparse_info["active_factors"][:10]:
+            q = f.get("q_bucket", "?")
+            w = f.get("w_eff", 0)
+            q3 = f.get("q3_eff", 0)
+            d = f.get("delta", 0)
+            sgn = f.get("sign", 0)
+            arrow = "看多 ↑" if sgn > 0 else ("看空 ↓" if sgn < 0 else "—")
+            lines.append(f"| {f.get('name')} | {q} | {w*100:.1f}% | {q3*100:.1f}% | {arrow} | {d:+.2f} |")
+        lines.append("")
+
+    if gates:
+        lines.append(f"**资金流门控**: {', '.join(gates[:6])}")
+        lines.append("")
+
+    if conf == "low":
+        lines.append("> ⚠️ 信号一致性偏低 (因子间存在冲突), 综合分仅作参考")
+    elif conf == "high" and n_active >= 5:
+        lines.append("> ✓ 多因子信号一致, 综合分参考价值高")
+
+    return "\n".join(lines)
+
+
 def _compose_final_score(
     experts: dict[str, ExpertResult],
     investment_plan: InvestmentPlan,
     trading_plan: TradingPlan,
     risk_policy: RiskPolicy,
     ts_enrich: dict[str, Any] | None = None,
+    sparse_info: dict[str, Any] | None = None,
 ) -> tuple[float, dict[str, float]]:
     """融合专家+Judge+Trader+PM 产出最终评分(v3 融合公式)。
 
@@ -192,10 +245,26 @@ def _compose_final_score(
         except Exception as e:
             logger.warning("[v3] quant_score 计算失败(非致命): %s", e)
 
+    # 4b) Sparse Layered Score (v3.2, 已在 phase 0 之前算过, 这里复用 caller 传入的)
+    sparse_score = None
+    if sparse_info and sparse_info.get("n_active", 0) > 0:
+        sparse_score = float(sparse_info.get("layered_score", 50.0))
+
     # 5) 最终融合
-    if quant_score is not None:
-        # 四因子: 0.43 + 0.275 + 0.155 + 0.14 = 1.00
-        # (其他三项按原 50:32:18 比例保留 0.86, quant 占 0.14)
+    # v3.2: expert 0.43 + judge 0.25 + risk 0.14 + quant 0.10 + sparse 0.08 = 1.00
+    # v3.1: expert 0.43 + judge 0.275 + risk 0.155 + quant 0.14 = 1.00
+    # v3.0: expert 0.50 + judge 0.32 + risk 0.18 = 1.00
+    if sparse_score is not None and quant_score is not None:
+        final_raw = (
+            0.43 * expert_consensus
+            + 0.25 * judge_adj
+            + 0.14 * risk_mapped
+            + 0.10 * quant_score
+            + 0.08 * sparse_score
+            + bonus
+        )
+        formula_used = "v3.2_sparse"
+    elif quant_score is not None:
         final_raw = (
             0.43 * expert_consensus
             + 0.275 * judge_adj
@@ -205,7 +274,6 @@ def _compose_final_score(
         )
         formula_used = "v3.1_quant"
     else:
-        # 退化为原三因子公式
         final_raw = 0.50 * expert_consensus + 0.32 * judge_adj + 0.18 * risk_mapped + bonus
         formula_used = "v3.0_legacy"
     final = round(max(0.0, min(100.0, final_raw)), 2)
@@ -228,6 +296,17 @@ def _compose_final_score(
     if quant_score is not None:
         components["quant_score"] = round(quant_score, 2)
         components["quant_components"] = quant_info
+    if sparse_score is not None:
+        components["sparse_layered_score"] = round(sparse_score, 2)
+        components["sparse_layered"] = {
+            "n_active": sparse_info.get("n_active", 0),
+            "n_silent": sparse_info.get("n_silent", 0),
+            "conflict_K": sparse_info.get("conflict_K", 0),
+            "confidence": sparse_info.get("confidence", "none"),
+            "active_factors": sparse_info.get("active_factors", [])[:10],
+            "context": sparse_info.get("context", {}),
+            "gates_applied": sparse_info.get("gates_applied", []),
+        }
     return final, components
 
 
@@ -361,9 +440,47 @@ def run_analysis_v3(
     except Exception as e:
         logger.warning("[v3] Tushare 增强失败(非致命, 继续): %s", e)
 
+    # ── Sparse Layered Score (在 phase 0 之前算, 让 4 专家也能看到) ──
+    sparse_info: dict[str, Any] = {}
+    if ts_enrich:
+        try:
+            from ..sparse_layered_score import (
+                compute_sparse_layered_score,
+                extract_features_from_enrich,
+                derive_context_from_enrich,
+                derive_mf_state,
+            )
+            features = extract_features_from_enrich(ts_enrich)
+            industry = (ts_enrich.get("industry") or "").strip() or None
+            sparse_context = derive_context_from_enrich(ts_enrich, industry=industry)
+            mf_state = derive_mf_state(ts_enrich)
+            regime = {"trend": "slow_bull", "dispersion": "high_industry"}
+            sparse_info = compute_sparse_layered_score(
+                features=features,
+                context=sparse_context,
+                regime=regime,
+                mf_state=mf_state,
+            )
+            ctx.setdefault("features", {})
+            ctx["features"]["sparse_layered"] = sparse_info
+            logger.info("[v3.2] sparse_layered: score=%.1f active=%d K=%.3f conf=%s",
+                        sparse_info.get("layered_score", 50.0),
+                        sparse_info.get("n_active", 0),
+                        sparse_info.get("conflict_K", 0),
+                        sparse_info.get("confidence", "?"))
+        except FileNotFoundError as e:
+            logger.warning("[v3.2] sparse_layered 数据底座缺失(跑 factor_lab.py --phase 3): %s", e)
+        except Exception as e:
+            logger.warning("[v3.2] sparse_layered 计算失败(非致命): %s", e)
+
     # ── Phase 0: 量化事实层 ──
     logger.info("[v3] Phase 0: 生成 6 份客观报告")
     bundle = build_all_reports(symbol, name, ctx)
+    # 把 sparse_layered 摘要附到 technical 报告末尾, 让 4 专家看见
+    if sparse_info:
+        appendix = _render_sparse_layered_md(sparse_info)
+        if appendix:
+            bundle.technical = (bundle.technical or "") + "\n\n" + appendix
     (run_dir / "data" / "phase0_bundle.md").write_text(bundle.as_markdown(), encoding="utf-8")
     (run_dir / "data" / "phase0_bundle.json").write_text(
         json.dumps(bundle.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
@@ -444,6 +561,7 @@ def run_analysis_v3(
     final_score, score_components = _compose_final_score(
         experts, investment_plan, trading_plan, risk_policy,
         ts_enrich=ts_enrich if ts_enrich else None,
+        sparse_info=ctx.get("features", {}).get("sparse_layered"),
     )
     _mkt_phase = (ctx.get("features", {}).get("market_context", {}) or {}).get("market_phase", "balanced")
     final_decision, decision_level = _decide_level(final_score, trading_plan.final_decision, _mkt_phase)

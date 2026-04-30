@@ -482,6 +482,176 @@ def compute_sparse_layered_score(
     }
 
 
+# ────────────────────────────────────────────────────────
+# Features 提取 (从 enrich 字典)
+# ────────────────────────────────────────────────────────
+
+def _safe_float(v):
+    try:
+        if v is None:
+            return None
+        f = float(v)
+        if f != f:   # NaN
+            return None
+        return f
+    except (TypeError, ValueError):
+        return None
+
+
+def extract_features_from_enrich(enrich: dict) -> dict[str, float]:
+    """从 tushare_enrich 字典抽取 sparse_layered 评分需要的核心因子值.
+
+    覆盖 ~17 个 high-激活率因子 (Top 25 中能从 enrich 拿到的部分).
+    enrich["tushare_factors"]: 最新一天的 stk_factor_pro 汇总
+    enrich["tushare_factors_raw"]: 近 60 天原始数据 (用于现算时序因子)
+    """
+    features: dict[str, float] = {}
+    tsf = enrich.get("tushare_factors") or {}
+    raw = enrich.get("tushare_factors_raw") or []
+
+    close = _safe_float(tsf.get("close_qfq"))
+    ma5 = _safe_float(tsf.get("ma5"))
+    ma20 = _safe_float(tsf.get("ma20"))
+    ma60 = _safe_float(tsf.get("ma60"))
+    ma250 = _safe_float(tsf.get("ma250"))
+
+    # 均线偏离类
+    if close and ma60 and ma60 > 0:
+        features["ma_ratio_60"] = close / ma60 - 1
+    if close and ma250 and ma250 > 0:
+        features["ma_ratio_120"] = close / ma250 - 1   # 用 250 替代 120
+    if ma20 and ma60 and ma60 > 0:
+        features["ma20_ma60"] = ma20 / ma60 - 1
+    if ma5 and ma20 and ma20 > 0:
+        features["ma5_ma20"] = ma5 / ma20 - 1
+
+    # MACD / RSI / 动量
+    for src, dst in [
+        ("macd_hist", "macd_hist"),
+        ("macd_dif", "macd"),
+        ("macd_dea", "macd_signal"),
+        ("rsi24", "rsi_24"),
+        ("rsi12", "rsi_14"),    # 12 替代 14
+        ("rsi6", "rsi_6"),
+        ("mfi", "mfi_14"),
+        ("trix", "trix"),
+        ("cci", "cci_14"),
+        ("wr", "wr_14"),
+        ("kdj_k", "kdj_k"),
+        ("kdj_d", "kdj_d"),
+    ]:
+        v = _safe_float(tsf.get(src))
+        if v is not None:
+            features[dst] = v
+
+    # 波动率
+    atr = _safe_float(tsf.get("atr"))
+    if atr is not None and close and close > 0:
+        features["atr_pct"] = atr / close
+        features["natr_14"] = atr / close * 100
+
+    # 布林
+    boll_u = _safe_float(tsf.get("boll_upper"))
+    boll_l = _safe_float(tsf.get("boll_lower"))
+    boll_m = _safe_float(tsf.get("boll_mid"))
+    if boll_u and boll_l and boll_m and boll_m > 0:
+        features["boll_width"] = (boll_u - boll_l) / boll_m
+    if boll_u and boll_l and close and (boll_u - boll_l) > 0:
+        features["boll_pct"] = (close - boll_l) / (boll_u - boll_l)
+
+    # 时序类 (从 raw 60 天算)
+    if len(raw) >= 21:
+        # 取最近 60 天
+        rs = sorted(raw, key=lambda r: r.get("trade_date", ""))[-60:]
+        # close 序列 (qfq)
+        closes = [_safe_float(r.get("close_qfq")) for r in rs]
+        closes = [c for c in closes if c is not None]
+        # pct_chg 序列
+        pcts = [_safe_float(r.get("pct_chg")) for r in rs]
+
+        # sump_20 / sumn_20: 最近 20 天累计正/负涨幅 (注意 pct_chg 单位是%)
+        last_20_pcts = [p for p in pcts[-20:] if p is not None]
+        if len(last_20_pcts) >= 15:
+            features["sump_20"] = sum(p for p in last_20_pcts if p > 0)
+            features["sumn_20"] = sum(-p for p in last_20_pcts if p < 0)
+            features["sumd_20"] = features["sump_20"] - features["sumn_20"]
+            # cntp/cntn/cntd
+            features["cntp_20"] = float(sum(1 for p in last_20_pcts if p > 0))
+            features["cntn_20"] = float(sum(1 for p in last_20_pcts if p < 0))
+            features["cntd_20"] = features["cntp_20"] - features["cntn_20"]
+
+        # channel_pos_60: close 在 60 日 [min, max] 中的位置
+        if len(closes) >= 30:
+            cmin = min(closes)
+            cmax = max(closes)
+            if cmax > cmin and close is not None:
+                features["channel_pos_60"] = (close - cmin) / (cmax - cmin)
+
+        # rank_20: close 在最近 20 天里的分位
+        last_20_closes = [c for c in closes[-20:] if c is not None]
+        if len(last_20_closes) >= 15 and close is not None:
+            n_lower = sum(1 for c in last_20_closes if c < close)
+            features["rank_20"] = n_lower / len(last_20_closes)
+            features["rsv_20"] = (close - min(last_20_closes)) / (
+                max(last_20_closes) - min(last_20_closes) + 1e-12)
+
+        # qtlu_20 / qtld_20: 20 日 80% / 20% 分位 / close - 1
+        if len(last_20_closes) >= 15 and close is not None and close > 0:
+            import statistics
+            q_sorted = sorted(last_20_closes)
+            n_q = len(q_sorted)
+            features["qtlu_20"] = q_sorted[int(n_q * 0.8)] / close - 1
+            features["qtld_20"] = q_sorted[int(n_q * 0.2)] / close - 1
+
+    # ht_trendmode: enrich 没有, 跳过 (可能未来加 talib.HT_TRENDMODE)
+    return features
+
+
+def derive_context_from_enrich(enrich: dict, industry: str | None = None,
+                                etf_held: bool = False) -> dict:
+    """从 enrich 抽取 context (mv_seg / pe_seg / industry / etf_held).
+
+    industry 由调用方传入 (一般来自 stock_basic 的 industry 字段).
+    """
+    tsf = enrich.get("tushare_factors") or {}
+    total_mv = _safe_float(tsf.get("total_mv"))
+    pe_ttm = _safe_float(tsf.get("pe_ttm"))
+
+    return {
+        "mv_seg": bucket_mv(total_mv),
+        "pe_seg": bucket_pe(pe_ttm),
+        "industry": industry,
+        "etf_held": etf_held,
+        "_raw": {"total_mv": total_mv, "pe_ttm": pe_ttm},
+    }
+
+
+def derive_mf_state(enrich: dict) -> str | None:
+    """从 enrich 的资金流字典推导 mf_state."""
+    mf = enrich.get("tushare_moneyflow") or {}
+    if not mf:
+        return None
+    # 优先用主力连续天数
+    consec = int(mf.get("consecutive_main_days", 0) or 0)
+    main_rate_ma3 = _safe_float(mf.get("main_rate_ma3"))
+    main_net_ma3 = _safe_float(mf.get("main_net_ma3"))
+
+    inflow = (main_rate_ma3 is not None and main_rate_ma3 > 0) or \
+             (main_net_ma3 is not None and main_net_ma3 > 0)
+    outflow = (main_rate_ma3 is not None and main_rate_ma3 < 0) or \
+              (main_net_ma3 is not None and main_net_ma3 < 0)
+
+    if consec >= 3 and inflow:
+        return "main_inflow_3d"
+    if consec >= 2 and outflow:
+        return "main_outflow_3d"
+    if inflow:
+        return "main_inflow"
+    if outflow:
+        return "main_outflow"
+    return None
+
+
 def _build_reason(fname: str, context: dict, q: int, sign: int,
                    w_eff: float, q3_eff: float, m_regime: float,
                    m_etf: float, gate: str | None) -> str:

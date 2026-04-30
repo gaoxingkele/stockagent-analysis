@@ -79,6 +79,22 @@ def _get_pro():
 # 抓取函数 (每个独立 try-except, 失败返 None 不中断)
 # ─────────────────────────────────────────────────────────────────
 
+def fetch_industry(ts_code: str) -> str | None:
+    """拿股票行业 (stock_basic), 用于 sparse_layered 上下文."""
+    pro = _get_pro()
+    if not pro:
+        return None
+    try:
+        df = pro.stock_basic(ts_code=ts_code, fields="ts_code,industry")
+        if df is None or df.empty:
+            return None
+        ind = df.iloc[0].get("industry")
+        return str(ind).strip() if ind else None
+    except Exception as e:
+        logger.warning("[tushare_enrich] stock_basic industry 失败 %s: %s", ts_code, e)
+        return None
+
+
 def fetch_stk_factor_pro(ts_code: str, days: int = 60) -> list[dict] | None:
     """拿近 N 天的扩展技术因子。
 
@@ -694,7 +710,19 @@ def enrich_with_tushare(symbol: str, run_dir: Path | None = None,
         cache_file = cache_dir / "tushare_enrich.json"
         if cache_file.exists():
             try:
-                return json.loads(cache_file.read_text(encoding="utf-8"))
+                cached = json.loads(cache_file.read_text(encoding="utf-8"))
+                # 兼容旧 cache: 缺 industry 字段就补一次, 不影响主流程
+                if cached and not cached.get("industry"):
+                    industry = fetch_industry(ts_code)
+                    if industry:
+                        cached["industry"] = industry
+                        try:
+                            cache_file.write_text(
+                                json.dumps(cached, ensure_ascii=False, indent=2),
+                                encoding="utf-8")
+                        except Exception:
+                            pass
+                return cached
             except Exception:
                 pass
 
@@ -725,6 +753,11 @@ def enrich_with_tushare(symbol: str, run_dir: Path | None = None,
     holders = fetch_holdernumber(ts_code, periods=4)
     if holders:
         result["tushare_holders"] = holders
+
+    # 6) 行业 (用于 sparse_layered 上下文)
+    industry = fetch_industry(ts_code)
+    if industry:
+        result["industry"] = industry
 
     # 写缓存
     if cache_dir:
