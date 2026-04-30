@@ -985,9 +985,330 @@ def phase2_report_mode(mode: str = "raw"):
     log.info("done. 写到 %s, %s", rep, rep_layer)
 
 
+# ──────────────────── Phase 3: validity_matrix.json ────────────────────
+
+VALIDITY_FILE = OUT_DIR / "validity_matrix.json"
+VALIDITY_STATS_FILE = OUT_DIR / "validity_matrix_stats.md"
+
+# 激活规则 (v2, 跨段可比):
+#   active = (best_win - q3_win) >= EXCESS_THRESHOLD AND best_win >= ABS_MIN
+#
+# 用 Q3 (中位桶, 信号无关基线) 作为该段段内基线.
+# v1 用 60% 绝对阈值导致大盘段全失效 (Q3 中位 47.8%), 小盘段过度激活 (Q3 中位 59.7%).
+EXCESS_THRESHOLD = 0.05   # 比中位桶高 5pp 才算"真信号"
+ABS_MIN = 0.50            # 绝对底线: best_win 至少 50% (避免负胜率假激活)
+
+# 各维度最低样本要求
+MIN_SAMPLES_MV = 5000
+MIN_SAMPLES_PE = 5000
+MIN_SAMPLES_IND = 10000
+# Q 桶内样本最低 (避免单桶噪音)
+MIN_BUCKET_SAMPLES = 200
+
+
+def _q_bucket_stats(sub: pd.DataFrame, factor: str, n_buckets: int = 5):
+    """对 sub 按 factor 分 5 分位, 返回每桶 D+20 胜率列表 + best_q + sign + spread + q_thresholds."""
+    x = sub[factor]
+    valid = sub[x.notna() & sub["r20"].notna()]
+    if len(valid) < MIN_BUCKET_SAMPLES * n_buckets:
+        return None
+    try:
+        ranks = valid[factor].rank(pct=True, method="first")
+        bucket = pd.cut(ranks, bins=n_buckets,
+                         labels=[f"Q{i+1}" for i in range(n_buckets)],
+                         include_lowest=True)
+        # q_thresholds: P20/P40/P60/P80 边界, 用于运行时判定股票 q 桶
+        q_thresholds = np.percentile(valid[factor].values, [20, 40, 60, 80]).tolist()
+    except Exception:
+        return None
+    wins = []
+    avgs = []
+    ns = []
+    for q_label in [f"Q{i+1}" for i in range(n_buckets)]:
+        b = valid[bucket == q_label]
+        if len(b) < MIN_BUCKET_SAMPLES:
+            wins.append(None)
+            avgs.append(None)
+            ns.append(int(len(b)))
+            continue
+        r = b["r20"].dropna()
+        wins.append(float((r > 0).mean()))
+        avgs.append(float(r.mean()))
+        ns.append(int(len(b)))
+    # best_q (1-indexed): 胜率最大的桶
+    valid_wins = [(i + 1, w) for i, w in enumerate(wins) if w is not None]
+    if not valid_wins:
+        return None
+    best_q, best_w = max(valid_wins, key=lambda r: r[1])
+    worst_q, worst_w = min(valid_wins, key=lambda r: r[1])
+    spread = best_w - worst_w
+    # sign: +1 表示因子值越高收益越好, -1 反之
+    # best_q == 5 → sign +1; best_q == 1 → sign -1; 中间桶 sign 0
+    if best_q == n_buckets:
+        sign = 1
+    elif best_q == 1:
+        sign = -1
+    else:
+        sign = 0
+    # 新激活规则: best_win 比 Q3 (中位桶) 高 EXCESS_THRESHOLD 且绝对值 >= ABS_MIN
+    q3_w = wins[2] if len(wins) >= 3 else None
+    excess = (best_w - q3_w) if q3_w is not None else None
+    is_active = (
+        q3_w is not None
+        and excess >= EXCESS_THRESHOLD
+        and best_w >= ABS_MIN
+    )
+    return {
+        "q_thresholds": [round(t, 6) for t in q_thresholds],
+        "q_wins": [round(w, 4) if w is not None else None for w in wins],
+        "q_avgs": [round(a, 4) if a is not None else None for a in avgs],
+        "q_ns": ns,
+        "best_q": best_q,
+        "best_win": round(best_w, 4),
+        "q3_win": round(q3_w, 4) if q3_w is not None else None,
+        "excess": round(excess, 4) if excess is not None else None,
+        "worst_q": worst_q,
+        "worst_win": round(worst_w, 4),
+        "spread": round(spread, 4),
+        "sign": sign,
+        "active": is_active,
+    }
+
+
+def phase3_validity_matrix():
+    """从 raw parquet 算 validity_matrix.json — sparse_layered 数据底座."""
+    log = setup_logger("phase3", LOG_DIR / "phase3.log")
+
+    log.info("加载所有 group parquet...")
+    files = sorted(GROUPS_DIR.glob("group_???.parquet"))
+    if not files:
+        log.error("无 parquet")
+        return
+    dfs = [pd.read_parquet(f) for f in files]
+    full = pd.concat(dfs, ignore_index=True)
+    log.info("总样本 %d, 列 %d", len(full), len(full.columns))
+
+    # 上下文分桶
+    full["mv_bucket"] = full["total_mv"].apply(bucket_mv)
+    full["pe_bucket"] = full["pe"].apply(bucket_pe)
+
+    # 因子列
+    excluded = {"ts_code", "trade_date", "industry", "name",
+                "total_mv", "pe", "pe_ttm", "pb",
+                "mv_bucket", "pe_bucket"} | \
+        {f"r{h}" for h in (5, 10, 20, 30, 40)} | \
+        {f"dd{h}" for h in (5, 10, 20, 30, 40)} | \
+        {"market_score_adj", "adx", "winner_rate", "main_net", "holder_pct",
+         "mf_divergence", "mf_strength", "mf_consecutive"}
+    factor_cols = [c for c in full.columns
+                   if c not in excluded and pd.api.types.is_numeric_dtype(full[c])]
+    log.info("因子数 %d", len(factor_cols))
+
+    # 全市场基准胜率
+    base_win = float((full["r20"] > 0).mean())
+    log.info("基准 D+20 胜率 %.4f", base_win)
+
+    # 主要行业 (Top 30, 样本 ≥ MIN_SAMPLES_IND)
+    ind_counts = full["industry"].value_counts()
+    main_inds = ind_counts[ind_counts >= MIN_SAMPLES_IND].index.tolist()[:30]
+    log.info("主要行业 %d 个", len(main_inds))
+
+    # ───── 算每个因子在每个 (dim, segment) 下的 5 分位胜率 ─────
+    matrix = {}   # factor → {"global": {...}, "mv": {seg: {...}}, "pe": {...}, "industry": {...}}
+    n_active_total = 0
+    n_factor_active = 0
+    counter = 0
+
+    for fc in factor_cols:
+        counter += 1
+        if counter % 30 == 0:
+            log.info("  progress %d/%d", counter, len(factor_cols))
+
+        entry = {"global": None, "mv": {}, "pe": {}, "industry": {}}
+
+        # 全市场
+        g_stats = _q_bucket_stats(full, fc)
+        if g_stats:
+            entry["global"] = g_stats
+
+        # mv 分层
+        for mv_seg in MV_LABELS:
+            sub = full[full["mv_bucket"] == mv_seg]
+            if len(sub) < MIN_SAMPLES_MV:
+                continue
+            s = _q_bucket_stats(sub, fc)
+            if s:
+                entry["mv"][mv_seg] = s
+                if s["active"]:
+                    n_active_total += 1
+
+        # pe 分层
+        for pe_seg in PE_LABELS:
+            sub = full[full["pe_bucket"] == pe_seg]
+            if len(sub) < MIN_SAMPLES_PE:
+                continue
+            s = _q_bucket_stats(sub, fc)
+            if s:
+                entry["pe"][pe_seg] = s
+                if s["active"]:
+                    n_active_total += 1
+
+        # industry 分层
+        for ind in main_inds:
+            sub = full[full["industry"] == ind]
+            if len(sub) < MIN_SAMPLES_IND:
+                continue
+            s = _q_bucket_stats(sub, fc)
+            if s:
+                entry["industry"][ind] = s
+                if s["active"]:
+                    n_active_total += 1
+
+        # 该因子是否在任何分层段下有 active
+        any_active = (
+            (entry["global"] and entry["global"]["active"]) or
+            any(v["active"] for v in entry["mv"].values()) or
+            any(v["active"] for v in entry["pe"].values()) or
+            any(v["active"] for v in entry["industry"].values())
+        )
+        if any_active:
+            n_factor_active += 1
+
+        matrix[fc] = entry
+
+    # ───── 写 JSON ─────
+    output = {
+        "meta": {
+            "n_samples": int(len(full)),
+            "n_stocks": int(full["ts_code"].nunique()),
+            "n_factors": len(factor_cols),
+            "n_industries": len(main_inds),
+            "base_win_rate": round(base_win, 4),
+            "activation_rule": "v2: (best_win - q3_win) >= excess_threshold AND best_win >= abs_min",
+            "excess_threshold": EXCESS_THRESHOLD,
+            "abs_min": ABS_MIN,
+            "hold_period": "D+20",
+            "min_bucket_samples": MIN_BUCKET_SAMPLES,
+            "data_period": [str(full["trade_date"].min()), str(full["trade_date"].max())],
+            "industries": main_inds,
+            "mv_labels": MV_LABELS,
+            "pe_labels": PE_LABELS,
+            "generated_at": datetime.now().isoformat(),
+        },
+        "factors": matrix,
+    }
+    VALIDITY_FILE.write_text(json.dumps(output, ensure_ascii=False, indent=1),
+                              encoding="utf-8")
+    log.info("validity_matrix 写入 %s", VALIDITY_FILE)
+    log.info("总激活段数 %d, 至少有一段激活的因子 %d/%d",
+             n_active_total, n_factor_active, len(factor_cols))
+
+    # ───── 统计报告 ─────
+    write_validity_stats(matrix, factor_cols, main_inds, base_win)
+
+
+def write_validity_stats(matrix: dict, factor_cols: list[str],
+                          main_inds: list[str], base_win: float):
+    """统计报告: 激活率分布 + Top 激活因子."""
+    lines = ["# Validity Matrix 统计\n\n"]
+    lines.append(f"> 生成: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    lines.append(f"> **激活规则 v2**: `(best_win - q3_win) >= {EXCESS_THRESHOLD*100:.0f}pp` AND `best_win >= {ABS_MIN*100:.0f}%`\n")
+    lines.append(f"> Q3 = 中位桶, 作为该段段内 \"信号无关\" 基线 (跨段可比)\n")
+    lines.append(f"> 全市场基准 D+20 胜率: {base_win*100:.2f}%\n\n")
+
+    # 1) 各维度激活段数统计
+    lines.append("## 一、激活段分布 (按维度)\n\n")
+    lines.append("| 维度 | 总段数 | 激活段 | 激活率 |\n|---|---|---|---|\n")
+
+    for dim, label, segs in [
+        ("global", "全市场", ["global"]),
+        ("mv", "市值", MV_LABELS),
+        ("pe", "PE", PE_LABELS),
+        ("industry", "行业", main_inds),
+    ]:
+        total = 0
+        active = 0
+        for fc in factor_cols:
+            entry = matrix.get(fc, {})
+            if dim == "global":
+                if entry.get("global"):
+                    total += 1
+                    if entry["global"]["active"]:
+                        active += 1
+            else:
+                d = entry.get(dim, {})
+                for seg in segs:
+                    if seg in d:
+                        total += 1
+                        if d[seg]["active"]:
+                            active += 1
+        rate = active / total * 100 if total else 0
+        lines.append(f"| {label} | {total} | {active} | {rate:.1f}% |\n")
+    lines.append("\n")
+
+    # 2) Top 20 最强 (best_win) 段
+    lines.append("## 二、Top 20 最强激活段 (按 best_win)\n\n")
+    lines.append("| 因子 | 维度 | 段 | best_q | best_win | sign | 样本 |\n")
+    lines.append("|---|---|---|---|---|---|---|\n")
+    rows = []
+    for fc, entry in matrix.items():
+        for dim_name, dim_data in [("mv", entry.get("mv", {})),
+                                    ("pe", entry.get("pe", {})),
+                                    ("industry", entry.get("industry", {}))]:
+            for seg, s in dim_data.items():
+                if s["active"]:
+                    n_samp = s["q_ns"][s["best_q"] - 1]
+                    rows.append({
+                        "factor": fc, "dim": dim_name, "seg": seg,
+                        "best_q": s["best_q"], "best_win": s["best_win"],
+                        "sign": s["sign"], "n": n_samp,
+                    })
+    rows.sort(key=lambda r: r["best_win"], reverse=True)
+    for r in rows[:20]:
+        lines.append(f"| {r['factor']} | {r['dim']} | {r['seg']} | "
+                     f"Q{r['best_q']} | {r['best_win']*100:.1f}% | "
+                     f"{r['sign']:+d} | {r['n']:,} |\n")
+    lines.append("\n")
+
+    # 3) 各维度激活段最多的 Top 10 因子
+    lines.append("## 三、各因子激活段统计\n\n")
+    factor_active_counts = []
+    for fc, entry in matrix.items():
+        n_mv = sum(1 for s in entry.get("mv", {}).values() if s["active"])
+        n_pe = sum(1 for s in entry.get("pe", {}).values() if s["active"])
+        n_ind = sum(1 for s in entry.get("industry", {}).values() if s["active"])
+        n_tot = n_mv + n_pe + n_ind
+        if n_tot:
+            factor_active_counts.append({
+                "factor": fc, "mv": n_mv, "pe": n_pe, "ind": n_ind, "total": n_tot
+            })
+    factor_active_counts.sort(key=lambda r: r["total"], reverse=True)
+    lines.append("| 因子 | mv 段 | PE 段 | 行业段 | 总激活段 |\n|---|---|---|---|---|\n")
+    for r in factor_active_counts[:25]:
+        lines.append(f"| {r['factor']} | {r['mv']} | {r['pe']} | "
+                     f"{r['ind']} | **{r['total']}** |\n")
+    lines.append(f"\n激活率最高的 25 个因子覆盖了大部分有效信号。\n\n")
+
+    # 4) 各 mv 段激活的因子数量
+    lines.append("## 四、各市值段下的激活因子数\n\n")
+    lines.append("| 市值段 | 激活因子数 |\n|---|---|\n")
+    for mv in MV_LABELS:
+        n = sum(1 for fc in factor_cols
+                if matrix.get(fc, {}).get("mv", {}).get(mv, {}).get("active"))
+        lines.append(f"| {mv} | {n} |\n")
+    lines.append("\n## 五、各 PE 段下的激活因子数\n\n")
+    lines.append("| PE 段 | 激活因子数 |\n|---|---|\n")
+    for pe in PE_LABELS:
+        n = sum(1 for fc in factor_cols
+                if matrix.get(fc, {}).get("pe", {}).get(pe, {}).get("active"))
+        lines.append(f"| PE {pe} | {n} |\n")
+
+    VALIDITY_STATS_FILE.write_text("".join(lines), encoding="utf-8")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--phase", choices=["0", "1", "2", "all"], default="all")
+    parser.add_argument("--phase", choices=["0", "1", "2", "3", "all"], default="all")
     parser.add_argument("--group", type=int)
     parser.add_argument("--mode", choices=["raw", "ha"], default="raw")
     args = parser.parse_args()
@@ -1008,5 +1329,9 @@ if __name__ == "__main__":
             phase2_report()
         else:
             phase2_report_mode(args.mode)
+
+    if args.phase in ("3", "all"):
+        log.info("===== Phase 3: validity_matrix =====")
+        phase3_validity_matrix()
 
     log.info("DONE")
