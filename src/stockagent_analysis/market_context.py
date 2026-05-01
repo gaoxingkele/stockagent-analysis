@@ -104,6 +104,8 @@ class MarketContext:
     # 全市场资金流方向信号
     mkt_flow_signal: str = "neutral"   # distribution/smart_money_buying/consensus_buy/consensus_sell/neutral
     mkt_flow_detail: str = ""
+    # 美股隔夜数据 (北京时间9:15前可用)
+    us_overnight: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -117,6 +119,7 @@ class MarketContext:
             "vision_summary": self.vision_summary,
             "mkt_flow_signal": self.mkt_flow_signal,
             "mkt_flow_detail": self.mkt_flow_detail,
+            "us_overnight": self.us_overnight,
         }
 
 
@@ -349,6 +352,92 @@ def _get_mkt_moneyflow_signal(days: int = 5) -> dict:
     except Exception as e:
         logger.debug("[market_context] mkt_moneyflow_signal 失败: %s", e)
         return {"signal": "neutral", "detail": "", "score_adj": 0}
+
+
+_US_OVERNIGHT_CACHE: dict | None = None
+_US_OVERNIGHT_DATE: str = ""
+
+
+def _fetch_us_overnight() -> dict:
+    """获取美股最近收盘数据, 北京时间9:15开盘前读取作为背景依据。
+
+    美股收盘约北京时间凌晨4-5点, 中国开盘前8小时已收市。
+    返回:
+        available: bool
+        indices: {sp500/nasdaq/dow: {pct, price, name}}
+        sentiment: bullish/mildly_bullish/neutral/mildly_bearish/bearish
+        score_adj: float  对大盘score的参考调节(-3~+3)
+        summary: str
+    """
+    global _US_OVERNIGHT_CACHE, _US_OVERNIGHT_DATE
+    today = datetime.now().strftime("%Y-%m-%d")
+    if _US_OVERNIGHT_CACHE and _US_OVERNIGHT_DATE == today:
+        return _US_OVERNIGHT_CACHE
+
+    result: dict = {
+        "available": False, "indices": {},
+        "sentiment": "neutral", "score_adj": 0.0, "summary": "",
+    }
+
+    _US_INDEX_MAP = {
+        "sp500":  (".INX",  "标普500"),
+        "nasdaq": (".IXIC", "纳指"),
+        "dow":    (".DJI",  "道指"),
+    }
+    indices: dict = {}
+    try:
+        import akshare as ak
+        for key, (symbol, label) in _US_INDEX_MAP.items():
+            try:
+                time.sleep(0.3)
+                df = _no_proxy_call(ak.index_us_stock_sina, symbol=symbol)
+                if df is None or df.empty:
+                    continue
+                close_col = next((c for c in ["close", "Close", "收盘"] if c in df.columns), None)
+                if not close_col:
+                    continue
+                price = float(df.iloc[-1][close_col])
+                prev = float(df.iloc[-2][close_col]) if len(df) > 1 else price
+                pct = round((price / prev - 1) * 100, 2) if prev > 0 else 0.0
+                indices[key] = {"pct": pct, "price": round(price, 2), "name": label}
+            except Exception as e:
+                logger.debug("us index %s: %s", symbol, e)
+    except Exception as e:
+        logger.debug("fetch_us_overnight failed: %s", e)
+
+    if not indices:
+        _US_OVERNIGHT_CACHE = result
+        _US_OVERNIGHT_DATE = today
+        return result
+
+    result["available"] = True
+    result["indices"] = indices
+
+    sp_pct = indices.get("sp500", {}).get("pct", 0.0)
+    nq_pct = indices.get("nasdaq", {}).get("pct", 0.0)
+    avg_pct = sp_pct * 0.5 + nq_pct * 0.5
+
+    if avg_pct >= 1.5:
+        sentiment, score_adj = "bullish", min(3.0, avg_pct * 0.8)
+    elif avg_pct >= 0.5:
+        sentiment, score_adj = "mildly_bullish", min(1.5, avg_pct * 0.6)
+    elif avg_pct <= -1.5:
+        sentiment, score_adj = "bearish", max(-3.0, avg_pct * 0.8)
+    elif avg_pct <= -0.5:
+        sentiment, score_adj = "mildly_bearish", max(-1.5, avg_pct * 0.6)
+    else:
+        sentiment, score_adj = "neutral", 0.0
+
+    result["sentiment"] = sentiment
+    result["score_adj"] = round(score_adj, 2)
+    result["summary"] = " | ".join(
+        f"{v['name']}{v['pct']:+.1f}%" for v in indices.values()
+    )
+    logger.info("[us_overnight] %s sentiment=%s adj=%+.1f", result["summary"], sentiment, score_adj)
+
+    _US_OVERNIGHT_CACHE = result
+    _US_OVERNIGHT_DATE = today
+    return result
 
 
 def _fetch_index_daily(code_with_market: str, days: int = 120) -> pd.DataFrame | None:
@@ -947,6 +1036,7 @@ class MarketContextAnalyzer:
         self._etf_cache: dict[str, TrendState] = {}  # etf_code → TrendState
         self._index_dfs: dict[str, pd.DataFrame] = {}  # code → df (for chart gen)
         self._mkt_flow: dict | None = None  # 全市场资金流信号缓存
+        self._us_overnight: dict | None = None  # 美股隔夜缓存
 
     def analyze_market_indices(self) -> list[TrendState]:
         """分析6大宽基指数趋势状态(带缓存)。"""
@@ -998,13 +1088,14 @@ class MarketContextAnalyzer:
         index_states = self.analyze_market_indices()
         market_score, phase, phase_cn = self.get_market_score()
 
-        # 2. 概念板块
+        # 2. 概念板块 + 关联ETF (先拉ETF, 趋势状态供板块热度使用)
         concepts = _fetch_stock_concepts(symbol)
-        sector_heats = self._analyze_sector_heats(industry, concepts)
-
-        # 3. 关联ETF走势
         related_etfs = _find_related_etfs(industry, concepts)
-        etf_states = self._analyze_etfs(related_etfs)
+        holder_etfs = self._get_holder_etf_codes(symbol)
+        all_etfs = list(dict.fromkeys(related_etfs + holder_etfs))[:8]
+        etf_states = self._analyze_etfs(all_etfs)
+
+        sector_heats = self._analyze_sector_heats(industry, concepts, symbol=symbol)
 
         # 4. 视觉分析(可选,有run_dir且有router时才做)
         vision_summary = ""
@@ -1036,6 +1127,12 @@ class MarketContextAnalyzer:
                 mkt_flow_signal, score_adj, market_score, adj_score, adj_phase,
             )
 
+        # 6. 美股隔夜(会话级缓存)
+        with self._lock:
+            if self._us_overnight is None:
+                self._us_overnight = _fetch_us_overnight()
+        us_overnight = self._us_overnight or {}
+
         ctx = MarketContext(
             generated_at=datetime.now().isoformat(),
             index_states=index_states,
@@ -1047,38 +1144,99 @@ class MarketContextAnalyzer:
             vision_summary=vision_summary,
             mkt_flow_signal=mkt_flow_signal,
             mkt_flow_detail=mkt_flow_detail,
+            us_overnight=us_overnight,
         )
         return ctx
 
-    def _analyze_sector_heats(self, industry: str, concepts: list[str]) -> list[SectorHeat]:
-        """分析个股关联板块的热度。"""
-        # 获取全市场概念排行(缓存)
+    def _get_holder_etf_codes(self, symbol: str) -> list[str]:
+        """从 stock_to_etfs.json 反向查找持有该股的 ETF 代码(6位)。"""
+        try:
+            from . import etf_tracker
+            ts_code = symbol if "." in symbol else etf_tracker.to_ts_code(symbol)
+            info = etf_tracker.track_stock(ts_code, min_etf_annual=15.0)
+            codes = []
+            for e in info.get("etfs", [])[:5]:
+                raw = e.get("code", "")
+                codes.append(raw.split(".")[0] if "." in raw else raw)
+            return [c for c in codes if c]
+        except Exception as e:
+            logger.debug("holder_etf_codes %s: %s", symbol, e)
+            return []
+
+    def _analyze_sector_heats(
+        self, industry: str, concepts: list[str], symbol: str = ""
+    ) -> list[SectorHeat]:
+        """分析个股关联板块热度。
+
+        优先用 ETF 持仓反向索引 (etf_tracker) 判断主题热度;
+        补充 / fallback 概念涨幅榜。
+        ETF 有效期比涨幅榜更长(资金持续流入为依据)。
+        """
+        _state_to_rank = {
+            "uptrend": 3, "downtrend_breakout": 6,
+            "ma_convergence": 12, "sideways": 16,
+            "trend_center": 20, "uptrend_breakdown": 24,
+            "downtrend": 28, "unknown": 20,
+        }
+        heats: list[SectorHeat] = []
+
+        # A. ETF 反向索引 (主路径)
+        if symbol:
+            try:
+                from . import etf_tracker
+                ts_code = symbol if "." in symbol else etf_tracker.to_ts_code(symbol)
+                etf_info = etf_tracker.track_stock(ts_code, min_etf_annual=10.0)
+                holder_etfs = etf_info.get("etfs", [])
+
+                seen_themes: set[str] = set()
+                for e in holder_etfs[:6]:
+                    theme = e.get("theme", "其他")
+                    if theme in seen_themes:
+                        continue
+                    seen_themes.add(theme)
+
+                    raw_code = e.get("code", "")
+                    code6 = raw_code.split(".")[0] if "." in raw_code else raw_code
+                    etf_ts = self._etf_cache.get(code6)
+
+                    if etf_ts:
+                        rank = _state_to_rank.get(etf_ts.state, 20)
+                        pct_1d = round(etf_ts.ret_5d / 5, 2) if etf_ts.ret_5d else 0.0
+                        pct_5d, pct_20d = etf_ts.ret_5d, etf_ts.ret_20d
+                    else:
+                        annual = e.get("annual_return_pct") or 0
+                        rank = 8 if annual >= 30 else 14 if annual >= 15 else 22
+                        pct_1d = pct_5d = pct_20d = 0.0
+
+                    heats.append(SectorHeat(
+                        sector_name=theme,
+                        rank=rank,
+                        pct_chg_1d=pct_1d,
+                        pct_chg_5d=pct_5d,
+                        pct_chg_20d=pct_20d,
+                        related_etfs=[code6],
+                    ))
+            except Exception as e:
+                logger.debug("etf_tracker sector heat %s: %s", symbol, e)
+
+        # B. 概念涨幅榜 (补充 / fallback)
         with self._lock:
             if self._concept_ranking is None:
                 self._concept_ranking = _fetch_concept_board_ranking(top_n=30)
             ranking = self._concept_ranking
 
-        # 找出与该股相关的板块
-        related_names = set()
-        if industry:
-            related_names.add(industry)
+        related_names = {industry} if industry else set()
         related_names.update(concepts)
 
-        heats = []
+        board_heats: list[SectorHeat] = []
         for item in ranking:
             board_name = item["name"]
-            # 模糊匹配
-            is_related = False
-            for rn in related_names:
-                if rn in board_name or board_name in rn:
-                    is_related = True
-                    break
-            if is_related:
+            if any(rn in board_name or board_name in rn for rn in related_names):
                 etfs = []
                 for key, codes in _CONCEPT_ETF_MAP.items():
                     if key in board_name or board_name in key:
                         etfs.extend(codes)
-                heats.append(SectorHeat(
+                board_heats.append(SectorHeat(
                     sector_name=board_name,
                     rank=item["rank"],
                     pct_chg_1d=item.get("pct_chg", 0),
@@ -1086,9 +1244,15 @@ class MarketContextAnalyzer:
                     related_etfs=list(set(etfs))[:3],
                 ))
 
-        # 如果没匹配到,把行业本身加进去(rank=0表示未上榜)
-        if not heats and industry:
-            heats.append(SectorHeat(sector_name=industry, rank=0))
+        if heats:
+            existing = {h.sector_name for h in heats}
+            for bh in board_heats:
+                if bh.sector_name not in existing:
+                    heats.append(bh)
+        else:
+            heats = board_heats
+            if not heats and industry:
+                heats.append(SectorHeat(sector_name=industry, rank=0))
 
         return heats[:5]
 
@@ -1193,6 +1357,12 @@ def compute_market_adjustment(market_ctx: MarketContext, stock_score: float) -> 
             ratio = (etf_bullish - etf_bearish) / n
             adj += ratio * 3
 
+    # 4. 美股隔夜调节 (±2, 参考背景, 衰减50%避免美股主导)
+    us = market_ctx.us_overnight
+    if us.get("available"):
+        us_adj = float(us.get("score_adj", 0)) * 0.5
+        adj += max(-2.0, min(2.0, us_adj))
+
     # 极端分数时调节减半
     if stock_score > 85 or stock_score < 15:
         adj *= 0.5
@@ -1246,6 +1416,15 @@ def market_context_summary(ctx: MarketContext) -> str:
     if _flow_cn:
         detail = f" — {ctx.mkt_flow_detail}" if ctx.mkt_flow_detail else ""
         parts.append(f"大盘资金流: {_flow_cn}{detail}")
+
+    # 美股隔夜
+    us = ctx.us_overnight
+    if us.get("available"):
+        _sentiment_cn = {
+            "bullish": "强势", "mildly_bullish": "偏强",
+            "neutral": "中性", "mildly_bearish": "偏弱", "bearish": "弱势",
+        }.get(us.get("sentiment", "neutral"), "")
+        parts.append(f"美股隔夜: {us.get('summary', '')} ({_sentiment_cn})")
 
     # 视觉研判
     if ctx.vision_summary:
