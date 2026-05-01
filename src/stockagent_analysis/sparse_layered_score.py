@@ -36,7 +36,11 @@ from pathlib import Path
 from typing import Any
 
 # 默认参数
-DEFAULT_MATRIX_PATH = Path(__file__).resolve().parents[2] / "output" / "factor_lab" / "validity_matrix.json"
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# 优先 3 年数据 (factor_lab_3y), 退化到 1 年 (factor_lab)
+_MATRIX_3Y = _PROJECT_ROOT / "output" / "factor_lab_3y" / "validity_matrix.json"
+_MATRIX_1Y = _PROJECT_ROOT / "output" / "factor_lab" / "validity_matrix.json"
+DEFAULT_MATRIX_PATH = _MATRIX_3Y if _MATRIX_3Y.exists() else _MATRIX_1Y
 DEFAULT_HOLD_BASE = 0.55          # 全市场基准 D+20 胜率
 DEFAULT_SCORE_SCALE = 30          # 因子超额胜率 → 分数比例尺
 DEFAULT_MAX_DELTA_PER_FACTOR = 8  # 每个因子最多 ±8 分 (避免单因子主导)
@@ -650,6 +654,324 @@ def derive_mf_state(enrich: dict) -> str | None:
     if outflow:
         return "main_outflow"
     return None
+
+
+# ────────────────────────────────────────────────────────
+# 可解释性辅助 (A): explain() 方法
+# ────────────────────────────────────────────────────────
+
+def explain_layered_score(result: dict, verbose: bool = True) -> str:
+    """生成完整人类可读的解释报告 (A 功能).
+
+    输入: compute_sparse_layered_score 返回的 dict
+    输出: markdown 多行字符串, 可直接打印或写入文件
+    """
+    if not result:
+        return "(空结果)"
+
+    score = result.get("layered_score", 50)
+    sum_d = result.get("sum_delta", 0)
+    n_a = result.get("n_active", 0)
+    n_s = result.get("n_silent", 0)
+    K = result.get("conflict_K", 0)
+    conf = result.get("confidence", "?")
+    ctx = result.get("context", {})
+    regime = result.get("regime", {})
+    mf_state = result.get("mf_state")
+
+    lines = [
+        "=" * 72,
+        f"sparse_layered_score 解释报告",
+        "=" * 72,
+        "",
+        f"【综合分】 {score:.1f} = 50 (基线) + Δ {sum_d:+.2f}",
+        f"【激活】 {n_a} 因子有效 / {n_s} 因子静默",
+        f"【信号一致性】 {conf}  (DS 冲突度 K = {K:.3f})",
+        "",
+        "## 上下文 (本只股票当下属于哪些段)",
+        f"  市值段:    {ctx.get('mv_seg', '?')}",
+        f"  PE 段:     {ctx.get('pe_seg', '?')}",
+        f"  行业:      {ctx.get('industry', '?')}",
+        f"  ETF 持有: {ctx.get('etf_held', False)}",
+        f"  资金流:    {mf_state or '未推导'}",
+    ]
+    if regime:
+        lines.append(f"  大盘 regime: trend={regime.get('trend')} dispersion={regime.get('dispersion')}")
+    lines.append("")
+
+    # 激活因子完整溯源
+    if result.get("active_factors"):
+        lines.append("## 激活因子 (每项的 delta 都能完整溯源)")
+        lines.append("")
+        for i, f in enumerate(result["active_factors"], 1):
+            sgn_arrow = "↑看多" if f.get("sign", 0) > 0 else "↓看空"
+            w = f.get("w_eff", 0)
+            q3 = f.get("q3_eff", 0)
+            excess = w - q3
+            d = f.get("delta", 0)
+            mr = f.get("regime_mul", 1.0)
+            me = f.get("etf_mul", 1.0)
+            lines.append(f"  {i}. {f['name']}  ({sgn_arrow})  delta = {d:+.2f}")
+            lines.append(f"     ├─ 该股股 q 桶: {f.get('q_bucket', '?')}")
+            lines.append(f"     ├─ 该桶在该上下文胜率: W = {w*100:.1f}%")
+            lines.append(f"     ├─ Q3 中位桶基线:     Q3 = {q3*100:.1f}%")
+            lines.append(f"     ├─ 超额胜率:           +{excess*100:.1f}pp" if excess > 0 else
+                         f"     ├─ 超额胜率:           {excess*100:.1f}pp")
+            extras = []
+            if mr != 1.0:
+                extras.append(f"regime×{mr:.2f}")
+            if me != 1.0:
+                extras.append(f"etf×{me:.2f}")
+            if extras:
+                lines.append(f"     ├─ 调节器:            {' + '.join(extras)}")
+            lines.append(f"     └─ 解释: {f.get('reason', '')}")
+            lines.append("")
+
+    # 静默因子摘要
+    if result.get("silent_factors") and verbose:
+        silent = result["silent_factors"]
+        lines.append(f"## 静默因子 ({len(silent)} 个, 不参与打分)")
+        lines.append("")
+        # 按 reason 归类
+        from collections import Counter
+        by_reason = Counter()
+        for s in silent:
+            r = s.get("reason", "?")
+            # 截短 reason 取关键词
+            if "差距" in r:
+                by_reason["q 桶超额 < 4pp (无显著信号)"] += 1
+            elif "无任何分层段" in r:
+                by_reason["上下文段缺数据"] += 1
+            elif "无任何 segment 激活" in r:
+                by_reason["validity_matrix 中段未激活"] += 1
+            elif "delta 太小" in r:
+                by_reason["调节后 delta 太小"] += 1
+            elif "方向不一致" in r:
+                by_reason["维度间方向冲突"] += 1
+            else:
+                by_reason[r[:40]] += 1
+        for reason, cnt in by_reason.most_common():
+            lines.append(f"  - {reason}: {cnt} 个因子")
+        lines.append("")
+
+    # 资金流门控
+    if result.get("gates_applied"):
+        lines.append("## 资金流门控 (主力进/出场对因子的修正)")
+        for g in result["gates_applied"]:
+            lines.append(f"  - {g}")
+        lines.append("")
+
+    # K 冲突解释
+    lines.append("## DS 冲突度 K 解释")
+    if n_a < 2:
+        lines.append(f"  K = {K:.3f}: 激活因子不足 2 个, 无冲突可言")
+    elif K < 0.20:
+        lines.append(f"  K = {K:.3f}: 多因子方向高度一致 → 信号可信度高")
+    elif K < 0.45:
+        lines.append(f"  K = {K:.3f}: 部分因子有冲突 → 信号需结合其他证据判断")
+    else:
+        lines.append(f"  K = {K:.3f}: 因子间冲突大 → 综合分不可靠, 应等待信号一致后再行动")
+    lines.append("")
+
+    # 决策建议
+    lines.append("## 决策含义")
+    if conf == "none":
+        lines.append("  → 没有任何因子激活, 系统无观点, 等待更多数据")
+    elif score >= 60 and conf == "high":
+        lines.append(f"  → 强多信号 ({score:.0f} 分, 高一致性), 可作为加仓/建仓依据")
+    elif score >= 60 and conf == "med":
+        lines.append(f"  → 多头信号 ({score:.0f} 分, 中等一致性), 建议结合其他因素")
+    elif score >= 60 and conf == "low":
+        lines.append(f"  → 因子打分多但内部冲突, **不建议作为单独决策依据**")
+    elif score <= 40 and conf == "high":
+        lines.append(f"  → 强空信号 ({score:.0f} 分, 高一致性), 可作为减仓/做空依据")
+    elif score <= 40:
+        lines.append(f"  → 偏空信号, 但一致性 {conf}, 谨慎对待")
+    else:
+        lines.append(f"  → 中性信号 ({score:.0f} 分), 不构成明确方向")
+    lines.append("")
+
+    lines.append("=" * 72)
+    return "\n".join(lines)
+
+
+# ────────────────────────────────────────────────────────
+# LLM context 增强 (B): 给 4 专家用的 markdown
+# ────────────────────────────────────────────────────────
+
+def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
+    """生成 LLM-friendly markdown, 嵌入 4 专家 context.
+
+    比简单的展示更结构化 + 直接告诉 LLM 怎么用这些信号.
+    """
+    if not result or result.get("n_active", 0) == 0:
+        return ""
+
+    score = result.get("layered_score", 50)
+    sum_d = result.get("sum_delta", 0)
+    n_a = result.get("n_active", 0)
+    K = result.get("conflict_K", 0)
+    conf = result.get("confidence", "?")
+    ctx = result.get("context", {})
+
+    # 分类: 看多 vs 看空因子
+    longs = [f for f in result.get("active_factors", []) if f.get("delta", 0) > 0]
+    shorts = [f for f in result.get("active_factors", []) if f.get("delta", 0) < 0]
+
+    lines = [
+        "## 量化分层信号 (sparse_layered, 来自 102 万样本回测)",
+        "",
+        f"**综合: {score:.1f} 分** (delta {sum_d:+.1f}) | "
+        f"激活 {n_a} 因子 | 冲突 K={K:.2f} | 一致性 **{conf}**",
+        "",
+        f"**股票上下文**: 市值={ctx.get('mv_seg')} · PE={ctx.get('pe_seg')} · "
+        f"行业={ctx.get('industry')} · 资金流={result.get('mf_state', 'neutral')}",
+        "",
+    ]
+
+    if longs:
+        lines.append(f"### 看多信号 ({len(longs)} 个)")
+        lines.append("")
+        lines.append("| 因子 | Q 桶 | 该桶胜率 | Q3 基线 | 超额 | delta |")
+        lines.append("|---|---|---|---|---|---|")
+        for f in longs[:max_active]:
+            w = f.get("w_eff", 0)
+            q3 = f.get("q3_eff", 0)
+            ex = w - q3
+            lines.append(f"| {f['name']} | {f.get('q_bucket')} | "
+                         f"{w*100:.1f}% | {q3*100:.1f}% | "
+                         f"+{ex*100:.1f}pp | +{f.get('delta', 0):.2f} |")
+        lines.append("")
+
+    if shorts:
+        lines.append(f"### 看空信号 ({len(shorts)} 个)")
+        lines.append("")
+        lines.append("| 因子 | Q 桶 | 该桶胜率 | Q3 基线 | 超额 | delta |")
+        lines.append("|---|---|---|---|---|---|")
+        for f in shorts[:max_active]:
+            w = f.get("w_eff", 0)
+            q3 = f.get("q3_eff", 0)
+            ex = w - q3
+            lines.append(f"| {f['name']} | {f.get('q_bucket')} | "
+                         f"{w*100:.1f}% | {q3*100:.1f}% | "
+                         f"{ex*100:.1f}pp | {f.get('delta', 0):.2f} |")
+        lines.append("")
+
+    # 给 LLM 的解读提示
+    lines.append("### 这些信号告诉你什么")
+    if conf == "high" and score >= 60:
+        lines.append(f"- 多个独立因子高度一致看多, 该上下文 (mv/pe/行业) 历史胜率显著超基准")
+        lines.append(f"- LLM 应在分析中给予 **较强多头权重**")
+    elif conf == "high" and score <= 40:
+        lines.append(f"- 多个因子一致看空, 历史风险率显著高于基准")
+        lines.append(f"- LLM 应在分析中给予 **较强空头权重**")
+    elif conf == "low":
+        lines.append(f"- 因子内部冲突 (K={K:.2f}), 综合分不可作为单独依据")
+        lines.append(f"- LLM 应保持中性, 重点看其他证据 (基本面/资金面)")
+    else:
+        lines.append(f"- 信号强度中等, LLM 可参考但不应过度依赖")
+
+    if result.get("gates_applied"):
+        gates_str = ", ".join(result['gates_applied'][:6])
+        lines.append(f"- 资金流门控: {gates_str}")
+
+    return "\n".join(lines)
+
+
+# ────────────────────────────────────────────────────────
+# 对比工具 (C): compare 两只股票
+# ────────────────────────────────────────────────────────
+
+def compare_stocks(result_a: dict, label_a: str,
+                    result_b: dict, label_b: str) -> str:
+    """对比两只股票的因子激活差异."""
+    score_a = result_a.get("layered_score", 50)
+    score_b = result_b.get("layered_score", 50)
+    n_a_a = result_a.get("n_active", 0)
+    n_a_b = result_b.get("n_active", 0)
+    K_a = result_a.get("conflict_K", 0)
+    K_b = result_b.get("conflict_K", 0)
+    conf_a = result_a.get("confidence", "?")
+    conf_b = result_b.get("confidence", "?")
+
+    af_a = {f["name"]: f for f in result_a.get("active_factors", [])}
+    af_b = {f["name"]: f for f in result_b.get("active_factors", [])}
+
+    common = set(af_a) & set(af_b)
+    only_a = set(af_a) - set(af_b)
+    only_b = set(af_b) - set(af_a)
+
+    lines = [
+        "=" * 72,
+        f"对比: {label_a}  vs  {label_b}",
+        "=" * 72,
+        "",
+        f"## 总览",
+        f"{'指标':<20} {label_a:<20} {label_b:<20}",
+        f"{'-'*60}",
+        f"{'综合分':<20} {score_a:<20.1f} {score_b:<20.1f}",
+        f"{'激活因子数':<20} {n_a_a:<20} {n_a_b:<20}",
+        f"{'冲突度 K':<20} {K_a:<20.3f} {K_b:<20.3f}",
+        f"{'信号一致性':<20} {conf_a:<20} {conf_b:<20}",
+        "",
+    ]
+
+    ctx_a = result_a.get("context", {})
+    ctx_b = result_b.get("context", {})
+    lines.append(f"## 上下文对比")
+    for k in ("mv_seg", "pe_seg", "industry"):
+        va = str(ctx_a.get(k) or "?")
+        vb = str(ctx_b.get(k) or "?")
+        diff = "" if va == vb else "  <-- 不同"
+        lines.append(f"  {k:<12}  {va:<20} | {vb}{diff}")
+    lines.append("")
+
+    # 共同因子的 delta 对比
+    if common:
+        lines.append(f"## 双方都激活的因子 ({len(common)} 个)")
+        lines.append(f"{'因子':<22} {'A delta':<10} {'B delta':<10} {'差异':<10}")
+        lines.append("-" * 55)
+        for fname in sorted(common):
+            d_a = af_a[fname].get("delta", 0)
+            d_b = af_b[fname].get("delta", 0)
+            diff = d_b - d_a
+            lines.append(f"{fname:<22} {d_a:<+10.2f} {d_b:<+10.2f} {diff:<+10.2f}")
+        lines.append("")
+
+    if only_a:
+        lines.append(f"## 仅 {label_a} 激活的因子 ({len(only_a)} 个)")
+        for fname in sorted(only_a):
+            f = af_a[fname]
+            lines.append(f"  {fname:<22} delta={f.get('delta', 0):+.2f}  ({f.get('reason', '')[:50]})")
+        lines.append("")
+
+    if only_b:
+        lines.append(f"## 仅 {label_b} 激活的因子 ({len(only_b)} 个)")
+        for fname in sorted(only_b):
+            f = af_b[fname]
+            lines.append(f"  {fname:<22} delta={f.get('delta', 0):+.2f}  ({f.get('reason', '')[:50]})")
+        lines.append("")
+
+    # 结论
+    lines.append("## 对比结论")
+    diff_score = score_b - score_a
+    if abs(diff_score) < 3:
+        lines.append(f"  - 两只股票综合评分接近 (差 {diff_score:+.1f})")
+    elif diff_score > 0:
+        lines.append(f"  - {label_b} 评分高 {diff_score:.1f} 分, 总体优于 {label_a}")
+    else:
+        lines.append(f"  - {label_a} 评分高 {-diff_score:.1f} 分, 总体优于 {label_b}")
+
+    if K_a < K_b:
+        lines.append(f"  - {label_a} 信号更一致 (K {K_a:.2f} < {K_b:.2f}), 决策更可信")
+    elif K_b < K_a:
+        lines.append(f"  - {label_b} 信号更一致 (K {K_b:.2f} < {K_a:.2f}), 决策更可信")
+
+    if ctx_a.get("mv_seg") != ctx_b.get("mv_seg"):
+        lines.append(f"  - **市值段不同**, 适用因子集差异显著, 不可直接比较绝对分")
+
+    lines.append("=" * 72)
+    return "\n".join(lines)
 
 
 def _build_reason(fname: str, context: dict, q: int, sign: int,

@@ -42,12 +42,23 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent
-SRC_DATA_DIR = ROOT / "output" / "backtest_factors_2026_04"
+
+# 数据源切换 (env: FACTOR_LAB_DATA_SOURCE)
+#   "1y"  → output/backtest_factors_2026_04 (241 天, 默认)
+#   "3y"  → output/backtest_3y_2023_2026 (783 天)
+DATA_SOURCE = os.environ.get("FACTOR_LAB_DATA_SOURCE", "1y").lower()
+if DATA_SOURCE == "3y":
+    SRC_DATA_DIR = ROOT / "output" / "backtest_3y_2023_2026"
+    OUT_SUFFIX = "_3y"
+else:
+    SRC_DATA_DIR = ROOT / "output" / "backtest_factors_2026_04"
+    OUT_SUFFIX = ""
+
 RAW_DATA_DIR = SRC_DATA_DIR / "raw_data"
 GR_DIR = SRC_DATA_DIR / "group_results"
 UNIVERSE_FILE = SRC_DATA_DIR / "universe.json"
 
-OUT_DIR = ROOT / "output" / "factor_lab"
+OUT_DIR = ROOT / "output" / f"factor_lab{OUT_SUFFIX}"
 GROUPS_DIR = OUT_DIR / "factor_groups"
 LOG_DIR = OUT_DIR / "logs"
 STATUS_FILE = OUT_DIR / "status.json"
