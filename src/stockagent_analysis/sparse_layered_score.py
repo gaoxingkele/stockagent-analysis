@@ -341,7 +341,7 @@ def compute_sparse_layered_score(
     mf_state: str | None = None,
     score_scale: float = DEFAULT_SCORE_SCALE,
     max_delta_per_factor: float = DEFAULT_MAX_DELTA_PER_FACTOR,
-    use_eb: bool = True,
+    use_eb: bool = False,
     use_k_weight: bool = True,
 ) -> dict[str, Any]:
     """主打分入口.
