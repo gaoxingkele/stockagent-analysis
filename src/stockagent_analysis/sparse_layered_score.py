@@ -269,6 +269,18 @@ def etf_multiplier(factor_name: str, mv_seg: str | None, etf_held: bool) -> floa
 # DS 证据理论 — 借 K 冲突度
 # ────────────────────────────────────────────────────────
 
+def eb_shrink_win(win_rate: float, q3_win: float, n_samples: int | None, n0: int = 3000) -> float:
+    """Empirical Bayes 收缩: 样本少的格子(industry维度)向Q3基线收缩。
+
+    n0=3000 → N≈6000时收缩33%, N≈300000时收缩1%.
+    仅对 industry 维度有实质效果(N~5000-30000),mv/pe维度(N~300000)几乎无影响。
+    """
+    if not n_samples or n_samples <= 0:
+        return win_rate
+    lam = n0 / (n_samples + n0)
+    return (1.0 - lam) * win_rate + lam * q3_win
+
+
 def compute_conflict_K(active_factors: list[dict]) -> float:
     """计算 DS 冲突度 K = sum of m_i(long) × m_j(short) for i!=j.
 
@@ -329,6 +341,8 @@ def compute_sparse_layered_score(
     mf_state: str | None = None,
     score_scale: float = DEFAULT_SCORE_SCALE,
     max_delta_per_factor: float = DEFAULT_MAX_DELTA_PER_FACTOR,
+    use_eb: bool = True,
+    use_k_weight: bool = True,
 ) -> dict[str, Any]:
     """主打分入口.
 
@@ -383,6 +397,11 @@ def compute_sparse_layered_score(
             q3_w = seg_data.get("q3_win")
             if actual_w is None or q3_w is None:
                 continue
+            # EB 收缩: 对 industry 维度(小样本)收缩向 Q3 基线
+            if use_eb:
+                q_ns = seg_data.get("q_ns") or []
+                n_samp = q_ns[q_b - 1] if len(q_ns) >= q_b else None
+                actual_w = eb_shrink_win(actual_w, q3_w, n_samp)
             seg_q_buckets.append(q_b)
             diff = actual_w - q3_w
             # 显著差距才记录
@@ -465,14 +484,26 @@ def compute_sparse_layered_score(
 
     # 综合
     sum_delta = sum(f["delta"] for f in active_factors)
-    layered_score = max(0, min(100, 50 + sum_delta))
 
     K = compute_conflict_K(active_factors)
     conf = confidence_label(K, len(active_factors))
 
+    # K → 动态权重: 冲突大时整体收缩向中性
+    k_weight = 1.0
+    if use_k_weight:
+        if K > 0.45:
+            k_weight = 0.60   # 高冲突, 大幅收缩
+        elif K > 0.25:
+            k_weight = 0.85   # 中等冲突, 小幅收缩
+    sum_delta_adj = sum_delta * k_weight
+
+    layered_score = max(0, min(100, 50 + sum_delta_adj))
+
     return {
         "layered_score": round(layered_score, 2),
         "sum_delta": round(sum_delta, 2),
+        "sum_delta_raw": round(sum_delta, 2),
+        "k_weight": round(k_weight, 3),
         "n_active": len(active_factors),
         "n_silent": len(silent_factors),
         "active_factors": active_factors,
