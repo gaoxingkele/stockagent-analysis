@@ -143,7 +143,7 @@ def _q_bucket_stats(sub: pd.DataFrame, factor: str, n_buckets: int = 5) -> dict 
 
 # ── 主流程 ────────────────────────────────────────────────────────────
 
-def build(train_end: str = "20240531"):
+def build(train_end: str = "20240531", train_start: str = "20230101"):
     t_total = time.time()
 
     # 1. 加载 parquet 并过滤训练期
@@ -156,7 +156,7 @@ def build(train_end: str = "20240531"):
     for f in files:
         df = pd.read_parquet(f)
         df["trade_date"] = df["trade_date"].astype(str)
-        df = df[df["trade_date"] <= train_end]
+        df = df[(df["trade_date"] >= train_start) & (df["trade_date"] <= train_end)]
         if not df.empty:
             parts.append(df)
 
@@ -248,6 +248,7 @@ def build(train_end: str = "20240531"):
             "hold_period":       "D+20",
             "min_bucket_samples": MIN_BUCKET_SAMPLES,
             "data_period":       [str(full["trade_date"].min()), str(full["trade_date"].max())],
+            "train_start":       train_start,
             "train_end":         train_end,
             "oos_start":         "20240701",
             "industries":        main_inds,
@@ -271,10 +272,12 @@ def build(train_end: str = "20240531"):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--train-start", default="20230101",
+                        help="训练期开始日期 (含, 格式 YYYYMMDD, 默认 20230101)")
     parser.add_argument("--train-end", default="20240531",
                         help="训练期截止日期 (含, 格式 YYYYMMDD, 默认 20240531)")
     args = parser.parse_args()
-    build(train_end=args.train_end)
+    build(train_end=args.train_end, train_start=args.train_start)
 
 
 if __name__ == "__main__":
