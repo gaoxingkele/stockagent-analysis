@@ -18,12 +18,21 @@ import pandas as pd
 logger = logging.getLogger("stockagent.lgbm_predictor")
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_DIR  = _PROJECT_ROOT / "output" / "lgbm_r20"
+_DEFAULT_DIR   = _PROJECT_ROOT / "output" / "lgbm_r20"
+_CLEAN_DIR     = _PROJECT_ROOT / "output" / "lgbm_clean"
+_MAXGAIN_DIR   = _PROJECT_ROOT / "output" / "lgbm_maxgain"
 
 # 模块级缓存
 _REG_MODEL = None
 _CLS_MODEL = None
 _FEAT_META: dict | None = None
+# 干净走势检测器 (二分类)
+_CLEAN_MODEL = None
+_CLEAN_META: dict | None = None
+# max_gain / max_dd 回归器 (连续预测期间最高涨幅 + 期间最大回撤)
+_GAIN_MODEL = None
+_DD_MODEL   = None
+_GAIN_META: dict | None = None
 
 
 def load(model_dir: Path | str | None = None) -> bool:
@@ -55,6 +64,108 @@ def load(model_dir: Path | str | None = None) -> bool:
                 len(_FEAT_META["feature_cols"]),
                 _FEAT_META.get("residual_std", 0))
     return True
+
+
+def load_clean(model_dir: Path | str | None = None) -> bool:
+    """加载干净走势检测器."""
+    global _CLEAN_MODEL, _CLEAN_META
+    if _CLEAN_MODEL is not None:
+        return True
+    try:
+        import lightgbm as lgb
+    except ImportError:
+        return False
+
+    d = Path(model_dir) if model_dir else _CLEAN_DIR
+    cls_path = d / "classifier.txt"
+    meta_path = d / "feature_meta.json"
+    if not cls_path.exists() or not meta_path.exists():
+        logger.debug("clean detector 未找到: %s", d)
+        return False
+    _CLEAN_MODEL = lgb.Booster(model_file=str(cls_path))
+    _CLEAN_META = json.loads(meta_path.read_text(encoding="utf-8"))
+    logger.info("clean detector 加载: %d 特征", len(_CLEAN_META["feature_cols"]))
+    return True
+
+
+def _build_row(feat_cols: list, industry_map: dict, industry: str,
+                features: dict, extras: dict | None) -> pd.DataFrame:
+    """构造单行 DataFrame, 处理缺失 + industry_id 映射."""
+    extras = extras or {}
+    industry_id = industry_map.get(industry, industry_map.get("unknown", -1))
+    row = {}
+    for c in feat_cols:
+        if c == "industry_id":
+            row[c] = industry_id
+            continue
+        v = features.get(c)
+        if v is None:
+            v = extras.get(c)
+        try:
+            row[c] = float(v) if v is not None else np.nan
+        except (TypeError, ValueError):
+            row[c] = np.nan
+    return pd.DataFrame([row], columns=feat_cols)
+
+
+def predict_clean(features: dict[str, Any], industry: str = "",
+                   extras: dict[str, Any] | None = None) -> dict | None:
+    """预测"干净上涨"概率 (max_gain_20>=20% AND max_dd_20>=-3%).
+
+    返回: {clean_prob: 0-1, ok: bool}
+    """
+    if not load_clean():
+        return None
+    feat_cols = _CLEAN_META["feature_cols"]
+    industry_map = _CLEAN_META.get("industry_map", {})
+    X = _build_row(feat_cols, industry_map, industry, features, extras)
+    prob = float(_CLEAN_MODEL.predict(X)[0])
+    return {"clean_prob": round(prob, 4), "ok": True}
+
+
+def load_maxgain(model_dir: Path | str | None = None) -> bool:
+    """加载 max_gain + max_dd 回归器."""
+    global _GAIN_MODEL, _DD_MODEL, _GAIN_META
+    if _GAIN_MODEL is not None:
+        return True
+    try:
+        import lightgbm as lgb
+    except ImportError:
+        return False
+    d = Path(model_dir) if model_dir else _MAXGAIN_DIR
+    g_path = d / "regressor_gain.txt"
+    dd_path = d / "regressor_dd.txt"
+    meta_path = d / "feature_meta.json"
+    if not g_path.exists() or not meta_path.exists():
+        logger.debug("maxgain 模型未找到: %s", d)
+        return False
+    _GAIN_MODEL = lgb.Booster(model_file=str(g_path))
+    if dd_path.exists():
+        _DD_MODEL = lgb.Booster(model_file=str(dd_path))
+    _GAIN_META = json.loads(meta_path.read_text(encoding="utf-8"))
+    logger.info("maxgain 加载: %d 特征", len(_GAIN_META["feature_cols"]))
+    return True
+
+
+def predict_maxgain(features: dict[str, Any], industry: str = "",
+                     extras: dict[str, Any] | None = None) -> dict | None:
+    """预测期间最高涨幅 (max_gain_20%) + 期间最大回撤 (max_dd_20%).
+
+    返回: {pred_gain: float, pred_dd: float, gain_dd_ratio: float, ok: bool}
+          gain_dd_ratio = pred_gain / |pred_dd|, 风险收益比 (越高越好)
+    """
+    if not load_maxgain():
+        return None
+    feat_cols = _GAIN_META["feature_cols"]
+    industry_map = _GAIN_META.get("industry_map", {})
+    X = _build_row(feat_cols, industry_map, industry, features, extras)
+    pg = float(_GAIN_MODEL.predict(X)[0])
+    pd_ = float(_DD_MODEL.predict(X)[0]) if _DD_MODEL else None
+    out = {"pred_gain": round(pg, 3), "ok": True}
+    if pd_ is not None:
+        out["pred_dd"] = round(pd_, 3)
+        out["gain_dd_ratio"] = round(pg / abs(pd_), 3) if pd_ != 0 else None
+    return out
 
 
 def predict(features: dict[str, Any], industry: str = "",

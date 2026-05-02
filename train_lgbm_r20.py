@@ -118,10 +118,12 @@ def main():
         ],
     )
 
-    # === 2) 分类模型 (预测 r20 > 0 概率) ===
-    log.info("训练 LightGBM 分类 (预测 r20 > 0 概率)...")
+    # === 2) 分类模型 (预测 r20 > 0 概率, AUC eval) ===
+    log.info("训练 LightGBM 分类 (AUC eval)...")
     y_train_cls = (y_train > 0).astype(int)
     y_test_cls  = (y_test  > 0).astype(int)
+    pos_ratio = y_train_cls.mean()
+    log.info("  正例比 %.1f%% (基线 hit rate)", pos_ratio * 100)
     classifier = lgb.LGBMClassifier(
         n_estimators=2000,
         learning_rate=0.05,
@@ -136,7 +138,7 @@ def main():
         random_state=42,
         n_jobs=-1,
         objective="binary",
-        metric="binary_logloss",
+        metric="auc",   # 比 logloss 更敏感, 不会过早停
         verbose=-1,
     )
     classifier.fit(
