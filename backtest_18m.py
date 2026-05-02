@@ -386,12 +386,13 @@ def main():
     parser.add_argument("--oos", action="store_true",
                         help="OOS模式: 用 factor_lab_oos 矩阵 + 2024-07 之后数据")
     parser.add_argument("--start", default=None, help="回测开始日期 YYYYMMDD (覆盖默认)")
+    parser.add_argument("--end",   default=None, help="回测结束日期 YYYYMMDD (覆盖默认)")
     parser.add_argument("--matrix", default=None, help="指定 validity_matrix.json 路径")
     parser.add_argument("--out", default=None, help="指定输出目录")
     args = parser.parse_args()
 
     # 动态配置 (支持 OOS 模式和自定义参数)
-    global BACKTEST_START, OUTPUT_DIR, CKPT_FILE, MATRIX_PATH
+    global BACKTEST_START, BACKTEST_END, OUTPUT_DIR, CKPT_FILE, MATRIX_PATH
 
     if args.oos:
         BACKTEST_START = OOS_START
@@ -401,6 +402,8 @@ def main():
 
     if args.start:
         BACKTEST_START = args.start
+    if args.end:
+        BACKTEST_END = args.end
     if args.matrix:
         MATRIX_PATH = Path(args.matrix)
     if args.out:
