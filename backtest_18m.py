@@ -43,8 +43,13 @@ BACKTEST_END   = "20260501"
 OUTPUT_DIR = Path("output/backtest_18m")
 CKPT_FILE  = OUTPUT_DIR / "checkpoint.json"
 
-FACTOR_DIR = Path("output/factor_lab_3y/factor_groups")
+FACTOR_DIR  = Path("output/factor_lab_3y/factor_groups")
 MATRIX_PATH = Path("output/factor_lab_3y/validity_matrix.json")
+
+# OOS 配置 (--oos 时使用)
+OOS_START      = "20240701"
+OOS_MATRIX     = Path("output/factor_lab_oos/validity_matrix.json")
+OOS_OUTPUT_DIR = Path("output/backtest_oos")
 
 # 持仓周期 (用 r5 = 5日前向收益)
 HOLD_DAYS  = 5
@@ -378,8 +383,30 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--phase", choices=["1", "2", "all"], default="all")
     parser.add_argument("--reset", action="store_true", help="清除 checkpoint 重新跑")
+    parser.add_argument("--oos", action="store_true",
+                        help="OOS模式: 用 factor_lab_oos 矩阵 + 2024-07 之后数据")
+    parser.add_argument("--start", default=None, help="回测开始日期 YYYYMMDD (覆盖默认)")
+    parser.add_argument("--matrix", default=None, help="指定 validity_matrix.json 路径")
+    parser.add_argument("--out", default=None, help="指定输出目录")
     args = parser.parse_args()
 
+    # 动态配置 (支持 OOS 模式和自定义参数)
+    global BACKTEST_START, OUTPUT_DIR, CKPT_FILE, MATRIX_PATH
+
+    if args.oos:
+        BACKTEST_START = OOS_START
+        OUTPUT_DIR = OOS_OUTPUT_DIR
+        MATRIX_PATH = OOS_MATRIX
+        log.info("OOS 模式: 矩阵=%s, 回测期=%s→", MATRIX_PATH, BACKTEST_START)
+
+    if args.start:
+        BACKTEST_START = args.start
+    if args.matrix:
+        MATRIX_PATH = Path(args.matrix)
+    if args.out:
+        OUTPUT_DIR = Path(args.out)
+
+    CKPT_FILE = OUTPUT_DIR / "checkpoint.json"
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     if args.reset and CKPT_FILE.exists():
@@ -394,8 +421,13 @@ def main():
     log.info("因子列数: %d", len(factor_cols))
 
     # 加载 validity matrix
+    if not MATRIX_PATH.exists():
+        sys.exit(f"validity_matrix 不存在: {MATRIX_PATH}\n先运行 python build_oos_matrix.py")
     with open(MATRIX_PATH, encoding="utf-8") as f:
         matrix = json.load(f)
+    log.info("矩阵加载: %s (训练期 %s)",
+             MATRIX_PATH.name,
+             matrix.get("meta", {}).get("data_period", ["?"])[-1])
 
     run_p1 = args.phase in ("1", "all") and not ckpt.get("phase1_done")
     run_p2 = args.phase in ("2", "all")
