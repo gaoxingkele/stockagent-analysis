@@ -342,6 +342,7 @@ def compute_sparse_layered_score(
     max_delta_per_factor: float = DEFAULT_MAX_DELTA_PER_FACTOR,
     use_eb: bool = False,
     use_k_weight: bool = True,
+    score_mode: str = "win",
 ) -> dict[str, Any]:
     """主打分入口.
 
@@ -350,9 +351,21 @@ def compute_sparse_layered_score(
     matrix:   validity_matrix.json 内容; 不传则自动加载
     regime:   {trend, dispersion}
     mf_state: 资金流状态字符串
+    score_mode: "win" = 用 q_wins (胜率, 默认) | "avg" = 用 q_avgs (平均涨幅%)
+                avg 模式下: 阈值 0.5pp, score_scale 自动 /10 适配单位
     """
     if matrix is None:
         matrix = load_validity_matrix()
+
+    # 模式相关参数
+    if score_mode == "avg":
+        wins_key      = "q_avgs"          # q_avgs 是 % 单位 (4.66 = 4.66%)
+        seg_threshold = 1.5               # 1.5pp 涨幅超额才算显著 (q_avgs 噪声大)
+        eff_scale     = score_scale / 30  # 1.5pp 涨幅 → delta ~1.5
+    else:
+        wins_key      = "q_wins"
+        seg_threshold = 0.04
+        eff_scale     = score_scale
 
     factors_data = matrix.get("factors", {})
     base_win = matrix.get("meta", {}).get("base_win_rate", DEFAULT_HOLD_BASE)
@@ -389,11 +402,15 @@ def compute_sparse_layered_score(
             q_b = find_q_bucket(fvalue, q_thresholds)
             if q_b is None:
                 continue
-            q_wins_list = seg_data.get("q_wins") or []
+            q_wins_list = seg_data.get(wins_key) or []
             if len(q_wins_list) < q_b:
                 continue
             actual_w = q_wins_list[q_b - 1]
-            q3_w = seg_data.get("q3_win")
+            # q3 基线: avg 模式从 q_avgs[2] 现算; win 模式直接读 q3_win
+            if score_mode == "avg":
+                q3_w = q_wins_list[2] if len(q_wins_list) >= 3 else None
+            else:
+                q3_w = seg_data.get("q3_win")
             if actual_w is None or q3_w is None:
                 continue
             # EB 收缩: 对 industry 维度(小样本)收缩向 Q3 基线
@@ -403,12 +420,19 @@ def compute_sparse_layered_score(
                 actual_w = eb_shrink_win(actual_w, q3_w, n_samp)
             seg_q_buckets.append(q_b)
             diff = actual_w - q3_w
-            # 显著差距才记录
-            if abs(diff) >= 0.04:
+            # 显著差距才记录 (mode 相关阈值)
+            if abs(diff) >= seg_threshold:
                 seg_excesses.append(diff)
                 seg_actual_wins.append(actual_w)
                 seg_q3_wins.append(q3_w)
-                if seg_data.get("active"):
+                # avg 模式: 现算激活 (best_avg - q3_avg >= 1.5pp 且 best_avg >= 0)
+                if score_mode == "avg":
+                    valid_avgs = [v for v in q_wins_list if v is not None]
+                    if valid_avgs:
+                        best_avg = max(valid_avgs)
+                        if (best_avg - q3_w) >= 1.5 and best_avg >= 0.0:
+                            any_active_segment = True
+                elif seg_data.get("active"):
                     any_active_segment = True
 
         if not seg_excesses:
@@ -443,11 +467,11 @@ def compute_sparse_layered_score(
         sign = 1 if all_pos else -1
         actual_q_bucket = seg_q_buckets[0]
 
-        # delta = 算术平均超额 × score_scale (excess 已带符号, 不再 × sign)
+        # delta = 算术平均超额 × eff_scale (avg 模式自动适配单位)
         mean_excess = sum(seg_excesses) / len(seg_excesses)
-        w_eff = sum(seg_actual_wins) / len(seg_actual_wins)   # 展示用算术均值
+        w_eff = sum(seg_actual_wins) / len(seg_actual_wins)
         q3_eff = sum(seg_q3_wins) / len(seg_q3_wins)
-        raw_delta = mean_excess * score_scale
+        raw_delta = mean_excess * eff_scale
 
         # 全局调节: regime + ETF
         m_regime = regime_multiplier(fname, regime)
@@ -507,9 +531,34 @@ def compute_sparse_layered_score(
     else:
         trade_signal = "清仓/回避"
 
+    # ── LGBM 预测 (可选) + 仓位综合建议 ────────────────────────────────
+    lgbm_result = None
+    position_suggestion = None
+    try:
+        from . import lgbm_predictor
+        # LGBM 需要的额外 context 特征 (mv/pe/mf_*) 从 context._raw 拉
+        lgbm_extras = {}
+        raw = context.get("_raw") or {}
+        for k in ("total_mv", "pe", "pe_ttm", "market_score_adj",
+                  "mf_divergence", "mf_strength", "mf_consecutive"):
+            if k in raw:
+                lgbm_extras[k] = raw[k]
+            elif k in features:
+                lgbm_extras[k] = features[k]
+        lgbm_result = lgbm_predictor.predict(
+            features, context.get("industry", ""), extras=lgbm_extras
+        )
+    except Exception as _e:
+        pass
+
+    # 综合仓位建议 (sparse + LGBM 双信号)
+    position_suggestion = _compute_position(layered_score, lgbm_result)
+
     return {
         "layered_score": round(layered_score, 2),
         "trade_signal": trade_signal,
+        "lgbm": lgbm_result,
+        "position_suggestion": position_suggestion,
         "sum_delta": round(sum_delta, 2),
         "sum_delta_raw": round(sum_delta, 2),
         "k_weight": round(k_weight, 3),
@@ -858,16 +907,35 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
     longs = [f for f in result.get("active_factors", []) if f.get("delta", 0) > 0]
     shorts = [f for f in result.get("active_factors", []) if f.get("delta", 0) < 0]
 
+    lgbm = result.get("lgbm") or {}
+    pos  = result.get("position_suggestion") or {}
+
     lines = [
-        "## 量化分层信号 (sparse_layered, 来自 102 万样本回测)",
+        "## 量化双引擎信号 (sparse_layered + LGBM)",
         "",
-        f"**综合: {score:.1f} 分** [{result.get('trade_signal', '')}] (delta {sum_d:+.1f}) | "
+        f"**Sparse: {score:.1f} 分** [{result.get('trade_signal', '')}] (delta {sum_d:+.1f}) | "
         f"激活 {n_a} 因子 | 冲突 K={K:.2f} | 一致性 **{conf}**",
         "",
-        f"**股票上下文**: 市值={ctx.get('mv_seg')} · PE={ctx.get('pe_seg')} · "
-        f"行业={ctx.get('industry')} · 资金流={result.get('mf_state', 'neutral')}",
-        "",
     ]
+    if lgbm.get("ok"):
+        lines.append(
+            f"**LGBM 预测**: r20 涨幅 {lgbm.get('pred_r20', 0):+.2f}% · "
+            f"上涨概率 **{lgbm.get('winprob', 0)*100:.1f}%** · 确信度 {lgbm.get('conf', '?')}"
+        )
+        lines.append("")
+    if pos:
+        consistency = pos.get('consistency', '?')
+        cons_cn = {'agree': '✓ 双信号一致', 'conflict': '⚠ 信号冲突',
+                   'single_engine': '单引擎'}.get(consistency, consistency)
+        lines.append(
+            f"**仓位建议**: **{pos.get('position_pct', 0):.0f}%** ({cons_cn}) — {pos.get('reason', '')}"
+        )
+        lines.append("")
+    lines.append(
+        f"**股票上下文**: 市值={ctx.get('mv_seg')} · PE={ctx.get('pe_seg')} · "
+        f"行业={ctx.get('industry')} · 资金流={result.get('mf_state', 'neutral')}"
+    )
+    lines.append("")
 
     if longs:
         lines.append(f"### 看多信号 ({len(longs)} 个)")
@@ -1012,6 +1080,86 @@ def compare_stocks(result_a: dict, label_a: str,
 
     lines.append("=" * 72)
     return "\n".join(lines)
+
+
+def _compute_position(sparse_score: float, lgbm: dict | None) -> dict:
+    """综合 sparse 评分 + LGBM 概率给出仓位建议 (0-100%).
+
+    规则:
+      - 低分 (<35) 或 LGBM 概率 <48% → 0% (避雷)
+      - sparse>=75 + LGBM winprob>=62% → 80% (强买信号)
+      - sparse>=65 + LGBM winprob>=55% → 50% (中等买入)
+      - sparse 50-65 + LGBM 50-55% → 25% (试探仓)
+      - sparse 35-50 + LGBM <50% → 10% (观望)
+      - 信号冲突 (一上一下) → 取低值
+    """
+    # 单引擎 fallback
+    if lgbm is None or not lgbm.get("ok"):
+        if sparse_score >= 75:
+            pct = 60.0; reason = "sparse 强信号 (无LGBM支持时打折)"
+        elif sparse_score >= 65:
+            pct = 35.0; reason = "sparse 中高分"
+        elif sparse_score >= 50:
+            pct = 15.0; reason = "sparse 中性偏多"
+        elif sparse_score >= 35:
+            pct = 5.0;  reason = "sparse 偏空, 仅试探"
+        else:
+            pct = 0.0;  reason = "sparse 低分回避"
+        return {
+            "position_pct": pct,
+            "reason": reason,
+            "consistency": "single_engine",
+        }
+
+    winprob = lgbm.get("winprob", 0.5)
+    pred_r20 = lgbm.get("pred_r20", 0.0)
+
+    # 双引擎一致性: sparse 看多 (>=50) AND LGBM winprob>=50, 或反之
+    sparse_bullish = sparse_score >= 50
+    lgbm_bullish   = winprob >= 0.50
+    if sparse_bullish == lgbm_bullish:
+        consistency = "agree"
+    else:
+        consistency = "conflict"
+
+    # 避雷
+    if sparse_score < 35 or winprob < 0.48:
+        return {
+            "position_pct": 0.0,
+            "reason": f"低分回避 (sparse={sparse_score:.0f}, win={winprob*100:.0f}%, pred={pred_r20:+.1f}%)",
+            "consistency": consistency,
+        }
+
+    # 主决策矩阵
+    if sparse_score >= 75 and winprob >= 0.62:
+        pct = 80.0; tier = "强买"
+    elif sparse_score >= 65 and winprob >= 0.55:
+        pct = 50.0; tier = "中等买入"
+    elif sparse_score >= 50 and winprob >= 0.52:
+        pct = 25.0; tier = "试探仓"
+    elif sparse_score >= 50 and winprob >= 0.50:
+        pct = 15.0; tier = "弱多观察"
+    else:
+        pct = 5.0;  tier = "纯观望"
+
+    # 冲突 → 仓位减半
+    if consistency == "conflict":
+        pct = round(pct * 0.5, 1)
+        tier += "(信号冲突减半)"
+
+    # pred_r20 极端值修正: <-3% 强制砍仓位, >+8% 加成
+    if pred_r20 < -3.0:
+        pct = min(pct, 10.0)
+        tier += " [LGBM预测下跌, 限仓]"
+    elif pred_r20 >= 8.0 and consistency == "agree":
+        pct = min(95.0, pct * 1.15)
+
+    return {
+        "position_pct": round(pct, 1),
+        "reason": f"{tier}: sparse={sparse_score:.0f} | win={winprob*100:.0f}% | pred={pred_r20:+.1f}%",
+        "consistency": consistency,
+        "tier": tier,
+    }
 
 
 def _build_reason(fname: str, context: dict, q: int, sign: int,
