@@ -106,6 +106,10 @@ class MarketContext:
     mkt_flow_detail: str = ""
     # 美股隔夜数据 (北京时间9:15前可用)
     us_overnight: dict = field(default_factory=dict)
+    # 行业分化度: 板块涨跌幅标准差 (高=慢牛分化, 低=普涨/普跌)
+    sector_divergence: float = 0.0
+    # 舆情热点行业 [{sector, keywords, weight_boost}]
+    news_hot_sectors: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -120,6 +124,8 @@ class MarketContext:
             "mkt_flow_signal": self.mkt_flow_signal,
             "mkt_flow_detail": self.mkt_flow_detail,
             "us_overnight": self.us_overnight,
+            "sector_divergence": self.sector_divergence,
+            "news_hot_sectors": self.news_hot_sectors,
         }
 
 
@@ -433,10 +439,141 @@ def _fetch_us_overnight() -> dict:
     result["summary"] = " | ".join(
         f"{v['name']}{v['pct']:+.1f}%" for v in indices.values()
     )
-    logger.info("[us_overnight] %s sentiment=%s adj=%+.1f", result["summary"], sentiment, score_adj)
+
+    # ── 板块级 ETF 映射: NASDAQ vs SPY 偏离度 → 科技热度 ──────────────
+    # A股板块联动映射 (US ETF名 → 相关A股行业)
+    _US_SECTOR_CN = {
+        "tech":   ["人工智能", "芯片", "半导体", "信创", "计算机"],
+        "health": ["医药生物", "医疗器械"],
+        "energy": ["石油石化", "煤炭"],
+        "finance":["银行", "证券", "保险"],
+    }
+    sector_signals: dict[str, dict] = {}
+
+    # 科技信号: NASDAQ 相对 S&P 的超额 (差距越大越强)
+    tech_alpha = round(nq_pct - sp_pct, 2)
+    if abs(tech_alpha) >= 0.5:
+        direction = "bullish" if tech_alpha > 0 else "bearish"
+        sector_signals["tech"] = {
+            "sectors_cn": _US_SECTOR_CN["tech"],
+            "us_alpha": tech_alpha,   # NASDAQ 超额
+            "direction": direction,
+            "weight_adj": round(min(1.5, abs(tech_alpha) * 0.5) * (1 if tech_alpha > 0 else -1), 2),
+        }
+    # 尝试获取个别板块 ETF (失败则忽略)
+    _US_SECTOR_ETFS = {
+        "health": ("XLV", "标普医疗"),
+        "energy": ("XLE", "标普能源"),
+    }
+    for sector_key, (ticker, label) in _US_SECTOR_ETFS.items():
+        try:
+            time.sleep(0.2)
+            df_etf = _no_proxy_call(ak.stock_us_daily, symbol=ticker, adjust="")
+            if df_etf is not None and not df_etf.empty and "close" in df_etf.columns:
+                p1 = float(df_etf["close"].iloc[-1])
+                p0 = float(df_etf["close"].iloc[-2]) if len(df_etf) > 1 else p1
+                pct_etf = round((p1 / p0 - 1) * 100, 2) if p0 > 0 else 0.0
+                direction = "bullish" if pct_etf > 0.5 else "bearish" if pct_etf < -0.5 else "neutral"
+                sector_signals[sector_key] = {
+                    "sectors_cn": _US_SECTOR_CN[sector_key],
+                    "us_ticker": ticker,
+                    "us_pct": pct_etf,
+                    "direction": direction,
+                    "weight_adj": round(min(1.5, abs(pct_etf) * 0.3) * (1 if pct_etf > 0 else -1), 2),
+                }
+        except Exception as _e:
+            logger.debug("us sector etf %s: %s", ticker, _e)
+
+    result["sector_signals"] = sector_signals
+    logger.info("[us_overnight] %s sentiment=%s adj=%+.1f tech_alpha=%+.2f%%",
+                result["summary"], sentiment, score_adj, tech_alpha)
 
     _US_OVERNIGHT_CACHE = result
     _US_OVERNIGHT_DATE = today
+    return result
+
+
+# 新闻关键词 → A股行业映射
+_NEWS_KW_SECTOR: dict[str, list[str]] = {
+    "低空经济": ["通用设备", "航空装备"], "机器人": ["机械设备", "电子"],
+    "人工智能": ["计算机", "电子", "通信"], "大模型": ["计算机", "通信"],
+    "算力": ["计算机", "通信"], "数据中心": ["计算机", "通信"],
+    "半导体": ["半导体", "电子"], "芯片": ["半导体", "电子"],
+    "新能源": ["电力设备"], "光伏": ["电力设备"], "储能": ["电力设备", "化工"],
+    "医疗": ["医药生物", "医疗器械"], "创新药": ["医药生物"],
+    "军工": ["国防军工"], "汽车": ["汽车"], "电动车": ["汽车", "电力设备"],
+    "消费": ["食品饮料", "商贸零售"], "地产": ["房地产"],
+    "银行": ["银行"], "券商": ["证券"], "黄金": ["贵金属"],
+    "关税": ["纺织服装", "家用电器"], "出口": ["纺织服装", "家用电器"],
+    "信创": ["计算机"], "智能驾驶": ["汽车", "电子"],
+    "固态电池": ["电力设备", "化工"], "量子": ["计算机", "通信"],
+    "核电": ["电力设备", "公用事业"], "煤炭": ["煤炭"], "钢铁": ["钢铁"],
+}
+
+_NEWS_CACHE: dict | None = None
+_NEWS_CACHE_DATE: str = ""
+
+
+def _fetch_news_hot_topics(max_articles: int = 50) -> list[dict]:
+    """从财联社电报/东财快讯抓取热点关键词, 映射到A股行业。
+
+    返回 [{sector: str, keywords: [str], score: int, source_count: int}]
+    score = 该行业关键词出现次数 (用于 weight_boost)
+    """
+    global _NEWS_CACHE, _NEWS_CACHE_DATE
+    today = datetime.now().strftime("%Y-%m-%d")
+    if _NEWS_CACHE is not None and _NEWS_CACHE_DATE == today:
+        return _NEWS_CACHE
+
+    sector_hits: dict[str, list[str]] = {}
+
+    try:
+        import akshare as ak
+        # 财联社电报 (最新快讯)
+        time.sleep(0.5)
+        df = _no_proxy_call(ak.stock_telegraph_cls)
+        if df is not None and not df.empty:
+            text_col = next((c for c in ["content", "title", "内容", "标题"] if c in df.columns), None)
+            if text_col:
+                texts = " ".join(df[text_col].dropna().astype(str).tolist()[:max_articles])
+                for kw, sectors in _NEWS_KW_SECTOR.items():
+                    if kw in texts:
+                        for s in sectors:
+                            sector_hits.setdefault(s, []).append(kw)
+    except Exception as e:
+        logger.debug("fetch_news_hot_topics cls failed: %s", e)
+
+    # fallback: 东财快讯
+    if not sector_hits:
+        try:
+            import akshare as ak
+            time.sleep(0.5)
+            df2 = _no_proxy_call(ak.stock_news_em, symbol="")
+            if df2 is not None and not df2.empty:
+                text_col = next((c for c in ["新闻标题", "title", "content"] if c in df2.columns), None)
+                if text_col:
+                    texts = " ".join(df2[text_col].dropna().astype(str).tolist()[:max_articles])
+                    for kw, sectors in _NEWS_KW_SECTOR.items():
+                        if kw in texts:
+                            for s in sectors:
+                                sector_hits.setdefault(s, []).append(kw)
+        except Exception as e:
+            logger.debug("fetch_news_hot_topics em failed: %s", e)
+
+    result = [
+        {
+            "sector": s,
+            "keywords": list(set(kws)),
+            "score": len(kws),
+            "weight_boost": round(min(2.0, len(kws) * 0.5), 2),
+        }
+        for s, kws in sorted(sector_hits.items(), key=lambda x: -len(x[1]))
+    ]
+    _NEWS_CACHE = result
+    _NEWS_CACHE_DATE = today
+    if result:
+        logger.info("[news_hot] 热点行业: %s",
+                    ", ".join(f"{r['sector']}({r['score']})" for r in result[:6]))
     return result
 
 
@@ -1133,6 +1270,20 @@ class MarketContextAnalyzer:
                 self._us_overnight = _fetch_us_overnight()
         us_overnight = self._us_overnight or {}
 
+        # 7. 新闻热点行业(模块级日期缓存)
+        news_hot_sectors = _fetch_news_hot_topics()
+
+        # 8. 板块分化度: 涨幅排行 pct_chg 标准差 (高=慢牛分化)
+        sector_divergence = 0.0
+        with self._lock:
+            ranking = self._concept_ranking or []
+        if ranking:
+            pcts = [float(item.get("pct_chg", 0) or 0) for item in ranking]
+            if len(pcts) >= 3:
+                mean_p = sum(pcts) / len(pcts)
+                var_p = sum((p - mean_p) ** 2 for p in pcts) / len(pcts)
+                sector_divergence = round(var_p ** 0.5, 2)
+
         ctx = MarketContext(
             generated_at=datetime.now().isoformat(),
             index_states=index_states,
@@ -1145,6 +1296,8 @@ class MarketContextAnalyzer:
             mkt_flow_signal=mkt_flow_signal,
             mkt_flow_detail=mkt_flow_detail,
             us_overnight=us_overnight,
+            sector_divergence=sector_divergence,
+            news_hot_sectors=news_hot_sectors,
         )
         return ctx
 
@@ -1363,6 +1516,26 @@ def compute_market_adjustment(market_ctx: MarketContext, stock_score: float) -> 
         us_adj = float(us.get("score_adj", 0)) * 0.5
         adj += max(-2.0, min(2.0, us_adj))
 
+    # 5. 美股行业信号 → 本股行业定向调节 (±1.5)
+    us_sector_signals = us.get("sector_signals", {}) if us else {}
+    if us_sector_signals and market_ctx.sector_heats:
+        stock_sectors = {h.sector_name for h in market_ctx.sector_heats}
+        for _sig in us_sector_signals.values():
+            if any(s in stock_sectors for s in _sig.get("sectors_cn", [])):
+                industry_adj = float(_sig.get("weight_adj", 0)) * 0.8
+                adj += max(-1.5, min(1.5, industry_adj))
+                break  # 取第一个匹配行业信号
+
+    # 6. 新闻热点行业 → 权重加成 (0~+2, 热点只加分不减分)
+    if market_ctx.news_hot_sectors and market_ctx.sector_heats:
+        stock_sectors = {h.sector_name for h in market_ctx.sector_heats}
+        best_boost = max(
+            (float(nh.get("weight_boost", 0)) for nh in market_ctx.news_hot_sectors
+             if nh.get("sector") in stock_sectors),
+            default=0.0,
+        )
+        adj += min(2.0, best_boost)
+
     # 极端分数时调节减半
     if stock_score > 85 or stock_score < 15:
         adj *= 0.5
@@ -1425,6 +1598,29 @@ def market_context_summary(ctx: MarketContext) -> str:
             "neutral": "中性", "mildly_bearish": "偏弱", "bearish": "弱势",
         }.get(us.get("sentiment", "neutral"), "")
         parts.append(f"美股隔夜: {us.get('summary', '')} ({_sentiment_cn})")
+        # 美股行业信号
+        for sig_key, sig in (us.get("sector_signals") or {}).items():
+            if sig.get("direction") != "neutral":
+                dir_cn = "↑利多" if sig["direction"] == "bullish" else "↓利空"
+                parts.append(
+                    f"  └ 美股{sig_key}信号{dir_cn} → "
+                    f"A股影响: {'/'.join(sig.get('sectors_cn', [])[:3])}"
+                )
+
+    # 板块分化度
+    if ctx.sector_divergence > 0:
+        div_label = ("高分化(热点驱动)" if ctx.sector_divergence >= 1.5
+                     else "中等分化" if ctx.sector_divergence >= 0.8
+                     else "低分化(普涨/普跌)")
+        parts.append(f"板块分化: σ={ctx.sector_divergence:.2f}% ({div_label})")
+
+    # 新闻热点行业
+    if ctx.news_hot_sectors:
+        nh_lines = [
+            f"{n['sector']}({','.join(n.get('keywords', [])[:2])})"
+            for n in ctx.news_hot_sectors[:4]
+        ]
+        parts.append("舆情热点: " + " | ".join(nh_lines))
 
     # 视觉研判
     if ctx.vision_summary:

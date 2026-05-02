@@ -202,10 +202,9 @@ def apply_mf_gate(delta: float, mf_state: str | None, factor_name: str) -> tuple
             return 0.0, "mf_outflow_veto"   # 主力出货 → 看多信号否决
         return delta * 0.5, "mf_neutral"
     elif delta < 0:
+        # A股无做空机制: 负向信号=减仓/回避，主力净流入不应否决减仓建议
         if mf_state == "main_outflow_3d":
             return delta, "mf_outflow_confirm"
-        if mf_state in ("main_inflow", "main_inflow_3d"):
-            return 0.0, "mf_inflow_veto"
         return delta * 0.5, "mf_neutral"
 
     return delta, None
@@ -499,8 +498,18 @@ def compute_sparse_layered_score(
 
     layered_score = max(0, min(100, 50 + sum_delta_adj))
 
+    if layered_score >= 65:
+        trade_signal = "入场/加仓"
+    elif layered_score >= 50:
+        trade_signal = "持仓观察"
+    elif layered_score >= 35:
+        trade_signal = "减仓/观望"
+    else:
+        trade_signal = "清仓/回避"
+
     return {
         "layered_score": round(layered_score, 2),
+        "trade_signal": trade_signal,
         "sum_delta": round(sum_delta, 2),
         "sum_delta_raw": round(sum_delta, 2),
         "k_weight": round(k_weight, 3),
@@ -715,7 +724,7 @@ def explain_layered_score(result: dict, verbose: bool = True) -> str:
         f"sparse_layered_score 解释报告",
         "=" * 72,
         "",
-        f"【综合分】 {score:.1f} = 50 (基线) + Δ {sum_d:+.2f}",
+        f"【综合分】 {score:.1f} = 50 (基线) + Δ {sum_d:+.2f}  →  {result.get('trade_signal', '')}",
         f"【激活】 {n_a} 因子有效 / {n_s} 因子静默",
         f"【信号一致性】 {conf}  (DS 冲突度 K = {K:.3f})",
         "",
@@ -852,7 +861,7 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
     lines = [
         "## 量化分层信号 (sparse_layered, 来自 102 万样本回测)",
         "",
-        f"**综合: {score:.1f} 分** (delta {sum_d:+.1f}) | "
+        f"**综合: {score:.1f} 分** [{result.get('trade_signal', '')}] (delta {sum_d:+.1f}) | "
         f"激活 {n_a} 因子 | 冲突 K={K:.2f} | 一致性 **{conf}**",
         "",
         f"**股票上下文**: 市值={ctx.get('mv_seg')} · PE={ctx.get('pe_seg')} · "
