@@ -950,14 +950,14 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
         rsi = regime.get("rsi14");   rsis = f"{rsi:.0f}"     if rsi is not None else "?"
         lines.append(f"### 🌐 当前市场状态: **{regime_cn}**")
         lines.append(f"  · 沪深300 5日 {r5s} / 20日 {r20s} / 60日 {r60s} / RSI14 {rsis}")
-        # Regime 适用建议 (根据 5 窗口走步式回测实证)
+        # Regime 适用建议 (基于 36 次配对实证 vs 沪深300 真 alpha)
         regime_advice = {
-            "bull_policy": "⚠ 政策驱动期, 起涨与已涨边界模糊, 信号置信度中等 (lift~6x)",
-            "bull_fast": "⚠ 流动性驱动, 涨幅大但起涨点稀少 (lift 5-8x), 多数已涨过",
-            "bull_slow_diverge": "★★ 系统主战场 — 5 窗口实证 top5% 起涨率 12%+ (lift 12x)",
-            "bear": "❌ 系统在熊市失效 (实证 top5% 仅 1%, 训练样本不足), 建议禁用信号",
-            "sideways": "★ 震荡市仍可信 (top5% 起涨率 7-12%, lift 8-17x)",
-            "mixed": "中性可用 (top5% 起涨率 6-8%, lift 6-10x)",
+            "bull_policy": "⚠ 政策驱动期, 直接买 ETF 完胜选股 (复利效应大), 系统暂禁用",
+            "bull_fast": "⚠ 流动性驱动, 普涨期, 直接买 ETF 收益更佳, 系统价值低",
+            "bull_slow_diverge": "★ 主战场 — 配对实证胜率 56.2% (个股分化, 系统有微弱 alpha)",
+            "bear": "❌ 熊市训练样本不足, 信号反向, 仅用 risk_score 避雷",
+            "sideways": "❌ 震荡市配对胜率仅 33% (反向 alpha), 选股不如持币观望",
+            "mixed": "★★ 过渡市配对胜率 63.6%, 系统在此 regime 真 alpha 最强",
         }.get(regime["regime"], "")
         if regime_advice:
             lines.append(f"  · 系统适用性: {regime_advice}")
