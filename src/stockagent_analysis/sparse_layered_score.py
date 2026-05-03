@@ -1280,13 +1280,29 @@ def _compute_entry_score(sparse_score: float, lgbm: dict | None,
     if cp is not None and cp >= 0.20: base += 3
     if cp is not None and cp >= 0.30: base += 2
 
-    # 5. 域限: 实证负 alpha 段降权 (-15)
+    # 5. 域限: 实证负 alpha 段降权
     if mv_seg == "1000亿+" and not etf_held:
-        base -= 25
-        reasons.append("⚠ 域限: 1000亿+ 非 ETF 持有 (实证强买档 r20=-0.4%)")
+        base -= 30
+        reasons.append("⚠ 域限: 1000亿+ 非 ETF (实证 r20=-0.4%, 几乎不可买)")
     elif mv_seg in ("300-1000亿", "1000亿+") and not etf_held:
-        base -= 8
+        base -= 12
         reasons.append("域限: 大盘非 ETF, sparse 实证负 alpha")
+
+    # 5b. 行业黑名单 (实证 top 50 中假阳性集中区)
+    industry = ctx.get("industry", "") or ""
+    BANK_INSURE = {"银行", "保险", "保险II"}
+    SLOW_INDUSTRIES = {"航运港口", "煤炭开采", "水电", "燃气", "高速公路", "铁路运输",
+                        "火电", "其他银行", "公用事业"}
+    if industry in BANK_INSURE:
+        if mv_seg in ("1000亿+", "300-1000亿"):
+            base -= 30
+            reasons.append(f"⚠ 黑名单: 大盘 {industry} 业 (实证起涨概率高但不涨)")
+        else:
+            base -= 15
+            reasons.append(f"行业 {industry} 起涨表现弱")
+    elif industry in SLOW_INDUSTRIES:
+        base -= 10
+        reasons.append(f"行业 {industry}: 慢速行业, 起涨幅度有限")
 
     # 6. 稀疏桶警告: mv×pe 桶 3年内干净起涨样本不足
     n_samples = _bucket_sample_count(mv_seg, pe_seg)

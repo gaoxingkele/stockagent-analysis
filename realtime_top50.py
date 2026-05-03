@@ -116,17 +116,62 @@ def main(target_date: str = None):
          "100-300亿" if v/1e4 < 300 else "300-1000亿" if v/1e4 < 1000 else "1000亿+")
         if pd.notna(v) else None)
 
-    # 按 uptrend_pred 排序取 top 100, 然后过滤
+    # 第一步: 用 uptrend_pred 取 top 200 候选 (粗筛)
     full = full.sort_values("uptrend_pred", ascending=False)
+    candidates = full.head(200).copy()
+    print(f"\n第一步: uptrend_prob 粗筛 top 200, 起涨概率均值 {candidates['uptrend_pred'].mean()*100:.2f}%")
 
-    top50 = full.head(50).copy()
+    # 第二步: 对 top 200 跑完整 sparse_layered_score (含黑名单/域限/regime)
+    print("第二步: 综合评分排序 (含黑名单 + 域限 + sparse 因子)...")
+    sys.path.insert(0, str(ROOT))
+    from src.stockagent_analysis.sparse_layered_score import (
+        compute_sparse_layered_score, bucket_mv, bucket_pe,
+    )
+    matrix_path = ROOT / "output" / "factor_lab_oos" / "validity_matrix.json"
+    matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
+    factor_excludes = {"ts_code","trade_date","industry","name",
+                        "r5","r10","r20","r30","r40","dd5","dd10","dd20","dd30","dd40",
+                        "mv_bucket","pe_bucket","total_mv","pe","pe_ttm",
+                        "market_score_adj","mf_divergence","mf_strength","mf_consecutive"}
+    factor_cols = [c for c in candidates.columns
+                    if c not in factor_excludes
+                    and pd.api.types.is_numeric_dtype(candidates[c])]
+    entry_scores = []; risk_scores = []
+    for _, row in candidates.iterrows():
+        feats = {fc: float(row[fc]) for fc in factor_cols if pd.notna(row.get(fc))}
+        raw = {k: row.get(k) for k in ("total_mv","pe","pe_ttm","market_score_adj",
+                                        "mf_divergence","mf_strength","mf_consecutive")}
+        ts = str(row["ts_code"])
+        ctx = {"mv_seg": bucket_mv(row.get("total_mv")),
+                "pe_seg": bucket_pe(row.get("pe_ttm") or row.get("pe")),
+                "industry": str(row.get("industry") or ""),
+                "etf_held": ts in etf_holders,
+                "_raw": raw}
+        try:
+            r = compute_sparse_layered_score(feats, ctx, matrix=matrix,
+                                              use_eb=True, use_k_weight=False)
+            es = (r.get("entry_score") or {}).get("score", 50)
+            rs = (r.get("risk_score") or {}).get("score", 50)
+        except Exception:
+            es, rs = 50, 50
+        entry_scores.append(es); risk_scores.append(rs)
+    candidates["entry_score"] = entry_scores
+    candidates["risk_score"] = risk_scores
+
+    # 第三步: 用 entry_score 重排取 top 50
+    candidates = candidates.sort_values("entry_score", ascending=False)
+    top50 = candidates.head(50).copy()
+    print(f"第三步: entry_score 重排, top 50 entry 均值 {top50['entry_score'].mean():.1f} risk 均值 {top50['risk_score'].mean():.1f}")
 
     # 提取关键列
     out = top50[[
         "ts_code", "industry", "mv_seg", "etf_held",
+        "entry_score", "risk_score",
         "uptrend_pred", "risk_pred",
         "maxgain_g_pred", "maxdd_pred",
     ]].rename(columns={
+        "entry_score": "买入评分",
+        "risk_score": "风险评分",
         "uptrend_pred": "起涨概率",
         "risk_pred": "回撤风险",
         "maxgain_g_pred": "预测max_gain%",
