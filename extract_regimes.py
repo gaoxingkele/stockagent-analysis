@@ -119,44 +119,45 @@ def main():
     else:
         hs["zz500_ret_20d"] = np.nan
 
-    # ── 分类逻辑 ──────────────────────────────────────────────
+    # ── 分类逻辑 (调优阈值, 让分布更合理) ──────────────────────
     def classify(row) -> str:
         r5  = row["ret_5d"]; r20 = row["ret_20d"]; r60 = row["ret_60d"]
         rsi = row["rsi14"]; vol_z = row["vol_z60"]; vol_r = row["vol_ratio"]
         ma60_slope = row["ma60_slope"]; bband = row["bband_w"]
         cyb20 = row["cyb_ret_20d"]; zz20 = row["zz500_ret_20d"]
-
-        # 任意 NaN 退化
         if pd.isna(r20): return "mixed"
 
-        # 1. 政策催化牛: 5 日 +8%, 放量
-        if pd.notna(r5) and r5 >= 0.08 and pd.notna(vol_r) and vol_r >= 1.5:
+        # 1. 政策催化牛: 5 日 ≥+5% AND 放量 1.3x (放宽)
+        if pd.notna(r5) and r5 >= 0.05 and pd.notna(vol_r) and vol_r >= 1.3:
+            return "bull_policy"
+        # 1b. 5 日单日 ≥+3% 突破 + 放量 (政策启动初期)
+        if pd.notna(r5) and r5 >= 0.03 and pd.notna(vol_r) and vol_r >= 1.5:
             return "bull_policy"
 
-        # 2. 快牛: 20 日 +15%+, RSI>70
-        if r20 >= 0.15 and pd.notna(rsi) and rsi > 70:
+        # 2. 快牛: 20 日 +10%+ AND (RSI>65 OR ma60_slope>+0.5%)
+        if r20 >= 0.10 and ((pd.notna(rsi) and rsi > 65) or
+                              (pd.notna(ma60_slope) and ma60_slope > 0.005)):
+            return "bull_fast"
+        # 2b. 60 日 +20%+ 持续上涨
+        if pd.notna(r60) and r60 >= 0.20:
             return "bull_fast"
 
-        # 3. 慢牛分化: 沪深300 横盘 ±3% 但中证500 / 创业板涨 +5%+
-        hs300_flat = abs(r20) < 0.03
-        small_up = ((pd.notna(zz20) and zz20 > 0.05) or
-                    (pd.notna(cyb20) and cyb20 > 0.05))
-        if hs300_flat and small_up:
+        # 3. 慢牛分化: 沪深300 ±5% 但中小盘 +3%+ (放宽)
+        hs300_mild = abs(r20) < 0.05
+        small_up = ((pd.notna(zz20) and zz20 > 0.03) or
+                    (pd.notna(cyb20) and cyb20 > 0.03))
+        if hs300_mild and small_up:
             return "bull_slow_diverge"
 
-        # 4. 熊市: 60 日 -10% 且 MA60 向下
-        if pd.notna(r60) and r60 <= -0.10 and pd.notna(ma60_slope) and ma60_slope < -0.005:
+        # 4. 熊市: 60 日 -8% 或 20 日 -7% 且向下
+        if pd.notna(r60) and r60 <= -0.08:
             return "bear"
-        # 单一条件较松版熊市
-        if pd.notna(r60) and r60 <= -0.15:
+        if pd.notna(r20) and r20 <= -0.07 and \
+           pd.notna(ma60_slope) and ma60_slope < 0:
             return "bear"
 
-        # 5. 震荡: 20 日斜率 ±2% AND 布林带宽 <6%
-        if abs(r20) < 0.02 and pd.notna(bband) and bband < 6:
-            return "sideways"
-
-        # 较宽松的震荡
-        if abs(r20) < 0.04:
+        # 5. 震荡: 20 日 ±3% (调严, 不再宽松归到震荡)
+        if abs(r20) < 0.03 and pd.notna(bband) and bband < 8:
             return "sideways"
 
         return "mixed"

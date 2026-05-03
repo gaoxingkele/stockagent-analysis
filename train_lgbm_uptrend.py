@@ -54,6 +54,21 @@ def load_with_label(start: str, end: str, pos_keys: set) -> pd.DataFrame:
     full = pd.concat(parts, ignore_index=True)
     full["_key"] = full["ts_code"] + "|" + full["trade_date"]
     full["is_uptrend"] = full["_key"].isin(pos_keys).astype(int)
+
+    # 合并 regime 标签
+    regime_path = ROOT / "output" / "regimes" / "daily_regime.parquet"
+    if regime_path.exists():
+        regime = pd.read_parquet(regime_path,
+                                  columns=["trade_date", "regime_id", "ret_5d",
+                                            "ret_20d", "ret_60d", "rsi14",
+                                            "vol_ratio", "cyb_ret_20d", "zz500_ret_20d"])
+        regime["trade_date"] = regime["trade_date"].astype(str)
+        regime = regime.rename(columns={
+            "ret_5d": "mkt_ret_5d", "ret_20d": "mkt_ret_20d",
+            "ret_60d": "mkt_ret_60d", "rsi14": "mkt_rsi14",
+            "vol_ratio": "mkt_vol_ratio",
+        })
+        full = full.merge(regime, on="trade_date", how="left")
     return full
 
 

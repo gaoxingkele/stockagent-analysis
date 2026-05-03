@@ -926,6 +926,35 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
         "## 量化双独立评分 (买入信号 + 风险信号, 由用户综合决策)",
         "",
     ]
+    # Regime 上下文 (市场背景)
+    regime = _load_regime_today()
+    if regime and regime.get("regime"):
+        regime_cn = {
+            "bull_policy":       "🚀 政策催化牛",
+            "bull_fast":         "📈 快牛 (流动性驱动)",
+            "bull_slow_diverge": "🌊 慢牛分化 (个股分化)",
+            "bear":              "🐻 熊市",
+            "sideways":          "↔ 震荡市",
+            "mixed":             "🔀 过渡期",
+        }.get(regime["regime"], regime["regime"])
+        r5  = regime.get("ret_5d");  r5s = f"{r5*100:+.1f}%"  if r5  is not None else "?"
+        r20 = regime.get("ret_20d"); r20s = f"{r20*100:+.1f}%" if r20 is not None else "?"
+        r60 = regime.get("ret_60d"); r60s = f"{r60*100:+.1f}%" if r60 is not None else "?"
+        rsi = regime.get("rsi14");   rsis = f"{rsi:.0f}"     if rsi is not None else "?"
+        lines.append(f"### 🌐 当前市场状态: **{regime_cn}**")
+        lines.append(f"  · 沪深300 5日 {r5s} / 20日 {r20s} / 60日 {r60s} / RSI14 {rsis}")
+        # Regime 适用建议
+        regime_advice = {
+            "bull_policy": "政策驱动暴涨期, 起涨密集但持续短, 注意快进快出",
+            "bull_fast": "流动性驱动期, 涨幅大但起涨点稀少, 多数股已经在涨",
+            "bull_slow_diverge": "★ 系统主战场 — 板块/个股分化, top 5% 真实起涨率 11%",
+            "bear": "系统失效区 — 训练样本极少, 信号不可信, 建议观望",
+            "sideways": "震荡市起涨概率仍可信 (10%), 但多数走势短而弱",
+            "mixed": "过渡期, 依赖个股具体信号判断",
+        }.get(regime["regime"], "")
+        if regime_advice:
+            lines.append(f"  · 系统适用性: {regime_advice}")
+        lines.append("")
     # 买入评分 (主)
     if entry:
         es = entry.get("score", 50)
@@ -1138,6 +1167,35 @@ def compare_stocks(result_a: dict, label_a: str,
 
 # 起涨点样本矩阵 (从 extract_uptrend_starts 输出加载)
 _SAMPLE_MATRIX: dict | None = None
+# Regime 当日标签缓存
+_REGIME_CACHE: dict | None = None
+
+
+def _load_regime_today() -> dict | None:
+    """加载今日 regime 标签 (取 daily_regime.parquet 最新行)."""
+    global _REGIME_CACHE
+    if _REGIME_CACHE is not None:
+        return _REGIME_CACHE
+    p = _PROJECT_ROOT / "output" / "regimes" / "daily_regime.parquet"
+    if not p.exists():
+        _REGIME_CACHE = {}
+        return _REGIME_CACHE
+    try:
+        import pandas as pd
+        df = pd.read_parquet(p)
+        last = df.iloc[-1]
+        _REGIME_CACHE = {
+            "date": str(last.get("trade_date", "")),
+            "regime": str(last.get("regime", "")),
+            "regime_id": int(last.get("regime_id", 0)),
+            "ret_5d":  float(last.get("ret_5d", 0)) if last.get("ret_5d") == last.get("ret_5d") else None,
+            "ret_20d": float(last.get("ret_20d", 0)) if last.get("ret_20d") == last.get("ret_20d") else None,
+            "ret_60d": float(last.get("ret_60d", 0)) if last.get("ret_60d") == last.get("ret_60d") else None,
+            "rsi14":   float(last.get("rsi14", 0)) if last.get("rsi14") == last.get("rsi14") else None,
+        }
+    except Exception:
+        _REGIME_CACHE = {}
+    return _REGIME_CACHE
 
 
 def _load_sample_matrix() -> dict:
