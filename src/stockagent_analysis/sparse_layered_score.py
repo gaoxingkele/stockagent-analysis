@@ -556,6 +556,9 @@ def compute_sparse_layered_score(
     except Exception as _e:
         pass
 
+    # Moneyflow 信号摘要 (从 features 提取展示用, 不影响评分)
+    moneyflow_summary = _extract_moneyflow_summary(features)
+
     # 两个独立评分 (用户自己结合判断)
     entry_eval = _compute_entry_score(layered_score, lgbm_result, maxgain_result,
                                        clean_result, context, uptrend_result)
@@ -569,6 +572,7 @@ def compute_sparse_layered_score(
         "clean": clean_result,
         "maxgain": maxgain_result,
         "uptrend": uptrend_result,    # 起涨点检测器 (AUC=0.965)
+        "moneyflow": moneyflow_summary, # 资金分层信号摘要
         "entry_score":  entry_eval,    # 0-100, 高=适合买入
         "risk_score":   risk_eval,     # 0-100, 高=浮亏/回撤风险大
         "sum_delta": round(sum_delta, 2),
@@ -999,6 +1003,17 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
         if gdr is not None:
             line += f" / 收益风险比 {gdr:.2f}"
         lines.append(line)
+    # Moneyflow 资金分层信号
+    mf = result.get("moneyflow")
+    if mf:
+        lines.append(
+            f"**💰 资金分层 (5日)**: 主力 {mf.get('main_net_5d', 0):+.2f}亿 / "
+            f"散户 {mf.get('sm_net_5d', 0):+.2f}亿 / "
+            f"主力连续 {'流入' if mf.get('main_consec_in', 0) > mf.get('main_consec_out', 0) else '流出'} "
+            f"{max(mf.get('main_consec_in', 0), mf.get('main_consec_out', 0))} 天"
+        )
+        if mf.get("pattern") and mf["pattern"] != "中性":
+            lines.append(f"  → 资金模式: {mf['pattern']}")
     uptrend = result.get("uptrend") or {}
     if uptrend.get("ok"):
         up = uptrend.get("uptrend_prob", 0)
@@ -1219,6 +1234,49 @@ def _bucket_sample_count(mv_seg: str | None, pe_seg: str | None) -> int | None:
     if not mv_seg or not pe_seg: return None
     m = _load_sample_matrix()
     return m.get(mv_seg, {}).get(pe_seg)
+
+
+def _extract_moneyflow_summary(features: dict) -> dict | None:
+    """从 features 抽取资金分层信号摘要 (供 LLM 解读, 不参与评分).
+
+    返回字段 (单位 亿元 / 天数 / 比率):
+      main_net_5d / main_net_20d: 主力 5/20 日累计净流入
+      sm_net_5d:      散户 5 日累计
+      main_consec_in / main_consec_out: 主力连续流入/流出天数
+      dispersion_5d:  主力 vs 散户分歧 (-2 = 主力出散户接, +2 = 主力进散户出)
+      pattern:        识别到的资金模式 (建仓/出货/分歧/同向)
+    """
+    keys = ["main_net_5d", "main_net_20d", "sm_net_5d", "lg_net_5d", "elg_net_5d",
+             "main_consec_in", "main_consec_out", "dispersion_5d",
+             "elg_ratio_5d", "buy_sell_imb_5d"]
+    data = {}
+    for k in keys:
+        v = features.get(k)
+        if v is not None and v == v:  # not NaN
+            data[k] = round(float(v), 4)
+    if not data:
+        return None
+
+    # 识别资金模式 (反传统判读, 实证有效)
+    pattern = "中性"
+    main_5d  = data.get("main_net_5d", 0)
+    sm_5d    = data.get("sm_net_5d", 0)
+    consec_in = data.get("main_consec_in", 0)
+    consec_out = data.get("main_consec_out", 0)
+    disp = data.get("dispersion_5d", 0)
+
+    if disp <= -1.5:
+        # 主力流出 + 散户流入: 实证 dispersion=-2 后续大涨 (反直觉)
+        pattern = "⚡ 散户接盘式 (反直觉看多, 模型实证 +30%以上概率 10%)"
+    elif disp >= 1.5:
+        pattern = "⚠ 主力建仓散户跑 (传统看多, 但实证不如散户接盘强)"
+    elif main_5d > 0.5 and consec_in >= 3:
+        pattern = "✓ 主力持续建仓 (主力连续流入 3天+, 累计 0.5亿+)"
+    elif main_5d < -0.5 and consec_out >= 3:
+        pattern = "❌ 主力持续派发 (主力连续流出 3天+)"
+
+    data["pattern"] = pattern
+    return data
 
 
 def _compute_entry_score(sparse_score: float, lgbm: dict | None,
