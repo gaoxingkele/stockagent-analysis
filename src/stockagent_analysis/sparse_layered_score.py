@@ -531,11 +531,10 @@ def compute_sparse_layered_score(
     else:
         trade_signal = "清仓/回避"
 
-    # ── LGBM 预测 (可选) + 仓位综合建议 ────────────────────────────────
+    # ── LGBM 预测 (可选) + 双独立评分 (入场 + 回撤风险) ───────────────
     lgbm_result = None
     clean_result = None
     maxgain_result = None
-    position_suggestion = None
     try:
         from . import lgbm_predictor
         lgbm_extras = {}
@@ -553,10 +552,10 @@ def compute_sparse_layered_score(
     except Exception as _e:
         pass
 
-    # 综合仓位建议 (sparse + LGBM r20 + clean + max_gain 四引擎)
-    position_suggestion = _compute_position(
-        layered_score, lgbm_result, clean_result, maxgain_result, context,
-    )
+    # 两个独立评分 (用户自己结合判断)
+    entry_eval = _compute_entry_score(layered_score, lgbm_result, maxgain_result,
+                                       clean_result, context)
+    risk_eval  = _compute_risk_score(layered_score, lgbm_result, maxgain_result, context)
 
     return {
         "layered_score": round(layered_score, 2),
@@ -564,7 +563,8 @@ def compute_sparse_layered_score(
         "lgbm": lgbm_result,
         "clean": clean_result,
         "maxgain": maxgain_result,
-        "position_suggestion": position_suggestion,
+        "entry_score":  entry_eval,    # 0-100, 高=适合买入
+        "risk_score":   risk_eval,     # 0-100, 高=浮亏/回撤风险大
         "sum_delta": round(sum_delta, 2),
         "sum_delta_raw": round(sum_delta, 2),
         "k_weight": round(k_weight, 3),
@@ -913,18 +913,37 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
     longs = [f for f in result.get("active_factors", []) if f.get("delta", 0) > 0]
     shorts = [f for f in result.get("active_factors", []) if f.get("delta", 0) < 0]
 
-    lgbm  = result.get("lgbm") or {}
-    clean = result.get("clean") or {}
+    lgbm    = result.get("lgbm") or {}
+    clean   = result.get("clean") or {}
     maxgain = result.get("maxgain") or {}
-    pos   = result.get("position_suggestion") or {}
+    entry   = result.get("entry_score") or {}
+    risk    = result.get("risk_score") or {}
 
     lines = [
-        "## 量化四引擎信号 (sparse + LGBM r20 + clean + max_gain回归)",
-        "",
-        f"**Sparse: {score:.1f} 分** [{result.get('trade_signal', '')}] (delta {sum_d:+.1f}) | "
-        f"激活 {n_a} 因子 | 冲突 K={K:.2f} | 一致性 **{conf}**",
+        "## 量化双独立评分 (买入信号 + 风险信号, 由用户综合决策)",
         "",
     ]
+    # 买入评分 (主)
+    if entry:
+        es = entry.get("score", 50)
+        lines.append(f"### 📈 买入评分: **{es:.0f} / 100** — {entry.get('label', '')}")
+        for r in entry.get("reasons", [])[:5]:
+            lines.append(f"  · {r}")
+        lines.append("")
+    # 风险评分 (独立)
+    if risk:
+        rs = risk.get("score", 50)
+        lines.append(f"### ⚠ 回撤风险评分: **{rs:.0f} / 100** — {risk.get('label', '')}")
+        for r in risk.get("reasons", [])[:4]:
+            lines.append(f"  · {r}")
+        if risk.get("warning"):
+            lines.append(f"  > {risk.get('warning')}")
+        lines.append("")
+    # 量化引擎细节
+    lines.append(
+        f"**Sparse 多因子: {score:.1f} 分** [{result.get('trade_signal', '')}] "
+        f"(delta {sum_d:+.1f}) | 激活 {n_a} 因子 | K={K:.2f} | 一致性 **{conf}**"
+    )
     if lgbm.get("ok"):
         lines.append(
             f"**LGBM r20 预测**: 涨幅 {lgbm.get('pred_r20', 0):+.2f}% · "
@@ -941,25 +960,11 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
         pg = maxgain.get("pred_gain", 0)
         pdd = maxgain.get("pred_dd", 0)
         gdr = maxgain.get("gain_dd_ratio")
-        # 基线: pred_gain ~14, p90~17
-        pg_label = ("极强 (top10%)" if pg >= 17 else
-                    "强 (top25%)"  if pg >= 15 else
-                    "中"           if pg >= 13 else
-                    "偏弱"         if pg >= 11 else "弱")
-        line = (f"**期间最高涨幅预测 (max_gain): {pg:+.1f}%** [{pg_label}] · "
-                f"期间最大回撤 (max_dd): {pdd:+.1f}%")
+        line = (f"**ML 预测**: 期间最高涨幅 {pg:+.1f}% / 最大回撤 {pdd:+.1f}%")
         if gdr is not None:
-            line += f" · 收益/风险比 {gdr:.2f}"
+            line += f" / 收益风险比 {gdr:.2f}"
         lines.append(line)
     if lgbm.get("ok") or clean.get("ok") or maxgain.get("ok"):
-        lines.append("")
-    if pos:
-        consistency = pos.get('consistency', '?')
-        cons_cn = {'agree': '✓ 双信号一致', 'conflict': '⚠ 信号冲突',
-                   'single_engine': '单引擎'}.get(consistency, consistency)
-        lines.append(
-            f"**仓位建议**: **{pos.get('position_pct', 0):.0f}%** ({cons_cn}) — {pos.get('reason', '')}"
-        )
         lines.append("")
     lines.append(
         f"**股票上下文**: 市值={ctx.get('mv_seg')} · PE={ctx.get('pe_seg')} · "
@@ -1112,107 +1117,147 @@ def compare_stocks(result_a: dict, label_a: str,
     return "\n".join(lines)
 
 
-def _compute_position(sparse_score: float, lgbm: dict | None,
-                       clean: dict | None = None,
-                       maxgain: dict | None = None,
-                       context: dict | None = None) -> dict:
-    """四引擎仓位建议: sparse + LGBM r20 + clean detector + max_gain 回归器.
+def _compute_entry_score(sparse_score: float, lgbm: dict | None,
+                          maxgain: dict | None = None,
+                          clean: dict | None = None,
+                          context: dict | None = None) -> dict:
+    """入场评分 (0-100, 高=适合买入).
 
-    主信号: max_gain (期间最高涨幅预测, IC=0.20, 完全单调) — 回归值直接对应仓位
-    避雷: sparse < 35 OR pred_gain < 8%
-    域限: 1000亿+ 大盘非 ETF 持有强制 0% (实证表现极差)
+    独立评估: 仅判断"现在买入是否合适", 不考虑回撤/仓位.
 
-    新仓位档 (基于 pred_gain, 单位 %):
-      pred_gain >= 17 → 80%   (top 20% 段, gain≥20% 概率 27%)
-      pred_gain >= 15 → 60%   (gain≥15% 概率 ~33%)
-      pred_gain >= 13 → 40%
-      pred_gain >= 11 → 20%
-      pred_gain >= 9  → 10%
-      else            → 5%
-    risk-adjusted: pred_gain / |pred_dd| < 1.5 → 仓位 ×0.7 (回撤过大)
+    输入信号权重:
+      - sparse_score (基础, 反映多因子综合)
+      - max_gain 预测 (核心: 期望最高涨幅)
+      - LGBM r20 winprob (辅助: 整体上涨概率)
+      - clean_prob (干净走势概率)
+      - 行业域限 (mv×etf 实证负 alpha 段降权)
+
+    返回: {score: 0-100, label: str, reasons: list[str]}
     """
-    pred_r20  = (lgbm or {}).get("pred_r20")  if lgbm  else None
-    clean_prob = (clean or {}).get("clean_prob") if clean else None
-    pred_gain = (maxgain or {}).get("pred_gain") if maxgain else None
-    pred_dd   = (maxgain or {}).get("pred_dd")   if maxgain else None
-    gd_ratio  = (maxgain or {}).get("gain_dd_ratio") if maxgain else None
+    base = 50.0
+    reasons = []
+    pg  = (maxgain or {}).get("pred_gain")
+    pdd = (maxgain or {}).get("pred_dd")
+    cp  = (clean   or {}).get("clean_prob")
+    wp  = (lgbm    or {}).get("winprob")
 
     ctx = context or {}
     mv_seg   = ctx.get("mv_seg")
     etf_held = ctx.get("etf_held", False)
 
-    # 域限: 大盘非 ETF 持有, 实测雷区
+    # 1. max_gain 预测 (主信号, ±25)
+    if pg is not None:
+        if pg >= 17:    base += 25; reasons.append(f"max_gain 预测 {pg:.1f}% [极强]")
+        elif pg >= 15:  base += 18; reasons.append(f"max_gain 预测 {pg:.1f}% [强]")
+        elif pg >= 13:  base += 10; reasons.append(f"max_gain 预测 {pg:.1f}% [中]")
+        elif pg >= 11:  base += 3;  reasons.append(f"max_gain 预测 {pg:.1f}% [偏弱]")
+        elif pg >= 9:   base -= 5;  reasons.append(f"max_gain 预测 {pg:.1f}% [弱]")
+        else:           base -= 18; reasons.append(f"max_gain 预测 {pg:.1f}% [极弱]")
+
+    # 2. sparse 综合 (±10)
+    if sparse_score >= 75:   base += 10; reasons.append(f"sparse {sparse_score:.0f} [强]")
+    elif sparse_score >= 60: base += 5
+    elif sparse_score >= 50: base += 0
+    elif sparse_score >= 35: base -= 5
+    else:                    base -= 15; reasons.append(f"sparse {sparse_score:.0f} [低分]")
+
+    # 3. r20 winprob (辅助, ±5)
+    if wp is not None:
+        if wp >= 0.62:   base += 5
+        elif wp >= 0.55: base += 2
+        elif wp <  0.45: base -= 5
+
+    # 4. clean_prob (辅助, +5)
+    if cp is not None and cp >= 0.20: base += 3
+    if cp is not None and cp >= 0.30: base += 2
+
+    # 5. 域限: 实证负 alpha 段降权 (-15)
     if mv_seg == "1000亿+" and not etf_held:
-        return {
-            "position_pct": 0.0,
-            "reason": "域限: 1000亿+ 非 ETF 持有 (实测高仓位组 r20=-0.4%)",
-            "consistency": "domain_blocked",
-            "tier": "blocked",
-        }
+        base -= 25
+        reasons.append("⚠ 域限: 1000亿+ 非 ETF 持有 (实证强买档 r20=-0.4%)")
+    elif mv_seg in ("300-1000亿", "1000亿+") and not etf_held:
+        base -= 8
+        reasons.append("域限: 大盘非 ETF, sparse 实证负 alpha")
 
-    # max_gain 不可用时退化路径
-    if pred_gain is None:
-        # 无 max_gain 模型, 用旧逻辑 (sparse + clean)
-        if sparse_score < 35:
-            return {"position_pct": 0.0, "reason": f"sparse 低分回避 ({sparse_score:.0f})",
-                    "consistency": "fallback", "tier": "avoid"}
-        if clean_prob is not None and clean_prob >= 0.30:
-            pct, tier = 60.0, "高 clean (无 maxgain)"
-        elif clean_prob is not None and clean_prob >= 0.15:
-            pct, tier = 30.0, "中 clean"
-        elif sparse_score >= 65:
-            pct, tier = 25.0, "sparse 中高分"
-        else:
-            pct, tier = 10.0, "保守"
-        return {"position_pct": pct, "reason": f"{tier}: sparse={sparse_score:.0f}",
-                "consistency": "fallback", "tier": tier}
+    score = max(0.0, min(100.0, round(base, 1)))
+    label = ("强买入信号 (top 20%)" if score >= 80 else
+             "中等买入"            if score >= 65 else
+             "偏多观察"            if score >= 50 else
+             "偏弱观望"            if score >= 35 else
+             "不建议买入")
+    return {"score": score, "label": label, "reasons": reasons}
 
-    # 避雷
-    if sparse_score < 35 or pred_gain < 8.0:
-        return {
-            "position_pct": 0.0,
-            "reason": f"避雷: sparse={sparse_score:.0f} pred_gain={pred_gain:.1f}% pred_dd={pred_dd or 0:.1f}%",
-            "consistency": "avoid",
-            "tier": "avoid",
-        }
 
-    # 主决策矩阵 — 基于 pred_gain
-    if pred_gain >= 17:    pct, tier = 80.0, "强买 (top 20%)"
-    elif pred_gain >= 15:  pct, tier = 60.0, "中强买"
-    elif pred_gain >= 13:  pct, tier = 40.0, "中买"
-    elif pred_gain >= 11:  pct, tier = 20.0, "试探仓"
-    elif pred_gain >= 9:   pct, tier = 10.0, "弱多观察"
-    else:                  pct, tier = 5.0,  "保守持仓"
+def _compute_risk_score(sparse_score: float, lgbm: dict | None,
+                         maxgain: dict | None = None,
+                         context: dict | None = None) -> dict:
+    """回撤/浮亏风险评分 (0-100, 高=风险大).
 
-    # 风险收益比 (gain/dd) 修正: < 1.5 仓位打折
-    if gd_ratio is not None and gd_ratio < 1.5:
-        pct = round(pct * 0.7, 1)
-        tier += f" [gain/dd={gd_ratio:.2f} 风险大]"
+    独立评估: 仅判断持有期回撤风险, 不考虑收益.
 
-    # 大盘段(300亿+) 非 ETF: 仓位减半 (实证 alpha 负)
-    if mv_seg in ("300-1000亿", "1000亿+") and not etf_held:
-        pct = round(pct * 0.5, 1)
-        tier += " [大盘非ETF减半]"
+    输入信号:
+      - max_dd 预测 (核心: 期望最大回撤)
+      - sparse 反向 (低 sparse 多个因子负面信号)
+      - 大盘段实证回撤大 (高仓位段 dd<-8% 概率 45%)
 
-    # 一致性 / 决策信号摘要
-    sig_count = sum(1 for s in [sparse_score >= 50,
-                                 (pred_r20 or 0) > 0 if pred_r20 is not None else None,
-                                 (clean_prob or 0) >= 0.10 if clean_prob is not None else None,
-                                 pred_gain >= 13] if s is True)
-    consistency = "agree" if sig_count >= 3 else "partial" if sig_count >= 2 else "weak"
+    返回: {score: 0-100, label: str, warning: str|None, reasons: list[str]}
+    """
+    base = 50.0
+    reasons = []
+    pdd = (maxgain or {}).get("pred_dd")
+    pg  = (maxgain or {}).get("pred_gain")
 
-    parts = [f"sparse={sparse_score:.0f}", f"gain={pred_gain:+.1f}%"]
-    if pred_dd  is not None: parts.append(f"dd={pred_dd:.1f}%")
-    if gd_ratio is not None: parts.append(f"g/d={gd_ratio:.2f}")
-    if clean_prob is not None: parts.append(f"clean={clean_prob*100:.0f}%")
-    if pred_r20 is not None: parts.append(f"r20={pred_r20:+.1f}%")
+    # 1. max_dd 预测 (主信号, ±30)
+    if pdd is not None:
+        # pdd 是负数, 越小越危险
+        if pdd <= -12:   base += 30; reasons.append(f"max_dd 预测 {pdd:.1f}% [极高风险]")
+        elif pdd <= -10: base += 20; reasons.append(f"max_dd 预测 {pdd:.1f}% [高风险]")
+        elif pdd <= -8:  base += 12; reasons.append(f"max_dd 预测 {pdd:.1f}% [中高]")
+        elif pdd <= -6:  base += 5
+        elif pdd <= -4:  base -= 5
+        else:            base -= 15; reasons.append(f"max_dd 预测 {pdd:.1f}% [低风险]")
 
-    return {
-        "position_pct": round(pct, 1),
-        "reason": f"{tier}: " + " | ".join(parts),
-        "consistency": consistency,
-        "tier": tier,
-    }
+    # 2. 收益/风险比 (gain/|dd|) — 比率太低风险高
+    if pg is not None and pdd is not None and abs(pdd) > 0.5:
+        ratio = pg / abs(pdd)
+        if ratio < 1.0:    base += 15; reasons.append(f"收益/风险比 {ratio:.2f} [极差, 涨幅 < 回撤]")
+        elif ratio < 1.5:  base += 8
+        elif ratio >= 2.5: base -= 8
+
+    # 3. sparse 极端低分 (反向加风险)
+    if sparse_score < 30:
+        base += 10
+        reasons.append(f"sparse {sparse_score:.0f} [因子普遍负面]")
+
+    # 4. 个股波动率特征
+    extras = (context or {}).get("_raw") or {}
+    # 主力流出连续 → 风险加大
+    mf_div = extras.get("mf_divergence")
+    mf_consec = extras.get("mf_consecutive")
+    if mf_div is not None and mf_div < -0.3:
+        base += 5
+        reasons.append("主力资金流出")
+    if mf_consec is not None and mf_consec <= -3:
+        base += 5
+        reasons.append(f"主力连续流出 {abs(mf_consec)} 天")
+
+    score = max(0.0, min(100.0, round(base, 1)))
+    label = ("极高回撤风险" if score >= 80 else
+             "高风险"      if score >= 65 else
+             "中等风险"    if score >= 50 else
+             "较低风险"    if score >= 35 else
+             "低风险")
+    warning = None
+    if score >= 65:
+        dd_str = f"{pdd:.1f}%" if pdd is not None else "?"
+        warning = (f"⚠ 高回撤风险: 预测期间最大回撤 {dd_str}. "
+                   f"实证显示同档股票 ~45% 概率短期跌破 -8%. "
+                   f"持仓建议设止损或分批进场.")
+    return {"score": score, "label": label, "warning": warning, "reasons": reasons}
+
+
+# 旧的 _compute_position 已废弃 — 系统不再给仓位建议.
+# 由用户结合 entry_score (买入评分) + risk_score (回撤风险评分) 独立判断.
 
 
 def _build_reason(fname: str, context: dict, q: int, sign: int,
