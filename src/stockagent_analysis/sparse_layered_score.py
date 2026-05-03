@@ -536,6 +536,7 @@ def compute_sparse_layered_score(
     clean_result = None
     maxgain_result = None
     uptrend_result = None
+    risk_ml_result = None
     try:
         from . import lgbm_predictor
         lgbm_extras = {}
@@ -551,13 +552,15 @@ def compute_sparse_layered_score(
         clean_result   = lgbm_predictor.predict_clean(features, ind, extras=lgbm_extras)
         maxgain_result = lgbm_predictor.predict_maxgain(features, ind, extras=lgbm_extras)
         uptrend_result = lgbm_predictor.predict_uptrend(features, ind, extras=lgbm_extras)
+        risk_ml_result = lgbm_predictor.predict_risk(features, ind, extras=lgbm_extras)
     except Exception as _e:
         pass
 
     # 两个独立评分 (用户自己结合判断)
     entry_eval = _compute_entry_score(layered_score, lgbm_result, maxgain_result,
                                        clean_result, context, uptrend_result)
-    risk_eval  = _compute_risk_score(layered_score, lgbm_result, maxgain_result, context)
+    risk_eval  = _compute_risk_score(layered_score, lgbm_result, maxgain_result,
+                                       context, risk_ml_result)
 
     return {
         "layered_score": round(layered_score, 2),
@@ -1310,32 +1313,35 @@ def _compute_entry_score(sparse_score: float, lgbm: dict | None,
 
 def _compute_risk_score(sparse_score: float, lgbm: dict | None,
                          maxgain: dict | None = None,
-                         context: dict | None = None) -> dict:
+                         context: dict | None = None,
+                         risk_ml: dict | None = None) -> dict:
     """回撤/浮亏风险评分 (0-100, 高=风险大).
 
-    独立评估: 仅判断持有期回撤风险, 不考虑收益.
-
-    输入信号:
-      - max_dd 预测 (核心: 期望最大回撤)
-      - sparse 反向 (低 sparse 多个因子负面信号)
-      - 大盘段实证回撤大 (高仓位段 dd<-8% 概率 45%)
-
-    返回: {score: 0-100, label: str, warning: str|None, reasons: list[str]}
+    新主信号: ML 风险检测器 (AUC=0.674, dd<=-8% 概率)
+    辅助: max_dd 预测, sparse 极低反向, 主力流出
     """
     base = 50.0
     reasons = []
     pdd = (maxgain or {}).get("pred_dd")
     pg  = (maxgain or {}).get("pred_gain")
+    rp  = (risk_ml or {}).get("risk_prob")
+    rt  = (risk_ml or {}).get("risk_tier")
 
-    # 1. max_dd 预测 (主信号, ±30)
+    # 0. ML 风险检测器 (新主信号, ±25)
+    if rp is not None:
+        if rp >= 0.75:    base += 25; reasons.append(f"ML 风险概率 {rp*100:.0f}% [极高, 实证 51% 真破-8%]")
+        elif rp >= 0.60:  base += 15; reasons.append(f"ML 风险概率 {rp*100:.0f}% [高]")
+        elif rp >= 0.40:  base += 5;  reasons.append(f"ML 风险概率 {rp*100:.0f}% [中]")
+        elif rp >= 0.25:  base -= 5
+        else:             base -= 15; reasons.append(f"ML 风险概率 {rp*100:.0f}% [低, 实证 dd<-15% 仅 0.6%]")
+
+    # 1. max_dd 预测 (辅助信号, ±15, 权重降低因为 ML 风险主导)
     if pdd is not None:
-        # pdd 是负数, 越小越危险
-        if pdd <= -12:   base += 30; reasons.append(f"max_dd 预测 {pdd:.1f}% [极高风险]")
-        elif pdd <= -10: base += 20; reasons.append(f"max_dd 预测 {pdd:.1f}% [高风险]")
-        elif pdd <= -8:  base += 12; reasons.append(f"max_dd 预测 {pdd:.1f}% [中高]")
-        elif pdd <= -6:  base += 5
-        elif pdd <= -4:  base -= 5
-        else:            base -= 15; reasons.append(f"max_dd 预测 {pdd:.1f}% [低风险]")
+        if pdd <= -12:   base += 15
+        elif pdd <= -10: base += 10
+        elif pdd <= -8:  base += 5
+        elif pdd <= -4:  base -= 3
+        else:            base -= 8
 
     # 2. 收益/风险比 (gain/|dd|) — 比率太低风险高
     if pg is not None and pdd is not None and abs(pdd) > 0.5:

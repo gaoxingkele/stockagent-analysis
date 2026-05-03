@@ -22,6 +22,7 @@ _DEFAULT_DIR   = _PROJECT_ROOT / "output" / "lgbm_r20"
 _CLEAN_DIR     = _PROJECT_ROOT / "output" / "lgbm_clean"
 _MAXGAIN_DIR   = _PROJECT_ROOT / "output" / "lgbm_maxgain"
 _UPTREND_DIR   = _PROJECT_ROOT / "output" / "lgbm_uptrend"
+_RISK_DIR      = _PROJECT_ROOT / "output" / "lgbm_risk"
 
 # 模块级缓存
 _REG_MODEL = None
@@ -35,6 +36,9 @@ _GAIN_META: dict | None = None
 # 起涨点检测器 (二分类, AUC=0.965, top 1% lift=16x)
 _UPTREND_MODEL = None
 _UPTREND_META: dict | None = None
+# 回撤风险检测器 (二分类, AUC=0.674, dd<=-8% 预测)
+_RISK_MODEL = None
+_RISK_META: dict | None = None
 
 
 def load(model_dir: Path | str | None = None) -> bool:
@@ -193,6 +197,43 @@ def predict_uptrend(features: dict[str, Any], industry: str = "",
     elif prob >= 0.04: tier = "top20%"
     else:              tier = "below_top20%"
     return {"uptrend_prob": round(prob, 4), "lift_tier": tier, "ok": True}
+
+
+def load_risk(model_dir: Path | str | None = None) -> bool:
+    """加载回撤风险检测器 (二分类, dd<=-8% 概率)."""
+    global _RISK_MODEL, _RISK_META
+    if _RISK_MODEL is not None: return True
+    try: import lightgbm as lgb
+    except ImportError: return False
+    d = Path(model_dir) if model_dir else _RISK_DIR
+    cls_path = d / "classifier.txt"
+    meta_path = d / "feature_meta.json"
+    if not cls_path.exists() or not meta_path.exists(): return False
+    _RISK_MODEL = lgb.Booster(model_file=str(cls_path))
+    _RISK_META = json.loads(meta_path.read_text(encoding="utf-8"))
+    logger.info("risk detector 加载: %d 特征", len(_RISK_META["feature_cols"]))
+    return True
+
+
+def predict_risk(features: dict[str, Any], industry: str = "",
+                  extras: dict[str, Any] | None = None) -> dict | None:
+    """预测 20 天内 max_dd <= -8% 的概率.
+
+    OOS 实证: Q5 (top20%) 真实风险率 50.8%, Q1 (bot20%) 仅 9.6%.
+    Q1 段 dd<-15% 比例从基线 5% 降到 0.6% (避雷强项).
+
+    返回: {risk_prob, risk_tier, ok}
+      tier: 'high' (>=0.7), 'mid' (0.4-0.7), 'low' (<0.4)
+    """
+    if not load_risk(): return None
+    feat_cols = _RISK_META["feature_cols"]
+    industry_map = _RISK_META.get("industry_map", {})
+    X = _build_row(feat_cols, industry_map, industry, features, extras)
+    prob = float(_RISK_MODEL.predict(X)[0])
+    if   prob >= 0.70: tier = "high"
+    elif prob >= 0.40: tier = "mid"
+    else:              tier = "low"
+    return {"risk_prob": round(prob, 4), "risk_tier": tier, "ok": True}
 
 
 def predict_maxgain(features: dict[str, Any], industry: str = "",
