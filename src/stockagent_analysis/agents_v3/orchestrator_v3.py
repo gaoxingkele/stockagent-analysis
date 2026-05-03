@@ -307,6 +307,15 @@ def _compose_final_score(
             "context": sparse_info.get("context", {}),
             "gates_applied": sparse_info.get("gates_applied", []),
         }
+        # 新增: 双独立评分 + ML 预测
+        if sparse_info.get("entry_score"):
+            components["entry_score"] = sparse_info["entry_score"]
+        if sparse_info.get("risk_score"):
+            components["risk_score"] = sparse_info["risk_score"]
+        if sparse_info.get("uptrend"):
+            components["uptrend"] = sparse_info["uptrend"]
+        if sparse_info.get("maxgain"):
+            components["maxgain"] = sparse_info["maxgain"]
     return final, components
 
 
@@ -476,9 +485,14 @@ def run_analysis_v3(
     # ── Phase 0: 量化事实层 ──
     logger.info("[v3] Phase 0: 生成 6 份客观报告")
     bundle = build_all_reports(symbol, name, ctx)
-    # 把 sparse_layered 摘要附到 technical 报告末尾, 让 4 专家看见
+    # 把完整量化信号 (双独立评分 + 起涨/风险概率 + max_gain + regime) 附到 technical 报告
     if sparse_info:
-        appendix = _render_sparse_layered_md(sparse_info)
+        # 优先使用新版 render_for_llm_prompt (含 entry_score/risk_score/uptrend_prob/regime)
+        try:
+            from ..sparse_layered_score import render_for_llm_prompt
+            appendix = render_for_llm_prompt(sparse_info, max_active=10)
+        except Exception:
+            appendix = _render_sparse_layered_md(sparse_info)
         if appendix:
             bundle.technical = (bundle.technical or "") + "\n\n" + appendix
     (run_dir / "data" / "phase0_bundle.md").write_text(bundle.as_markdown(), encoding="utf-8")
