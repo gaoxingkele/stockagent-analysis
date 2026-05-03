@@ -535,6 +535,7 @@ def compute_sparse_layered_score(
     lgbm_result = None
     clean_result = None
     maxgain_result = None
+    uptrend_result = None
     try:
         from . import lgbm_predictor
         lgbm_extras = {}
@@ -549,12 +550,13 @@ def compute_sparse_layered_score(
         lgbm_result    = lgbm_predictor.predict(features, ind, extras=lgbm_extras)
         clean_result   = lgbm_predictor.predict_clean(features, ind, extras=lgbm_extras)
         maxgain_result = lgbm_predictor.predict_maxgain(features, ind, extras=lgbm_extras)
+        uptrend_result = lgbm_predictor.predict_uptrend(features, ind, extras=lgbm_extras)
     except Exception as _e:
         pass
 
     # 两个独立评分 (用户自己结合判断)
     entry_eval = _compute_entry_score(layered_score, lgbm_result, maxgain_result,
-                                       clean_result, context)
+                                       clean_result, context, uptrend_result)
     risk_eval  = _compute_risk_score(layered_score, lgbm_result, maxgain_result, context)
 
     return {
@@ -563,6 +565,7 @@ def compute_sparse_layered_score(
         "lgbm": lgbm_result,
         "clean": clean_result,
         "maxgain": maxgain_result,
+        "uptrend": uptrend_result,    # 起涨点检测器 (AUC=0.965)
         "entry_score":  entry_eval,    # 0-100, 高=适合买入
         "risk_score":   risk_eval,     # 0-100, 高=浮亏/回撤风险大
         "sum_delta": round(sum_delta, 2),
@@ -964,7 +967,23 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
         if gdr is not None:
             line += f" / 收益风险比 {gdr:.2f}"
         lines.append(line)
-    if lgbm.get("ok") or clean.get("ok") or maxgain.get("ok"):
+    uptrend = result.get("uptrend") or {}
+    if uptrend.get("ok"):
+        up = uptrend.get("uptrend_prob", 0)
+        tier = uptrend.get("lift_tier", "")
+        # 基线 0.75%
+        if up >= 0.30:
+            label = f"⭐⭐⭐ {tier} (lift 16-17x, ~12% 真起涨)"
+        elif up >= 0.15:
+            label = f"⭐⭐ {tier} (lift 13x, ~10% 真起涨)"
+        elif up >= 0.08:
+            label = f"⭐ {tier} (lift 10x, ~7% 真起涨)"
+        elif up >= 0.04:
+            label = f"{tier} (lift 5x)"
+        else:
+            label = "底部 80% (起涨概率极低)"
+        lines.append(f"**🎯 起涨点概率**: {up*100:.2f}% [{label}]")
+    if lgbm.get("ok") or clean.get("ok") or maxgain.get("ok") or uptrend.get("ok"):
         lines.append("")
     lines.append(
         f"**股票上下文**: 市值={ctx.get('mv_seg')} · PE={ctx.get('pe_seg')} · "
@@ -1117,22 +1136,39 @@ def compare_stocks(result_a: dict, label_a: str,
     return "\n".join(lines)
 
 
+# 起涨点样本矩阵 (从 extract_uptrend_starts 输出加载)
+_SAMPLE_MATRIX: dict | None = None
+
+
+def _load_sample_matrix() -> dict:
+    """加载 mv × pe 桶起涨点样本数 (用于稀疏桶警告)."""
+    global _SAMPLE_MATRIX
+    if _SAMPLE_MATRIX is not None:
+        return _SAMPLE_MATRIX
+    p = _PROJECT_ROOT / "output" / "uptrend_starts" / "sample_matrix.json"
+    if p.exists():
+        _SAMPLE_MATRIX = json.loads(p.read_text(encoding="utf-8"))
+    else:
+        _SAMPLE_MATRIX = {}
+    return _SAMPLE_MATRIX
+
+
+def _bucket_sample_count(mv_seg: str | None, pe_seg: str | None) -> int | None:
+    """查 mv × pe 桶在 3 年训练数据里的有效起涨点样本数."""
+    if not mv_seg or not pe_seg: return None
+    m = _load_sample_matrix()
+    return m.get(mv_seg, {}).get(pe_seg)
+
+
 def _compute_entry_score(sparse_score: float, lgbm: dict | None,
                           maxgain: dict | None = None,
                           clean: dict | None = None,
-                          context: dict | None = None) -> dict:
+                          context: dict | None = None,
+                          uptrend: dict | None = None) -> dict:
     """入场评分 (0-100, 高=适合买入).
 
-    独立评估: 仅判断"现在买入是否合适", 不考虑回撤/仓位.
-
-    输入信号权重:
-      - sparse_score (基础, 反映多因子综合)
-      - max_gain 预测 (核心: 期望最高涨幅)
-      - LGBM r20 winprob (辅助: 整体上涨概率)
-      - clean_prob (干净走势概率)
-      - 行业域限 (mv×etf 实证负 alpha 段降权)
-
-    返回: {score: 0-100, label: str, reasons: list[str]}
+    新主信号: uptrend_prob (起涨点检测器, AUC=0.965, top 1% lift 16x)
+    辅助信号: max_gain 预测, sparse, winprob
     """
     base = 50.0
     reasons = []
@@ -1140,19 +1176,31 @@ def _compute_entry_score(sparse_score: float, lgbm: dict | None,
     pdd = (maxgain or {}).get("pred_dd")
     cp  = (clean   or {}).get("clean_prob")
     wp  = (lgbm    or {}).get("winprob")
+    up  = (uptrend or {}).get("uptrend_prob")
+    up_tier = (uptrend or {}).get("lift_tier")
+
+    # 0. 起涨点检测器 (新主信号, ±30)
+    if up is not None:
+        if up >= 0.40:    base += 30; reasons.append(f"⭐ 起涨点概率 {up*100:.1f}% (top 0.5%, lift 17x)")
+        elif up >= 0.30:  base += 25; reasons.append(f"⭐ 起涨点概率 {up*100:.1f}% (top 1%, lift 16x)")
+        elif up >= 0.15:  base += 18; reasons.append(f"起涨点概率 {up*100:.1f}% (top 5%, lift 13x)")
+        elif up >= 0.08:  base += 8;  reasons.append(f"起涨点概率 {up*100:.1f}% (top 10%, lift 10x)")
+        elif up >= 0.04:  base += 0
+        else:             base -= 8;  reasons.append(f"起涨点概率 {up*100:.1f}% [低]")
 
     ctx = context or {}
     mv_seg   = ctx.get("mv_seg")
+    pe_seg   = ctx.get("pe_seg")
     etf_held = ctx.get("etf_held", False)
 
-    # 1. max_gain 预测 (主信号, ±25)
+    # 1. max_gain 预测 (辅助信号, ±15, 权重降低因为 uptrend 主导)
     if pg is not None:
-        if pg >= 17:    base += 25; reasons.append(f"max_gain 预测 {pg:.1f}% [极强]")
-        elif pg >= 15:  base += 18; reasons.append(f"max_gain 预测 {pg:.1f}% [强]")
-        elif pg >= 13:  base += 10; reasons.append(f"max_gain 预测 {pg:.1f}% [中]")
-        elif pg >= 11:  base += 3;  reasons.append(f"max_gain 预测 {pg:.1f}% [偏弱]")
-        elif pg >= 9:   base -= 5;  reasons.append(f"max_gain 预测 {pg:.1f}% [弱]")
-        else:           base -= 18; reasons.append(f"max_gain 预测 {pg:.1f}% [极弱]")
+        if pg >= 17:    base += 15; reasons.append(f"max_gain 预测 {pg:.1f}% [极强]")
+        elif pg >= 15:  base += 10; reasons.append(f"max_gain 预测 {pg:.1f}% [强]")
+        elif pg >= 13:  base += 5
+        elif pg >= 11:  base += 0
+        elif pg >= 9:   base -= 3
+        else:           base -= 10; reasons.append(f"max_gain 预测 {pg:.1f}% [极弱]")
 
     # 2. sparse 综合 (±10)
     if sparse_score >= 75:   base += 10; reasons.append(f"sparse {sparse_score:.0f} [强]")
@@ -1178,6 +1226,20 @@ def _compute_entry_score(sparse_score: float, lgbm: dict | None,
     elif mv_seg in ("300-1000亿", "1000亿+") and not etf_held:
         base -= 8
         reasons.append("域限: 大盘非 ETF, sparse 实证负 alpha")
+
+    # 6. 稀疏桶警告: mv×pe 桶 3年内干净起涨样本不足
+    n_samples = _bucket_sample_count(mv_seg, pe_seg)
+    sparse_warning = None
+    if n_samples is not None:
+        if n_samples < 50:
+            base = min(base, 50.0)   # 数据极稀疏, 评分压回中性
+            sparse_warning = f"⚠ 训练样本极稀 (3年仅 {n_samples} 个干净起涨点), 评分不可信"
+            reasons.append(sparse_warning)
+        elif n_samples < 100:
+            sparse_warning = f"训练样本偏稀 ({n_samples} 个), 慎信高分"
+            reasons.append(sparse_warning)
+        elif n_samples < 200:
+            reasons.append(f"训练样本中等 ({n_samples} 个)")
 
     score = max(0.0, min(100.0, round(base, 1)))
     label = ("强买入信号 (top 20%)" if score >= 80 else

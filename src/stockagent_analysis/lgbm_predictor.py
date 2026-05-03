@@ -21,18 +21,20 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_DIR   = _PROJECT_ROOT / "output" / "lgbm_r20"
 _CLEAN_DIR     = _PROJECT_ROOT / "output" / "lgbm_clean"
 _MAXGAIN_DIR   = _PROJECT_ROOT / "output" / "lgbm_maxgain"
+_UPTREND_DIR   = _PROJECT_ROOT / "output" / "lgbm_uptrend"
 
 # 模块级缓存
 _REG_MODEL = None
 _CLS_MODEL = None
 _FEAT_META: dict | None = None
-# 干净走势检测器 (二分类)
 _CLEAN_MODEL = None
 _CLEAN_META: dict | None = None
-# max_gain / max_dd 回归器 (连续预测期间最高涨幅 + 期间最大回撤)
 _GAIN_MODEL = None
 _DD_MODEL   = None
 _GAIN_META: dict | None = None
+# 起涨点检测器 (二分类, AUC=0.965, top 1% lift=16x)
+_UPTREND_MODEL = None
+_UPTREND_META: dict | None = None
 
 
 def load(model_dir: Path | str | None = None) -> bool:
@@ -145,6 +147,52 @@ def load_maxgain(model_dir: Path | str | None = None) -> bool:
     _GAIN_META = json.loads(meta_path.read_text(encoding="utf-8"))
     logger.info("maxgain 加载: %d 特征", len(_GAIN_META["feature_cols"]))
     return True
+
+
+def load_uptrend(model_dir: Path | str | None = None) -> bool:
+    """加载起涨点检测器 (二分类). AUC=0.965, top 1% lift 16x."""
+    global _UPTREND_MODEL, _UPTREND_META
+    if _UPTREND_MODEL is not None:
+        return True
+    try: import lightgbm as lgb
+    except ImportError: return False
+    d = Path(model_dir) if model_dir else _UPTREND_DIR
+    cls_path = d / "classifier.txt"
+    meta_path = d / "feature_meta.json"
+    if not cls_path.exists() or not meta_path.exists():
+        return False
+    _UPTREND_MODEL = lgb.Booster(model_file=str(cls_path))
+    _UPTREND_META = json.loads(meta_path.read_text(encoding="utf-8"))
+    logger.info("uptrend detector 加载: %d 特征", len(_UPTREND_META["feature_cols"]))
+    return True
+
+
+def predict_uptrend(features: dict[str, Any], industry: str = "",
+                     extras: dict[str, Any] | None = None) -> dict | None:
+    """预测干净起涨点概率.
+
+    起涨点定义: MA5 拐点+放量+未来20天MA5稳定向上+不破起涨点-3%+涨幅>=10%
+
+    返回: {uptrend_prob, lift_tier, ok}
+      lift_tier:
+        'top0.5%' (prob>=0.4):  ~13% 概率是真起涨点 (lift 17x)
+        'top1%'   (prob>=0.3):  ~12% (lift 16x)
+        'top5%'   (prob>=0.15): ~10% (lift 13x)
+        'top10%'  (prob>=0.08): ~7%  (lift 10x)
+        'top20%'  (prob>=0.04): ~4%  (lift 5x)
+    """
+    if not load_uptrend(): return None
+    feat_cols = _UPTREND_META["feature_cols"]
+    industry_map = _UPTREND_META.get("industry_map", {})
+    X = _build_row(feat_cols, industry_map, industry, features, extras)
+    prob = float(_UPTREND_MODEL.predict(X)[0])
+    if   prob >= 0.40: tier = "top0.5%"
+    elif prob >= 0.30: tier = "top1%"
+    elif prob >= 0.15: tier = "top5%"
+    elif prob >= 0.08: tier = "top10%"
+    elif prob >= 0.04: tier = "top20%"
+    else:              tier = "below_top20%"
+    return {"uptrend_prob": round(prob, 4), "lift_tier": tier, "ok": True}
 
 
 def predict_maxgain(features: dict[str, Any], industry: str = "",
