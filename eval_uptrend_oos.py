@@ -63,6 +63,13 @@ def main():
     full["_key"] = full["ts_code"]+"|"+full["trade_date"]
     full["is_uptrend"] = full["_key"].isin(pos_keys).astype(int)
 
+    # 合并 amount features
+    amount_path = Path("output/amount_features/amount_features.parquet")
+    if amount_path.exists():
+        amount = pd.read_parquet(amount_path)
+        amount["trade_date"] = amount["trade_date"].astype(str)
+        full = full.merge(amount, on=["ts_code","trade_date"], how="left")
+
     # regime
     if Path(REGIMES).exists():
         regime = pd.read_parquet(REGIMES,

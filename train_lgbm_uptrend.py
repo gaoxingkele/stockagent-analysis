@@ -69,6 +69,13 @@ def load_with_label(start: str, end: str, pos_keys: set) -> pd.DataFrame:
             "vol_ratio": "mkt_vol_ratio",
         })
         full = full.merge(regime, on="trade_date", how="left")
+
+    # 合并 amount features (绝对成交额特征)
+    amount_path = ROOT / "output" / "amount_features" / "amount_features.parquet"
+    if amount_path.exists():
+        amount = pd.read_parquet(amount_path)
+        amount["trade_date"] = amount["trade_date"].astype(str)
+        full = full.merge(amount, on=["ts_code","trade_date"], how="left")
     return full
 
 
