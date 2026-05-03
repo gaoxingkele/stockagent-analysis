@@ -83,6 +83,13 @@ def load_with_label(start: str, end: str, pos_keys: set) -> pd.DataFrame:
         rextra = pd.read_parquet(rextra_path)
         rextra["trade_date"] = rextra["trade_date"].astype(str)
         full = full.merge(rextra, on="trade_date", how="left")
+
+    # 合并 moneyflow features (13 个资金分层特征, 来自 tushare)
+    mf_path = ROOT / "output" / "moneyflow" / "features.parquet"
+    if mf_path.exists():
+        mf = pd.read_parquet(mf_path)
+        mf["trade_date"] = mf["trade_date"].astype(str)
+        full = full.merge(mf, on=["ts_code","trade_date"], how="left")
     return full
 
 

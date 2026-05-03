@@ -77,6 +77,13 @@ def main():
         rextra["trade_date"] = rextra["trade_date"].astype(str)
         full = full.merge(rextra, on="trade_date", how="left")
 
+    # 合并 moneyflow features
+    mf_path = Path("output/moneyflow/features.parquet")
+    if mf_path.exists():
+        mf = pd.read_parquet(mf_path)
+        mf["trade_date"] = mf["trade_date"].astype(str)
+        full = full.merge(mf, on=["ts_code","trade_date"], how="left")
+
     # regime
     if Path(REGIMES).exists():
         regime = pd.read_parquet(REGIMES,
