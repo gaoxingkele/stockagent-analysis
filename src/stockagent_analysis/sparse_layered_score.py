@@ -943,14 +943,14 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
         rsi = regime.get("rsi14");   rsis = f"{rsi:.0f}"     if rsi is not None else "?"
         lines.append(f"### 🌐 当前市场状态: **{regime_cn}**")
         lines.append(f"  · 沪深300 5日 {r5s} / 20日 {r20s} / 60日 {r60s} / RSI14 {rsis}")
-        # Regime 适用建议
+        # Regime 适用建议 (根据 5 窗口走步式回测实证)
         regime_advice = {
-            "bull_policy": "政策驱动暴涨期, 起涨密集但持续短, 注意快进快出",
-            "bull_fast": "流动性驱动期, 涨幅大但起涨点稀少, 多数股已经在涨",
-            "bull_slow_diverge": "★ 系统主战场 — 板块/个股分化, top 5% 真实起涨率 11%",
-            "bear": "系统失效区 — 训练样本极少, 信号不可信, 建议观望",
-            "sideways": "震荡市起涨概率仍可信 (10%), 但多数走势短而弱",
-            "mixed": "过渡期, 依赖个股具体信号判断",
+            "bull_policy": "⚠ 政策驱动期, 起涨与已涨边界模糊, 信号置信度中等 (lift~6x)",
+            "bull_fast": "⚠ 流动性驱动, 涨幅大但起涨点稀少 (lift 5-8x), 多数已涨过",
+            "bull_slow_diverge": "★★ 系统主战场 — 5 窗口实证 top5% 起涨率 12%+ (lift 12x)",
+            "bear": "❌ 系统在熊市失效 (实证 top5% 仅 1%, 训练样本不足), 建议禁用信号",
+            "sideways": "★ 震荡市仍可信 (top5% 起涨率 7-12%, lift 8-17x)",
+            "mixed": "中性可用 (top5% 起涨率 6-8%, lift 6-10x)",
         }.get(regime["regime"], "")
         if regime_advice:
             lines.append(f"  · 系统适用性: {regime_advice}")
