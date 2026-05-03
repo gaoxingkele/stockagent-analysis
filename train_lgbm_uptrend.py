@@ -76,6 +76,13 @@ def load_with_label(start: str, end: str, pos_keys: set) -> pd.DataFrame:
         amount = pd.read_parquet(amount_path)
         amount["trade_date"] = amount["trade_date"].astype(str)
         full = full.merge(amount, on=["ts_code","trade_date"], how="left")
+
+    # 合并 regime extra features (市场状态强化特征)
+    rextra_path = ROOT / "output" / "regime_extra" / "regime_extra.parquet"
+    if rextra_path.exists():
+        rextra = pd.read_parquet(rextra_path)
+        rextra["trade_date"] = rextra["trade_date"].astype(str)
+        full = full.merge(rextra, on="trade_date", how="left")
     return full
 
 

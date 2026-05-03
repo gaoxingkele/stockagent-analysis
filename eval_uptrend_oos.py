@@ -70,6 +70,13 @@ def main():
         amount["trade_date"] = amount["trade_date"].astype(str)
         full = full.merge(amount, on=["ts_code","trade_date"], how="left")
 
+    # 合并 regime extra
+    rextra_path = Path("output/regime_extra/regime_extra.parquet")
+    if rextra_path.exists():
+        rextra = pd.read_parquet(rextra_path)
+        rextra["trade_date"] = rextra["trade_date"].astype(str)
+        full = full.merge(rextra, on="trade_date", how="left")
+
     # regime
     if Path(REGIMES).exists():
         regime = pd.read_parquet(REGIMES,
