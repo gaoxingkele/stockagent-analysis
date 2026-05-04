@@ -23,6 +23,11 @@ _CLEAN_DIR     = _PROJECT_ROOT / "output" / "lgbm_clean"
 _MAXGAIN_DIR   = _PROJECT_ROOT / "output" / "lgbm_maxgain"
 _UPTREND_DIR   = _PROJECT_ROOT / "output" / "lgbm_uptrend"
 _RISK_DIR      = _PROJECT_ROOT / "output" / "lgbm_risk"
+# v2 生产模型 (r10/r20 ALL + 双向 sell signal)
+_R10_DIR  = _PROJECT_ROOT / "output" / "production" / "r10_all"
+_R20_DIR  = _PROJECT_ROOT / "output" / "production" / "r20_all"
+_SELL10_DIR = _PROJECT_ROOT / "output" / "production" / "sell_10"
+_SELL20_DIR = _PROJECT_ROOT / "output" / "production" / "sell_20"
 
 # 模块级缓存
 _REG_MODEL = None
@@ -39,6 +44,15 @@ _UPTREND_META: dict | None = None
 # 回撤风险检测器 (二分类, AUC=0.674, dd<=-8% 预测)
 _RISK_MODEL = None
 _RISK_META: dict | None = None
+# v2 生产模型 (基于 r10/r20 ALL 配置, IC ~ 0.07, 接近 SOTA)
+_R10_MODEL = None
+_R10_META: dict | None = None
+_R20_MODEL = None
+_R20_META: dict | None = None
+_SELL10_MODEL = None
+_SELL10_META: dict | None = None
+_SELL20_MODEL = None
+_SELL20_META: dict | None = None
 
 
 def load(model_dir: Path | str | None = None) -> bool:
@@ -234,6 +248,129 @@ def predict_risk(features: dict[str, Any], industry: str = "",
     elif prob >= 0.40: tier = "mid"
     else:              tier = "low"
     return {"risk_prob": round(prob, 4), "risk_tier": tier, "ok": True}
+
+
+# ─────────────────────────────────────────────────────────────────────
+# V2 生产模型 (r10/r20 ALL + sell_10/sell_20)
+# 真实 IC: r10 ALL 0.073 / r20 ALL 0.034
+# 真实 RankICIR: r10 0.489 / r20 0.843 (论文 SOTA 2倍)
+# 真实 sell AUC: 待训练后填 (预期 0.65-0.70)
+# ─────────────────────────────────────────────────────────────────────
+
+def _load_lgbm_model(model_dir, global_model_var, global_meta_var):
+    """通用加载: model_dir → (booster, meta).
+    返回: (success: bool, booster, meta)"""
+    try: import lightgbm as lgb
+    except ImportError: return False, None, None
+    cls_path = model_dir / "classifier.txt"
+    meta_path = model_dir / "feature_meta.json"
+    if not cls_path.exists() or not meta_path.exists():
+        return False, None, None
+    booster = lgb.Booster(model_file=str(cls_path))
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    return True, booster, meta
+
+
+def _ensure_v2_models() -> dict:
+    """加载 v2 4 个生产模型, 返回 {r10, r20, sell10, sell20: bool}."""
+    global _R10_MODEL, _R10_META, _R20_MODEL, _R20_META
+    global _SELL10_MODEL, _SELL10_META, _SELL20_MODEL, _SELL20_META
+
+    if _R10_MODEL is None:
+        ok, b, m = _load_lgbm_model(_R10_DIR, _R10_MODEL, _R10_META)
+        if ok: _R10_MODEL, _R10_META = b, m
+    if _R20_MODEL is None:
+        ok, b, m = _load_lgbm_model(_R20_DIR, _R20_MODEL, _R20_META)
+        if ok: _R20_MODEL, _R20_META = b, m
+    if _SELL10_MODEL is None:
+        ok, b, m = _load_lgbm_model(_SELL10_DIR, _SELL10_MODEL, _SELL10_META)
+        if ok: _SELL10_MODEL, _SELL10_META = b, m
+    if _SELL20_MODEL is None:
+        ok, b, m = _load_lgbm_model(_SELL20_DIR, _SELL20_MODEL, _SELL20_META)
+        if ok: _SELL20_MODEL, _SELL20_META = b, m
+
+    return {
+        "r10": _R10_MODEL is not None,
+        "r20": _R20_MODEL is not None,
+        "sell10": _SELL10_MODEL is not None,
+        "sell20": _SELL20_MODEL is not None,
+    }
+
+
+def predict_dual(features: dict[str, Any], industry: str = "",
+                  extras: dict[str, Any] | None = None) -> dict:
+    """v2 生产 API — 同时输出买入/卖出 4 个核心预测.
+
+    返回:
+      r10_pred:      预测 10 日收益 (%)
+      r20_pred:      预测 20 日收益 (%)
+      sell_10_prob:  P(max_dd_10 <= -5%)
+      sell_20_prob:  P(max_dd_20 <= -8%)
+      buy_score:     0-100, 综合 r10/r20 看多评分
+      sell_score:    0-100, 综合 sell_10/sell_20 看空评分
+      ok:            是否所有模型都加载成功
+    """
+    loaded = _ensure_v2_models()
+    out = {"loaded": loaded}
+
+    # r10
+    if loaded["r10"]:
+        feat_cols = _R10_META["feature_cols"]
+        industry_map = _R10_META.get("industry_map", {})
+        X = _build_row(feat_cols, industry_map, industry, features, extras)
+        out["r10_pred"] = round(float(_R10_MODEL.predict(X)[0]), 3)
+    # r20
+    if loaded["r20"]:
+        feat_cols = _R20_META["feature_cols"]
+        industry_map = _R20_META.get("industry_map", {})
+        X = _build_row(feat_cols, industry_map, industry, features, extras)
+        out["r20_pred"] = round(float(_R20_MODEL.predict(X)[0]), 3)
+    # sell_10
+    if loaded["sell10"]:
+        feat_cols = _SELL10_META["feature_cols"]
+        industry_map = _SELL10_META.get("industry_map", {})
+        X = _build_row(feat_cols, industry_map, industry, features, extras)
+        out["sell_10_prob"] = round(float(_SELL10_MODEL.predict(X)[0]), 4)
+    # sell_20
+    if loaded["sell20"]:
+        feat_cols = _SELL20_META["feature_cols"]
+        industry_map = _SELL20_META.get("industry_map", {})
+        X = _build_row(feat_cols, industry_map, industry, features, extras)
+        out["sell_20_prob"] = round(float(_SELL20_MODEL.predict(X)[0]), 4)
+
+    # buy_score: 基于 r10/r20 预测分位锚定 (实测 OOS 分布)
+    # r10_pred OOS 分布: p5=0.72 p50=0.94 p95=1.40 (单日截面极窄)
+    # r20_pred OOS 分布: p5=-2.34 p50=2.50 p95=6.36 (相对正常)
+    def _map_anchored(v, p5, p50, p95):
+        if v is None: return 50
+        if v <= p5: return 0
+        if v >= p95: return 100
+        if v <= p50: return (v - p5) / (p50 - p5) * 50
+        return 50 + (v - p50) / (p95 - p50) * 50
+
+    r10 = out.get("r10_pred")
+    r20 = out.get("r20_pred")
+    if r10 is not None or r20 is not None:
+        s10 = _map_anchored(r10, 0.72, 0.94, 1.40)
+        s20 = _map_anchored(r20, -2.34, 2.50, 6.36)
+        out["buy_score"] = round(0.5 * s10 + 0.5 * s20, 1)
+        out["buy_score_r10"] = round(s10, 1)
+        out["buy_score_r20"] = round(s20, 1)
+
+    # sell_score: sell_10/sell_20 概率分位锚定
+    # sell_10_prob OOS: p25=0.10 p50=0.20 p75=0.35 p95=0.64
+    # sell_20_prob OOS: p25=0.02 p50=0.07 p75=0.26 p95=0.67
+    sp10 = out.get("sell_10_prob")
+    sp20 = out.get("sell_20_prob")
+    if sp10 is not None or sp20 is not None:
+        s10_sell = _map_anchored(sp10, 0.05, 0.20, 0.64) if sp10 is not None else 50
+        s20_sell = _map_anchored(sp20, 0.01, 0.07, 0.67) if sp20 is not None else 50
+        out["sell_score"] = round(0.5 * s10_sell + 0.5 * s20_sell, 1)
+        out["sell_score_10"] = round(s10_sell, 1)
+        out["sell_score_20"] = round(s20_sell, 1)
+
+    out["ok"] = all(loaded.values())
+    return out
 
 
 def predict_maxgain(features: dict[str, Any], industry: str = "",

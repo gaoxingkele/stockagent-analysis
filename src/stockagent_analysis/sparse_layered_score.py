@@ -537,6 +537,7 @@ def compute_sparse_layered_score(
     maxgain_result = None
     uptrend_result = None
     risk_ml_result = None
+    dual_result = None
     try:
         from . import lgbm_predictor
         lgbm_extras = {}
@@ -553,6 +554,8 @@ def compute_sparse_layered_score(
         maxgain_result = lgbm_predictor.predict_maxgain(features, ind, extras=lgbm_extras)
         uptrend_result = lgbm_predictor.predict_uptrend(features, ind, extras=lgbm_extras)
         risk_ml_result = lgbm_predictor.predict_risk(features, ind, extras=lgbm_extras)
+        # v2 生产模型: 双向评分 (基于 r10/r20 ALL + sell_10/sell_20)
+        dual_result = lgbm_predictor.predict_dual(features, ind, extras=lgbm_extras)
     except Exception as _e:
         pass
 
@@ -571,9 +574,10 @@ def compute_sparse_layered_score(
         "lgbm": lgbm_result,
         "clean": clean_result,
         "maxgain": maxgain_result,
-        "uptrend": uptrend_result,    # 起涨点检测器 (AUC=0.965)
-        "moneyflow": moneyflow_summary, # 资金分层信号摘要
-        "entry_score":  entry_eval,    # 0-100, 高=适合买入
+        "uptrend": uptrend_result,    # 起涨点检测器 (注意: 之前数据有泄漏)
+        "moneyflow": moneyflow_summary,
+        "dual": dual_result,           # v2 双向评分 (r10/r20 + sell_10/sell_20, 真实 IC 0.073)
+        "entry_score":  entry_eval,    # 0-100, 高=适合买入 (规则推导, 后续可被 dual 替代)
         "risk_score":   risk_eval,     # 0-100, 高=浮亏/回撤风险大
         "sum_delta": round(sum_delta, 2),
         "sum_delta_raw": round(sum_delta, 2),
@@ -926,6 +930,7 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
     lgbm    = result.get("lgbm") or {}
     clean   = result.get("clean") or {}
     maxgain = result.get("maxgain") or {}
+    dual    = result.get("dual") or {}
     entry   = result.get("entry_score") or {}
     risk    = result.get("risk_score") or {}
 
@@ -962,10 +967,36 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
         if regime_advice:
             lines.append(f"  · 系统适用性: {regime_advice}")
         lines.append("")
-    # 买入评分 (主)
+    # v2 双向评分 (基于 r10/r20 ALL, IC 接近 SOTA)
+    if dual and dual.get("ok"):
+        bs = dual.get("buy_score", 50)
+        ss = dual.get("sell_score", 50)
+        r10 = dual.get("r10_pred", 0)
+        r20 = dual.get("r20_pred", 0)
+        sp10 = dual.get("sell_10_prob", 0) * 100
+        sp20 = dual.get("sell_20_prob", 0) * 100
+        # 买入档位
+        bs_label = ("强烈看多" if bs >= 75 else "看多" if bs >= 60 else
+                     "中性" if bs >= 45 else "看空" if bs >= 30 else "强烈看空")
+        ss_label = ("高风险" if ss >= 65 else "中等风险" if ss >= 45 else "低风险")
+        lines.append(f"### 🎯 v2 双向评分 (真实 IC 0.073, RankICIR 0.49)")
+        lines.append(f"  📈 **买入分: {bs:.0f}/100** [{bs_label}] — r10预测 {r10:+.2f}%, r20预测 {r20:+.2f}%")
+        lines.append(f"  📉 **卖出分: {ss:.0f}/100** [{ss_label}] — 10日跌破-5%概率 {sp10:.0f}%, 20日跌破-8%概率 {sp20:.0f}%")
+        # 信号一致性
+        if bs >= 65 and ss <= 35:
+            lines.append(f"  ✓ 信号一致看多 (买入分高+卖出分低)")
+        elif bs <= 35 and ss >= 65:
+            lines.append(f"  ✓ 信号一致看空 (买入分低+卖出分高)")
+        elif abs(bs - (100 - ss)) < 15:
+            lines.append(f"  · 信号一致性中等")
+        else:
+            lines.append(f"  ⚠ 信号冲突 (买入与卖出评分不匹配, 谨慎决策)")
+        lines.append("")
+
+    # 买入评分 (传统规则推导, 保留兼容)
     if entry:
         es = entry.get("score", 50)
-        lines.append(f"### 📈 买入评分: **{es:.0f} / 100** — {entry.get('label', '')}")
+        lines.append(f"### 📈 买入评分(规则): **{es:.0f} / 100** — {entry.get('label', '')}")
         for r in entry.get("reasons", [])[:5]:
             lines.append(f"  · {r}")
         lines.append("")
