@@ -1,0 +1,39 @@
+=== V7 P0: r20_v7_all (ALL+mfk+pyramid_v2) ===
+
+特征数: 225 (mfk 17, pyramid_v2 6)
+  train=1,500,000 test=920,055 feat=226
+Training until validation scores don't improve for 80 rounds
+Early stopping, best iteration is:
+[226]	valid_0's spearman_ic: 0.0714269
+Evaluated only: spearman_ic
+
+  r20_v7_all 完成:
+    IC=0.0275 (V4: 0.031)
+    RankIC=0.0714 (V4: 0.072)
+    RankICIR=0.761 (V4: 0.81)
+    best_iter=226 (V4: 278)
+    mfk imp=1.4%, pyramid imp=0.8%
+    锚点: p5=-7.709, p50=-1.231, p95=8.680
+  Top 20 importance:
+mkt_ret_60d           1.524412e+08
+cyb_rel_strength      1.519585e+08
+industry_id           1.269963e+08
+hs300_ret60_z60       1.186499e+08
+mkt_ret_20d           1.061037e+08
+zz500_rel_strength    9.081998e+07
+mkt_ret_5d            7.387814e+07
+mkt_vol_ratio         7.242136e+07
+mkt_rsi14             5.303765e+07
+regime_intensity      4.023688e+07
+regime_days_in        3.908318e+07
+total_mv              3.378760e+07
+regime_id             2.149334e+07
+mf_divergence         1.606618e+07
+sumn_20               1.576945e+07
+atr_pct               1.564058e+07
+ma_ratio_20           1.442446e+07
+main_consec_in        1.395793e+07
+kama_20               1.362890e+07
+pe_ttm                1.300302e+07
+
+总耗时 208s

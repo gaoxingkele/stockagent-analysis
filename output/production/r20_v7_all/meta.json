@@ -1,0 +1,16 @@
+{
+  "best_iter": 226,
+  "ic": 0.027483402707363026,
+  "rank_ic": 0.07142692336781442,
+  "rank_ic_ir": 0.76106150689596,
+  "n_train": 1500000,
+  "n_test": 920055,
+  "n_features": 226,
+  "version": "v7",
+  "leakage_fix": true,
+  "mfk_importance_pct": 1.357888260288649,
+  "pyramid_importance_pct": 0.8041414851134774,
+  "anchor_p5": -7.708855439502435,
+  "anchor_p50": -1.2305233350764635,
+  "anchor_p95": 8.680379418116633
+}
