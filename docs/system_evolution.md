@@ -1055,3 +1055,90 @@ V4 评估明确证明 mfk 让 r20 IC 从 0.034 → 0.057 (+68%), 大概率也能
 4. **f1/f2 阈值条件化**: (-1%, -3%, -5%, -8%) 4 阈值变种
 5. **跨股票 cross-section 信号**: industry_main_net_rank 等
 6. **回测真实交易成本** (~0.5% 双向)看扣除后 alpha 是否仍正
+
+---
+
+## 阶段 V6: P0 sell+mfk + P1 过滤实验 + P3 成本回测 ✅ 完成 (2026-05-04)
+
+### V6.1 P0: sell with mfk 重训 (train_v6_sell_mfk.py)
+
+| 模型 | V4 (无 mfk) AUC | V6 (含 mfk) AUC | mfk importance |
+|---|---|---|---|
+| sell_10 | 0.676 | 0.681 (+0.5pp) | 0.03% (近 0) |
+| sell_20 | 0.678 | 0.677 (-0.1pp) | 0.44% |
+
+**第一直觉错误,ICR 视角才能看到真相** — AUC 几乎无变化,但**top 1% 极端段显著提升**:
+
+| sell_score 段 | V4 dd<-15% | V6 dd<-15% | Δ |
+|---|---|---|---|
+| top 10% | 22.09% | 22.39% | +0.3pp |
+| top 5% | 25.09% | 26.46% | +1.4pp |
+| **top 1%** | 27.68% | **31.01%** | **+3.3pp** ⭐ (+12% 提升) |
+
+**核心洞察**: AUC 是平均度量,但实战避雷用 top 1%/5%/10% segment,**mfk 在 fat tail 极端段有效**,中间段无差异。**结论修正**: V6 sell with mfk 应该上线 (替代 V4),即使 AUC 不变,极端避雷力提升 12%.
+
+### V6.2 P1: buy_70_85 + SELL_v6≤30 多过滤实验 (analyze_v6_full.py)
+
+baseline: buy_70_85 + SELL_v6≤30, n=61,058, r20=4.77%, vs hs300 α=+3.20
+
+| Filter | n | vs **hs300 α** | vs zz500 α | vs **创业板 α** |
+|---|---|---|---|---|
+| baseline | 61K | +3.20 | -1.17 | -0.07 |
+| **🌟 low_pyramid (机构占比<0.45)** | 50K | **+3.49** ⭐ | -0.97 | **+0.37** ⭐ |
+| no_extreme_event (f1/f2 静默) | 49K | +3.43 | -1.09 | +0.28 |
+| mfk_gold + low_pyramid | 25K | +3.18 | -1.22 | +0.04 |
+| low_pyramid + bull_regime | 43K | +3.09 | -1.63 | -0.37 |
+| mfk_gold (cross=+1) | 30K | +2.98 ⬇ | -1.36 | -0.20 |
+| high_macd_hist | 29K | +2.95 | -1.34 | -0.27 |
+| main_inflow (main_net_5d>0) | 20K | +2.94 | -1.31 | -0.19 |
+| mfk_gold + main_inflow | 17K | +2.95 | -1.29 | -0.24 |
+| mfk_strong_cross | 28K | +2.95 | -1.37 | -0.23 |
+| 全套叠加 | 22K | +2.83 ⬇ | -1.78 | -0.62 |
+| bull_regime 单独 | 53K | +2.79 ⬇ | -1.78 | -0.82 |
+| mfk_gold + bull_regime | 26K | +2.61 ⬇⬇ | -1.91 | -0.87 |
+
+**核心发现**:
+1. **low_pyramid (机构占比<0.45) 是最强单过滤** — 跟单因子 RankIC=-0.081 一致,这个 mfk_pyramid_top_heavy 是真王者
+2. **mfk_gold 单独拖累** — 与 V4 共振分析 "理想多+mfk_gold 略降" 一致 (+gold 在 buy 高分段是反信号)
+3. **bull_regime 反向** — 60d>0 时筛反而 alpha 降, 因为已涨段难继续跑赢
+4. **多重过滤叠加稀释** — 全套 gold+low_pyr+bull 不如单独 low_pyramid
+5. **过滤选择性**: 单一最强因子优于多因子组合
+
+### V6.3 P3: 真实交易成本扣除 (stock -0.5%, ETF -0.2%, 净差 -0.3%)
+
+| Filter | n | **net α vs hs300** | net α vs zz500 | net α vs 创业板 |
+|---|---|---|---|---|
+| **🌟 low_pyramid** | 50K | **+3.19pp/月** ⭐ | -1.27 | **+0.07** (净持平) |
+| no_extreme_event | 49K | +3.13 | -1.39 | -0.02 |
+| baseline | 61K | +2.90 | -1.47 | -0.37 |
+| mfk_gold + low_pyramid | 25K | +2.88 | -1.52 | -0.26 |
+| low_pyramid + bull_regime | 43K | +2.79 | -1.93 | -0.67 |
+| ... 略 | ... | ... | ... | ... |
+
+**扣交易成本结论**:
+- **low_pyramid 段 net α vs hs300 = +3.19pp/月 = 年化 +38pp** (vs 毛 +3.49pp,只损 0.3pp)
+- 跟**创业板净持平** (扣完成本仍能跟上最强 beta)
+- vs 中证500 仍输 (-1.27pp 净) — 中证500 是最强 ETF 难超越
+- **首次实证: 扣交易成本后仍有 +3pp/月 net alpha 段**
+
+### V6.4 V6 综合结论
+
+**V6 系统主推荐** (替代 V5 的 buy_70_85 全段):
+
+```
+buy_70_85 + SELL_v6≤30 + mfk_pyramid_top_heavy < 0.45
+n=50K (5.5% OOS), 净 α vs hs300 +3.19pp/月
+```
+
+**v6 选股清单 (5 条铁律)**:
+1. buy_score ∈ [70, 85] (不追>85, 实测反转)
+2. sell_score (V6) ≤ 30 (双向一致)
+3. mfk_pyramid_top_heavy < 0.45 (避免机构垄断股)
+4. **不要叠加** mfk_gold 或 bull_regime (实测拖累)
+5. 单股仓位 ≤5%, 分散 20+ 只 (IC 0.07 信噪比下必须靠均值法则)
+
+**V6 决策清单**:
+1. ✅ sell_10_v6 / sell_20_v6 上线 (替代 V4) — top 1% 避雷力 +12%
+2. ✅ low_pyramid 过滤集成 sparse_layered LLM 渲染 (V7 候选)
+3. ⏳ 待 V7: P2 多窗口 mfk_pyramid_top_heavy 5d/10d/20d/60d 变种
+4. ⏳ 待 V7: industry score 设计 + 跨行业 cross-section

@@ -23,12 +23,13 @@ _CLEAN_DIR     = _PROJECT_ROOT / "output" / "lgbm_clean"
 _MAXGAIN_DIR   = _PROJECT_ROOT / "output" / "lgbm_maxgain"
 _UPTREND_DIR   = _PROJECT_ROOT / "output" / "lgbm_uptrend"
 _RISK_DIR      = _PROJECT_ROOT / "output" / "lgbm_risk"
-# V4 生产模型 (无标签泄漏, ALL+mfk for r20)
+# V6 生产模型 (r10/r20 沿用 V4, sell 升级到 V6 含 mfk)
 # V3 (r10_all, r20_all, r20_v3_all, sell_10, sell_20) 已撤销 — 含标签泄漏
+# V4 sell_10_v4 / sell_20_v4 仍可用, V6 在极端段 (top 1%) 避雷力 +12%
 _R10_DIR  = _PROJECT_ROOT / "output" / "production" / "r10_v4_all"
 _R20_DIR  = _PROJECT_ROOT / "output" / "production" / "r20_v4_all"
-_SELL10_DIR = _PROJECT_ROOT / "output" / "production" / "sell_10_v4"
-_SELL20_DIR = _PROJECT_ROOT / "output" / "production" / "sell_20_v4"
+_SELL10_DIR = _PROJECT_ROOT / "output" / "production" / "sell_10_v6"
+_SELL20_DIR = _PROJECT_ROOT / "output" / "production" / "sell_20_v6"
 
 # 模块级缓存
 _REG_MODEL = None
@@ -339,11 +340,11 @@ def predict_dual(features: dict[str, Any], industry: str = "",
         X = _build_row(feat_cols, industry_map, industry, features, extras)
         out["sell_20_prob"] = round(float(_SELL20_MODEL.predict(X)[0]), 4)
 
-    # V4 锚点 (来自 r*_v4_all/sell_*_v4 训练时的 OOS 预测分布)
+    # 锚点 (V4 r10/r20, V6 sell)
     # r10_v4_all OOS:  p5=-1.44, p50=0.22, p95=2.40
     # r20_v4_all OOS:  p5=-7.78, p50=-1.18, p95=8.76
-    # sell_10_v4 OOS:  p5=0.27, p50=0.48, p95=0.70
-    # sell_20_v4 OOS:  p5=0.04, p50=0.43, p95=0.88
+    # sell_10_v6 OOS:  p5=0.18, p50=0.48, p95=0.78  (V6 含 mfk)
+    # sell_20_v6 OOS:  p5=0.05, p50=0.43, p95=0.87  (V6 含 mfk)
     def _map_anchored(v, p5, p50, p95):
         if v is None: return 50
         if v <= p5: return 0
@@ -363,8 +364,8 @@ def predict_dual(features: dict[str, Any], industry: str = "",
     sp10 = out.get("sell_10_prob")
     sp20 = out.get("sell_20_prob")
     if sp10 is not None or sp20 is not None:
-        s10_sell = _map_anchored(sp10, 0.27, 0.48, 0.70) if sp10 is not None else 50
-        s20_sell = _map_anchored(sp20, 0.04, 0.43, 0.88) if sp20 is not None else 50
+        s10_sell = _map_anchored(sp10, 0.18, 0.48, 0.78) if sp10 is not None else 50
+        s20_sell = _map_anchored(sp20, 0.05, 0.43, 0.87) if sp20 is not None else 50
         out["sell_score"] = round(0.5 * s10_sell + 0.5 * s20_sell, 1)
         out["sell_score_10"] = round(s10_sell, 1)
         out["sell_score_20"] = round(s20_sell, 1)

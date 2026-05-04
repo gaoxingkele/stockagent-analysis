@@ -1,0 +1,14 @@
+﻿filter,n,net_α_vs_sh000300,net_α_vs_sh000905,net_α_vs_sz399006
+low_pyramid (机构占比 < 0.45),50177,3.19,-1.27,0.07
+no_extreme_event,49457,3.13,-1.39,-0.02
+baseline,61058,2.9,-1.47,-0.37
+mfk_gold + low_pyramid,24838,2.88,-1.52,-0.26
+low_pyramid + bull_regime,43401,2.79,-1.93,-0.67
+mfk_gold (cross=+1),29521,2.68,-1.66,-0.5
+high_macd_hist,28849,2.65,-1.64,-0.57
+mfk_strong_cross,28122,2.65,-1.67,-0.53
+mfk_gold + main_inflow,16971,2.65,-1.59,-0.54
+main_inflow (main_net_5d>0),19781,2.64,-1.61,-0.49
+全套 (gold + low_pyr + bull),21647,2.53,-2.08,-0.92
+bull_regime (mkt 60d>0),53273,2.49,-2.08,-1.12
+mfk_gold + bull_regime,25870,2.31,-2.21,-1.17
