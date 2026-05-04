@@ -1142,3 +1142,71 @@ n=50K (5.5% OOS), 净 α vs hs300 +3.19pp/月
 2. ✅ low_pyramid 过滤集成 sparse_layered LLM 渲染 (V7 候选)
 3. ⏳ 待 V7: P2 多窗口 mfk_pyramid_top_heavy 5d/10d/20d/60d 变种
 4. ⏳ 待 V7: industry score 设计 + 跨行业 cross-section
+
+### V6.5 P2: pyramid 多窗口变种 + pyr_velocity 突破 ✅ 完成 (2026-05-04)
+
+**6 个 pyramid 变种** (extract_pyramid_multiwindow.py):
+- `pyr_5d` / `pyr_10d` / `pyr_20d` / `pyr_60d`: 4 个窗口的 inst/retail 比值
+- `pyr_acc_5_20`: 5d / 20d 比值 (机构占比加速度)
+- `pyr_velocity_10_60`: 10d - 60d 差值 (机构占比趋势)
+
+#### 单因子 RankIC (vs r20)
+
+| 因子 | RankIC | 备注 |
+|---|---|---|
+| **pyr_10d** | **-0.0821** | 略强于 5d |
+| **pyr_20d** | **-0.0820** | 并列 |
+| pyr_5d | -0.0808 | V6 默认 |
+| pyr_60d | -0.0721 | 略弱 |
+| pyr_velocity_10_60 | -0.0286 | 单因子弱 |
+| pyr_acc_5_20 | -0.0084 | 近无效 |
+
+#### P2 过滤实验 (在 buy_70_85+SELL_v6≤30 之上, 扣交易成本)
+
+| 排名 | Filter | n | stock_r20 | net α vs hs300 | net α vs 创业板 |
+|---|---|---|---|---|---|
+| 🥇 | **pyr_velocity_10_60 < p20** | 8.4K | 5.68% | **+4.20** ⭐ | **+2.37** ⭐ |
+| 🥈 | pyr_20d < p20 | 19.8K | 5.92% | +4.08 | +1.07 |
+| 🥉 | pyr_5d < p20 | 17.6K | 6.00% | +4.06 | +1.21 |
+| 4 | **pyr_velocity_10_60 < p35** | 17.6K | 5.62% | **+4.06** ⭐ | **+2.03** ⭐ |
+| 5 | pyr_10d < p20 | 18.9K | 5.89% | +3.98 | +1.12 |
+| 6 | pyr_velocity_10_60 < p50 | 28.4K | 5.51% | +3.86 | +1.57 |
+| ... | (其他 12 组合略) | | | | |
+| baseline | V6 P3 low_pyramid<0.45 | 50K | 4.77% | +3.19 | +0.07 |
+
+#### 颠覆性发现
+
+**pyr_velocity_10_60 单因子 RankIC=-0.029 (看似弱), 但作为 buy_70_85+SELL≤30 段的过滤器最强**:
+- 跑赢创业板 (V1→V6 全程**首次实现**, 之前所有过滤都跑不赢)
+- 物理意义: "10 日机构占比 < 60 日机构占比" = 机构正在温和减仓
+- 解读: 机构吃饱后让位散户接盘的早期阶段, 这种股票:
+  1. buy_score 高 (短期看多)
+  2. SELL 低 (无强避雷信号)
+  3. 机构温和退出 (没有派发恐慌, 散户接盘量大)
+  4. 价格仍稳健 (没崩塌)
+  → 后续 r20 表现极强
+
+**反直觉**: 单因子 RankIC 弱不代表过滤价值低 — pyr_velocity 跟 buy_score **信号正交**, 提供互补信息.
+
+#### V6.5 主推荐 (替代 V6 baseline)
+
+**平衡版** (推荐):
+```
+buy_70_85 + SELL_v6≤30 + pyr_velocity_10_60 < p35
+n = 17,609 (1.9% OOS), stock_r20 = 5.62%
+净 α vs hs300 = +4.06pp/月 = 年化 +49pp
+净 α vs 创业板 = +2.03pp/月 ⭐ (跑赢最强 beta)
+```
+
+**激进版**:
+```
++ pyr_velocity_10_60 < p20
+n = 8,411 (0.9% OOS), 净 α vs hs300 = +4.20pp, vs 创业板 +2.37pp
+```
+
+#### V7 候选 (P2 后续)
+
+1. **训练 r20_v7_all (ALL+mfk+pyramid_v2 含 6 个新 pyramid 因子)** — 可能进一步提升 r20 IC
+2. **设计 pyr_velocity 变种**: pyr_velocity_5_60, pyr_velocity_10_30, ...
+3. **industry score**: 跨行业 cross-section 排名 (V5.5 候选 #5)
+4. **f1/f2 阈值条件化** (V5.5 候选 #4)
