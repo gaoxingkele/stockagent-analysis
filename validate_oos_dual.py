@@ -23,17 +23,22 @@ PARQUET_DIR = ROOT / "output" / "factor_lab_3y" / "factor_groups"
 LABELS_10 = ROOT / "output" / "cogalpha_features" / "labels_10d.parquet"
 LABELS_20 = ROOT / "output" / "labels" / "max_gain_labels.parquet"
 PROD_DIR = ROOT / "output" / "production"
-OUT_DIR = PROD_DIR / "oos_validation"
+OUT_DIR = PROD_DIR / "oos_validation_v4"
 OUT_DIR.mkdir(exist_ok=True)
 
 TEST_START = "20250501"
 TEST_END   = "20260126"
 
-# OOS 锚定百分位 (与 lgbm_predictor.predict_dual 同步)
-R10_ANCHOR = (0.72, 0.94, 1.40)
-R20_ANCHOR = (-2.34, 2.50, 6.36)
-SELL10_ANCHOR = (0.05, 0.20, 0.64)
-SELL20_ANCHOR = (0.01, 0.07, 0.67)
+# V4 OOS 锚点
+R10_ANCHOR = (-1.44, 0.22, 2.40)
+R20_ANCHOR = (-7.78, -1.18, 8.76)
+SELL10_ANCHOR = (0.27, 0.48, 0.70)
+SELL20_ANCHOR = (0.04, 0.43, 0.88)
+# V4 模型目录
+R10_MODEL = "r10_v4_all"
+R20_MODEL = "r20_v4_all"
+SELL10_MODEL = "sell_10_v4"
+SELL20_MODEL = "sell_20_v4"
 
 
 def _map_anchored(v, p5, p50, p95):
@@ -73,6 +78,7 @@ def load_oos():
         ROOT / "output" / "regime_extra" / "regime_extra.parquet",
         ROOT / "output" / "moneyflow" / "features.parquet",
         ROOT / "output" / "cogalpha_features" / "features.parquet",
+        ROOT / "output" / "mfk_features" / "features.parquet",
     ]:
         if not path.exists(): continue
         d = pd.read_parquet(path)
@@ -145,15 +151,15 @@ def main():
     df = load_oos()
     print(f"[{int(time.time()-t0)}s] OOS shape: {df.shape}")
 
-    # 4 模型预测
-    print(f"[{int(time.time()-t0)}s] 预测 r10_all...")
-    df["r10_pred"] = predict_model(df, "r10_all")
-    print(f"[{int(time.time()-t0)}s] 预测 r20_all...")
-    df["r20_pred"] = predict_model(df, "r20_all")
-    print(f"[{int(time.time()-t0)}s] 预测 sell_10...")
-    df["sell_10_prob"] = predict_model(df, "sell_10")
-    print(f"[{int(time.time()-t0)}s] 预测 sell_20...")
-    df["sell_20_prob"] = predict_model(df, "sell_20")
+    # 4 V4 模型预测
+    print(f"[{int(time.time()-t0)}s] 预测 {R10_MODEL}...")
+    df["r10_pred"] = predict_model(df, R10_MODEL)
+    print(f"[{int(time.time()-t0)}s] 预测 {R20_MODEL}...")
+    df["r20_pred"] = predict_model(df, R20_MODEL)
+    print(f"[{int(time.time()-t0)}s] 预测 {SELL10_MODEL}...")
+    df["sell_10_prob"] = predict_model(df, SELL10_MODEL)
+    print(f"[{int(time.time()-t0)}s] 预测 {SELL20_MODEL}...")
+    df["sell_20_prob"] = predict_model(df, SELL20_MODEL)
 
     # 评分
     s10 = _map_anchored(df["r10_pred"].values, *R10_ANCHOR)

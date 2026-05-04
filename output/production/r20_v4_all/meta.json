@@ -1,0 +1,11 @@
+{
+  "best_iter": 278,
+  "ic": 0.031154796447793613,
+  "rank_ic": 0.07184209072733007,
+  "rank_ic_ir": 0.8102002554433375,
+  "n_train": 1500000,
+  "n_test": 920055,
+  "n_features": 220,
+  "version": "v4",
+  "leakage_fix": true
+}

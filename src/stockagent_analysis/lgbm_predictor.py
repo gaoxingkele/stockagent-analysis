@@ -23,11 +23,12 @@ _CLEAN_DIR     = _PROJECT_ROOT / "output" / "lgbm_clean"
 _MAXGAIN_DIR   = _PROJECT_ROOT / "output" / "lgbm_maxgain"
 _UPTREND_DIR   = _PROJECT_ROOT / "output" / "lgbm_uptrend"
 _RISK_DIR      = _PROJECT_ROOT / "output" / "lgbm_risk"
-# v2 生产模型 (r10/r20 ALL + 双向 sell signal)
-_R10_DIR  = _PROJECT_ROOT / "output" / "production" / "r10_all"
-_R20_DIR  = _PROJECT_ROOT / "output" / "production" / "r20_all"
-_SELL10_DIR = _PROJECT_ROOT / "output" / "production" / "sell_10"
-_SELL20_DIR = _PROJECT_ROOT / "output" / "production" / "sell_20"
+# V4 生产模型 (无标签泄漏, ALL+mfk for r20)
+# V3 (r10_all, r20_all, r20_v3_all, sell_10, sell_20) 已撤销 — 含标签泄漏
+_R10_DIR  = _PROJECT_ROOT / "output" / "production" / "r10_v4_all"
+_R20_DIR  = _PROJECT_ROOT / "output" / "production" / "r20_v4_all"
+_SELL10_DIR = _PROJECT_ROOT / "output" / "production" / "sell_10_v4"
+_SELL20_DIR = _PROJECT_ROOT / "output" / "production" / "sell_20_v4"
 
 # 模块级缓存
 _REG_MODEL = None
@@ -338,9 +339,11 @@ def predict_dual(features: dict[str, Any], industry: str = "",
         X = _build_row(feat_cols, industry_map, industry, features, extras)
         out["sell_20_prob"] = round(float(_SELL20_MODEL.predict(X)[0]), 4)
 
-    # buy_score: 基于 r10/r20 预测分位锚定 (实测 OOS 分布)
-    # r10_pred OOS 分布: p5=0.72 p50=0.94 p95=1.40 (单日截面极窄)
-    # r20_pred OOS 分布: p5=-2.34 p50=2.50 p95=6.36 (相对正常)
+    # V4 锚点 (来自 r*_v4_all/sell_*_v4 训练时的 OOS 预测分布)
+    # r10_v4_all OOS:  p5=-1.44, p50=0.22, p95=2.40
+    # r20_v4_all OOS:  p5=-7.78, p50=-1.18, p95=8.76
+    # sell_10_v4 OOS:  p5=0.27, p50=0.48, p95=0.70
+    # sell_20_v4 OOS:  p5=0.04, p50=0.43, p95=0.88
     def _map_anchored(v, p5, p50, p95):
         if v is None: return 50
         if v <= p5: return 0
@@ -351,20 +354,17 @@ def predict_dual(features: dict[str, Any], industry: str = "",
     r10 = out.get("r10_pred")
     r20 = out.get("r20_pred")
     if r10 is not None or r20 is not None:
-        s10 = _map_anchored(r10, 0.72, 0.94, 1.40)
-        s20 = _map_anchored(r20, -2.34, 2.50, 6.36)
+        s10 = _map_anchored(r10, -1.44, 0.22, 2.40)
+        s20 = _map_anchored(r20, -7.78, -1.18, 8.76)
         out["buy_score"] = round(0.5 * s10 + 0.5 * s20, 1)
         out["buy_score_r10"] = round(s10, 1)
         out["buy_score_r20"] = round(s20, 1)
 
-    # sell_score: sell_10/sell_20 概率分位锚定
-    # sell_10_prob OOS: p25=0.10 p50=0.20 p75=0.35 p95=0.64
-    # sell_20_prob OOS: p25=0.02 p50=0.07 p75=0.26 p95=0.67
     sp10 = out.get("sell_10_prob")
     sp20 = out.get("sell_20_prob")
     if sp10 is not None or sp20 is not None:
-        s10_sell = _map_anchored(sp10, 0.05, 0.20, 0.64) if sp10 is not None else 50
-        s20_sell = _map_anchored(sp20, 0.01, 0.07, 0.67) if sp20 is not None else 50
+        s10_sell = _map_anchored(sp10, 0.27, 0.48, 0.70) if sp10 is not None else 50
+        s20_sell = _map_anchored(sp20, 0.04, 0.43, 0.88) if sp20 is not None else 50
         out["sell_score"] = round(0.5 * s10_sell + 0.5 * s20_sell, 1)
         out["sell_score_10"] = round(s10_sell, 1)
         out["sell_score_20"] = round(s20_sell, 1)

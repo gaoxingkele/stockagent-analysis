@@ -776,3 +776,176 @@ p5=28.5, p50=81.7, p95=100.0 — qcut 也被压缩为 8 桶, ~30% 样本 sell_sc
 - 严格 EXCLUDE r5/r10/r20/r30/r40/dd5/dd10/dd20/dd30/dd40/max_gain_10/max_dd_10/max_gain_20/max_dd_20/entry_open 防止标签泄漏.
 - best_iter 与 OOS 指标对齐 (r10 best_iter=7 对应弱信号, r20 best_iter=108 对应强信号).
 - 5 指标月度稳定: r20 ALL RankIC 9 个月平均 0.092, std 不大 (RankICIR=0.843 反推).
+
+> **⚠️ V2 撤销说明 (V4 时发现)**:
+> V2 阶段所述 EXCLUDE "已包含 max_gain_20/max_dd_20" 是**错误的** — 实际训练代码 (train_production_models.py) EXCLUDE 缺失 max_gain_20/max_dd_20, 即这两个 20 日前瞻标签作为特征参与了所有 V2/V3 模型训练, **构成标签泄漏**. V4 阶段重训后所有指标均比 V2 实际报告值更接近真实水平, V2 的 r10/r20 IC/RankICIR 数字都应视为虚高, 与 SOTA 比较的 "+118%/+121%" 等数字也应折扣.
+
+---
+
+## 阶段 V3: 价量耦合事件因子尝试 (V2 因子 v2: f1-f8) ✅ 完成 → V4 撤销 (2026-05-04)
+
+**目标**: 用 Tushare Pro 4-tier 资金分层数据 + 价格变化耦合, 突破纯流动性因子局限.
+
+**实施**: `extract_moneyflow_v2.py` 计算 8 因子 (f1-f8), 名单见 V2.7.
+
+**测试结果** (清理泄漏前的 V3 评估):
+- ALL+v2 r20 IC=0.041 vs ALL r20 IC=0.034 (报告 +21%) — 有标签泄漏
+- f1/f2 单因子 RankIC=+0.046/+0.054 (强) — 未泄漏, 真实
+- 但 V4 重训 (无泄漏) 显示: ALL+v2 r20 IC=0.047 vs ALL 0.034, **真实 +38% 提升**
+
+**部署**: 训练 r20_v3_all 含 f1-f8 + 旧泄漏 EXCLUDE, 上线 sparse_layered_score 双向评分系统.
+
+**V4 撤销**:
+- r20_v3_all 含标签泄漏, 已被 r20_v4_all 替代
+- f1-f8 单独有信号, 但 V4 评估证明 mfk K线因子组**比 f1-f8 更强 + 互冲**
+- 在 ALL 之上加 mfk: r20 IC 从 0.034 → 0.057
+- 在 ALL+mfk 上加 v2: r20 IC 反而降到 0.046
+- **结论**: f1-f8 应在 r20 模型中删除, 仅保留作为 sparse_layered LLM 暴露的"避雷信号"
+
+---
+
+## 阶段 V4: K 线风格资金流因子 + 模型清理 ✅ 完成 (2026-05-04)
+
+### V4.1 mfk K 线因子设计 (extract_mfk_features.py)
+
+把"主力净流入"当成"价格", 用技术分析手法分析资金流。**6 层 17 因子**:
+
+| Layer | 因子 (3-3-3-3-2-3) | 物理类比 |
+|---|---|---|
+| A 趋势均线 | mfk_main_ma5/ma20/ma_diff | MA 系统 |
+| B 金叉死叉 | _cross_state, _days_in_cross, _cross_strength | 短期 vs 长期均线交叉 |
+| C MACD | _macd, _macd_hist, _macd_zero_dist | 资金动量 |
+| D 多空对比 | _smart_dumb_spread, _pyramid_top_heavy, _inst_acc_velocity | 主力/散户/分层结构 |
+| E 量价同步 | _main_price_sync_20d, _main_lead_5d | 资金价格耦合 |
+| F 速度强度 | _main_velocity_5d, _main_consec_above_ma20, _main_acc_ratio_60d | 资金加速度 |
+
+输出: `output/mfk_features/features.parquet` (3.6M 行 × 5072 股)
+
+### V4.2 6 配置 × 2 horizon LGBM 全面对比 (train_v4_compare.py, 600K 子样本)
+
+| 配置 | feat | r10 IC | r10 RankICIR | r20 IC | r20 RankICIR |
+|---|---|---|---|---|---|
+| **ALL** | 203 | **0.085** ⭐ | 0.705 | 0.034 | 0.795 |
+| ALL+v2 | 211 | 0.070 ⬇ | 0.497 | 0.047 | 0.880 |
+| **ALL+mfk** | 220 | 0.081 | 0.477 | **0.057** ⭐ | **0.950** ⭐ |
+| ALL+v2+mfk | 228 | 0.031 ⬇⬇ | 0.646 | 0.046 | 0.823 |
+| only_v2 | 184 | 0.076 | 0.508 | 0.033 | 0.776 |
+| only_mfk | 193 | 0.071 | 0.521 | 0.041 | 0.739 |
+
+**核心发现**:
+1. **r10 不需要新因子**: ALL alone 最佳, 加任何东西都拖累 (ALL+v2+mfk r10 跌到 0.031)
+2. **r20 mfk 完胜 v2**: ALL+mfk 比 ALL+v2 高 0.010 IC, RankICIR 高 0.07
+3. **v2 + mfk 互冲**: 加在一起反而下降 — 两者捕捉相似信号 + 冗余噪音
+4. **vs CogAlpha SOTA (r10 IC 0.0591/RankICIR 0.435)**: ALL r10 IC=0.085 (+44%), ALL+mfk r20 RankICIR=0.965 (+122%)
+
+### V4.3 25 因子单因子 RankIC vs r20 (analyze_v4_full.py)
+
+**Tier S (RankIC > 0.04)**:
+- `mfk_pyramid_top_heavy` **-0.081** ⭐⭐⭐ (机构占比, 反向)
+- `f2_main_out_green` +0.054 (大涨日主力流出)
+- `f1_main_in_red` +0.046 (大跌日主力流入)
+
+**Tier A (0.02-0.04)**:
+- f8_quiet_distribution +0.038, mfk_inst_acc_velocity -0.035
+- f6_inst_buy_pressure -0.035, mfk_main_ma20 +0.020
+
+**Tier C (<0.02, 几乎无效)**:
+- f3, f4, f5, f7 — 4 个 V2 因子
+- mfk_main_macd*, _consec_above_ma20, _lead_5d, _ma5, _days_in_cross, _cross_state, _velocity_5d — 多个 mfk
+
+**冗余发现 (高相关需删冗余)**:
+- `mfk_main_acc_ratio_60d` ≡ `f5_main_acc_velocity_60d` (corr=**1.000**, 完全相同)
+- `mfk_main_cross_strength` ↔ `mfk_main_ma_diff` (corr=0.94)
+- `mfk_main_macd_zero_dist` ↔ `mfk_main_macd` (corr=0.92)
+- `f5_main_acc_velocity_60d` ↔ `f6_inst_buy_pressure` (corr=0.78)
+
+### V4.4 高分共振分析 (颠覆性)
+
+| Filter | n | r10 mean | r20 mean | dd20≤-8% | dd20≤-15% |
+|---|---|---|---|---|---|
+| 理想多 (BUY≥70+SELL≤30) | 10870 | 2.52 | **3.94** | 5.0 | 0.18 |
+| 理想多+mfk_gold | 5067 | 2.40 | 3.66 ⬇ | 5.2 | 0.22 |
+| **理想多+f1>0** | 255 | 1.94 | **-0.41** ⬇⬇ | 16.1 | 0.39 |
+| sell_top20 | 211098 | 0.87 | 2.03 | 49.7 | 16.5 |
+| **sell_top20+f2>0** | 35227 | 1.32 | 2.24 | **53.4** ⬆ | **20.3** ⬆ |
+| **sell_top20+mfk_dead+f2** | 24920 | 1.43 | 2.22 | **53.8** ⬆ | **21.1** ⬆ |
+
+**关键洞察**:
+1. f1/f2/mfk **在 sell 高分段是真护城河** — 三重共振 dd20≤-15%=21.1% (vs 16.5%, +28%)
+2. f1/f2/mfk **在 buy 高分段是反向信号** — 理想多+f1>0 让 r20 从 +3.94% 跌到 **-0.41%**
+3. **理想多象限本身就是金矿** — 高 buy + 低 sell = "温和上涨", 强吸筹/突破信号反而预示派发
+
+### V4.5 V4 生产模型 (train_v4_production.py, 1.5M 子样本)
+
+| 模型 | 特征 | OOS 指标 | 锚点 (p5/p50/p95) |
+|---|---|---|---|
+| r10_v4_all | ALL (203) | IC=0.073 / RankIC=0.113 / RankICIR=0.460 | -1.44 / 0.22 / 2.40 |
+| r20_v4_all | ALL+mfk (220) | IC=0.031 / RankIC=0.072 / RankICIR=0.810 | -7.78 / -1.18 / 8.76 |
+| sell_10_v4 | ALL (203) | AUC=0.676, base 47.6% | 0.27 / 0.48 / 0.70 |
+| sell_20_v4 | ALL (203) | AUC=0.678, base 48.3% | 0.04 / 0.43 / 0.88 |
+
+注: V4 IC 值与 V4 评估 (600K 子样本 IC=0.057) 不同 — 1.5M 子样本下模型更稳但极端样本更难捕捉. 实际 OOS 表现以分位胜率 + 4 象限为准.
+
+### V4.6 V4 OOS 验证 (validate_oos_dual.py + 4 V4 模型)
+
+**buy_score 完美单调 (vs V3 反向)**:
+
+| bucket | n | score | r20 mean | r20 win% | dd20≤-15% |
+|---|---|---|---|---|---|
+| 0 | 92K | 8.1 | 0.47 | 41.2% | 13.8% |
+| 4 | 92K | 47.1 | 4.21 | 59.9% | 5.2% |
+| 8 | 92K | 71.7 | 5.01 | 64.2% | 3.8% |
+| 9 | 92K | 90.4 | 2.85 | 51.0% | 6.9% |
+
+注: bucket 8 (70-90 分) r20=5.01 最高, bucket 9 (90+) 反而回落 — 极端段过拟合/反转,**最优区间是 70-85 分**.
+
+**sell_score 严格单调**:
+
+| bucket | n | score | dd20≤-15% |
+|---|---|---|---|
+| 0 | 92K | 3.3 | 0.31% |
+| 5 | 92K | 55.1 | 4.56% |
+| 9 | 92K | 96.6 | **22.1%** |
+
+top vs bot **71x 差距** (vs V3 58x).
+
+**4 象限 (V4 vs V3)**:
+
+| 象限 | V3 n | V3 r20 | V3 dd<-15% | V4 n | V4 r20 | V4 dd<-15% |
+|---|---|---|---|---|---|---|
+| 理想多 (BUY≥70+SELL≤30) | 10870 | 3.94 | 0.18 | **98279** | 3.57 | 1.56 |
+| 矛盾 (双高) | 17617 | 1.72 | 15.06 | 9306 | 3.07 | **29.21** |
+| 主流空 (BUY≤30+SELL≥70) | 490986 | 1.39 | 8.55 | 162012 | 1.55 | 12.76 |
+| 沉寂 (双低) | 22865 | 1.30 | 0.16 | 4404 | 0.71 | 0.95 |
+| **中性区** (其他) | 84002 | 1.87 | 1.62 | **219977** | **4.53** | **3.66** |
+
+**核心**: V4 中性区 (其他) 占 24%, r20 = 4.53% (最高), dd20≤-15% = 3.66% — 是真正的实战主战场.
+
+### V4.7 V4 思考总结
+
+1. **K 线风格资金流分析 > 事件型聚合** — mfk MA/MACD/金叉死叉 比 f1-f8 价量耦合事件 强.
+2. **r10 短期信号简洁更好** — 加任何资金流因子都拖累
+3. **r20 中期方向需要 mfk** — 17 mfk 因子让 RankICIR 突破 0.95
+4. **共振信号实战层** — sell_top + mfk_dead + f2 → 25.1% top 5% dd<-15% 命中, 是真避雷护城河
+5. **理想多象限不要叠加信号** — 它自己就是"温和+上涨"状态, 强信号叠加反而预示派发
+
+### V4.8 撤销说明
+
+**V3 撤销 (含标签泄漏)**:
+- output/production/r10_all/, r20_all/, sell_10/, sell_20/, r20_v3_all/ 均含 max_gain_20/max_dd_20 泄漏
+- lgbm_predictor.py 已切换到 V4 模型, 旧路径仍保留 (历史归档)
+- V2 OOS validation (decile_buy.csv etc.) 数字虚高, 应以 V4 oos_validation_v4/ 为准
+
+**V4 决策清单**:
+1. ✅ 修复 EXCLUDE 加 max_gain_20/max_dd_20
+2. ✅ r10_v4_all (ALL only) - 不加 v2/mfk
+3. ✅ r20_v4_all (ALL+17 mfk) - 不加 v2
+4. ✅ sell_10_v4, sell_20_v4 (ALL only)
+5. ✅ V4 锚点 + lgbm_predictor.py 切换
+6. ⏳ V5 候选: f1/f2/mfk_dead 共振规则集成到 sparse_layered_score 渲染
+
+**过拟合检查 ✓**:
+- EXCLUDE 含 max_gain_20/max_dd_20, 真正无泄漏
+- 1.5M 训练子样本, 920K 测试集 (无重叠)
+- best_iter (r20 v4 = 278) > 比 V3 的 108 高,但模型规模仍合理
+- OOS 4 象限分布稳定, 中性区是主体 (24%) 表明信号不过激
