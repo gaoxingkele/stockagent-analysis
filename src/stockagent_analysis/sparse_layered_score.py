@@ -967,7 +967,7 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
         if regime_advice:
             lines.append(f"  · 系统适用性: {regime_advice}")
         lines.append("")
-    # v2 双向评分 (基于 r10/r20 ALL, IC 接近 SOTA)
+    # V4 双向评分 (r10_v4_all/r20_v4_all/sell_10_v4/sell_20_v4, 无标签泄漏)
     if dual and dual.get("ok"):
         bs = dual.get("buy_score", 50)
         ss = dual.get("sell_score", 50)
@@ -975,22 +975,59 @@ def render_for_llm_prompt(result: dict, max_active: int = 12) -> str:
         r20 = dual.get("r20_pred", 0)
         sp10 = dual.get("sell_10_prob", 0) * 100
         sp20 = dual.get("sell_20_prob", 0) * 100
-        # 买入档位
-        bs_label = ("强烈看多" if bs >= 75 else "看多" if bs >= 60 else
-                     "中性" if bs >= 45 else "看空" if bs >= 30 else "强烈看空")
-        ss_label = ("高风险" if ss >= 65 else "中等风险" if ss >= 45 else "低风险")
-        lines.append(f"### 🎯 v2 双向评分 (真实 IC 0.073, RankICIR 0.49)")
+        # buy_score 70-85 是最优区间 (V4 OOS 实证 bucket 8 r20=5.0%, bucket 9 跌到 2.85%)
+        if 70 <= bs <= 85:
+            bs_label = "看多 (最优区间)"
+        elif bs > 85:
+            bs_label = "极端高分 (注意反转)"
+        elif bs >= 60:
+            bs_label = "偏多"
+        elif bs >= 45:
+            bs_label = "中性"
+        elif bs >= 30:
+            bs_label = "偏空"
+        else:
+            bs_label = "强烈看空"
+        ss_label = ("极高风险" if ss >= 80 else "高风险" if ss >= 65 else
+                     "中等风险" if ss >= 45 else "低风险")
+        lines.append(f"### 🎯 V4 双向评分 (无泄漏, sell 71x lift)")
         lines.append(f"  📈 **买入分: {bs:.0f}/100** [{bs_label}] — r10预测 {r10:+.2f}%, r20预测 {r20:+.2f}%")
         lines.append(f"  📉 **卖出分: {ss:.0f}/100** [{ss_label}] — 10日跌破-5%概率 {sp10:.0f}%, 20日跌破-8%概率 {sp20:.0f}%")
-        # 信号一致性
-        if bs >= 65 and ss <= 35:
-            lines.append(f"  ✓ 信号一致看多 (买入分高+卖出分低)")
-        elif bs <= 35 and ss >= 65:
-            lines.append(f"  ✓ 信号一致看空 (买入分低+卖出分高)")
-        elif abs(bs - (100 - ss)) < 15:
-            lines.append(f"  · 信号一致性中等")
+
+        # ── V4 共振规则 + 4 象限分类 ──
+        # 拉取关键资金流因子 (用于共振判断)
+        f1 = features.get("f1_main_in_red") or 0  # 大跌日吸筹
+        f2 = features.get("f2_main_out_green") or 0  # 大涨日派发
+        mfk_cross = features.get("mfk_main_cross_state") or 0  # 主力 MA5-MA20 金叉态
+        mfk_pyr = features.get("mfk_pyramid_top_heavy") or 0.36  # 机构占比 (baseline ~0.36)
+
+        if bs >= 70 and ss <= 30:
+            lines.append(f"  ✅ **理想多 (BUY≥70 + SELL≤30)** — V4 OOS r20=3.57%, dd<-15% 仅 1.56%")
+            # 反信号警告
+            if f1 > 0.005:
+                lines.append(f"  ⚠ **反信号**: 同时有 f1>0 (大跌日主力流入), 历史 OOS r20 反而跌至 -0.41%, 谨慎追入")
+            if mfk_cross > 0:
+                lines.append(f"  · 注: mfk_gold (主力金叉) 在理想多段不增益 (实测略降)")
+        elif bs >= 70 and ss >= 70:
+            lines.append(f"  ❌ **矛盾段 (双高)** — V4 OOS dd<-15% 高达 29.2%, 必避")
+        elif bs <= 30 and ss >= 70:
+            lines.append(f"  📉 主流空 (BUY≤30+SELL≥70) — 主体 17.6%, 中等风险")
+        elif bs <= 30 and ss <= 30:
+            lines.append(f"  💤 沉寂段 (双低) — 收益弱 (r20=0.71%) 但极安全 (dd<-15% 0.95%)")
         else:
-            lines.append(f"  ⚠ 信号冲突 (买入与卖出评分不匹配, 谨慎决策)")
+            lines.append(f"  · 中性区 — V4 OOS 主战场 (24% 样本), r20=4.53% 最高")
+
+        # ── 强避雷共振 (sell_top + mfk_dead + f2 → dd<-15% 21.1%, +28%) ──
+        if ss >= 80:
+            extras_warn = []
+            if mfk_cross < 0:
+                extras_warn.append("mfk_dead (主力死叉)")
+            if f2 > 0.005:
+                extras_warn.append("f2>0 (大涨日主力派发)")
+            if mfk_pyr > 0.45:
+                extras_warn.append("机构占比偏高")
+            if extras_warn:
+                lines.append(f"  🚨 **强避雷共振**: 高 sell_score + {' + '.join(extras_warn)} → V4 OOS dd<-15% 命中率 21%+ (+28% lift)")
         lines.append("")
 
     # 买入评分 (传统规则推导, 保留兼容)
