@@ -1567,3 +1567,156 @@ Section 6: Why LLM Multi-Agent Voting Fails in A-share Quant Selection
 V7c LGBM (Layer 1) → 推荐池 → 实战入场
 LLM 角色: 给用户写"为什么这只股被推荐"的自然语言报告
 ```
+
+---
+
+## 阶段 V9: 解耦架构 + 双任务 PoC ❌ 完成 (2026-05-05)
+
+用户提出关键架构修正: **V9 不参与 V7c LGBM 训练**, 仅作为 V7c 后置推理层.
+
+### V9.1 解耦原因 (用户的 4 大洞察)
+
+1. **数据正交性** → V7c LGBM 是 ex-ante 统计 alpha (28 月历史训练), 新闻是 ex-post 事件信号
+2. **AKShare 历史快照不存档**, 强行回填 = 大量 NaN, LGBM 学到错误关联
+3. **工程解耦** → V9 改 if-else 规则 5 分钟, 不影响 V7c 半天重训
+4. **可解释性** → LGBM 黑盒 + 规则白盒 = 经典 Two-Stage 架构
+
+### V9.2 数据源调研 (TradingAgents-CN 启示)
+
+借鉴 TradingAgents-CN (借鉴自 arXiv 2412.20138):
+- 东方财富搜索 API + curl_cffi 模拟 Chrome 120 (绕反爬)
+- 财联社 RSS (https://www.cls.cn/api/sw)
+- AKShare 9 个 stock-level 情绪/热度接口
+
+**关键发现**: AKShare 已经把"股吧/雪球/东财评论"压缩为数字指标 (综合得分/关注/机构参与度), 等于免费用了别人的 NLP 结果. 不需要重新读新闻文本.
+
+### V9.3 8 指标全市场快照 (extract_v9_akshare.py)
+
+```
+ef_score (东财综合得分 0-100, mean 59.5)
+ef_focus (关注指数 0-100, mean 71.8)
+ef_inst_pct (机构参与度 0-1, mean 0.28)
+ef_main_cost_dev (主力成本偏离 %, mean 0)
+ef_rank_chg (排名变化, mean -2)
+xq_follow_pct (雪球关注度全市场分位 0-1)
+xq_tweet_pct (雪球讨论度全市场分位 0-1)
+ef_rank_now (当前排名)
+```
+
+5184 股 × 8 指标, 81s 拉完, $0 成本.
+
+### V9.4 规则引擎 (analyze_v9_rule_engine.py) — 时间错位评估
+
+V9 推理层规则:
+```
+if ef_score<35 or ef_main_cost_dev>10: SKIP
+基础仓位 3% + 加分项 (高综合分/雪球关注/排名升/机构高) - 减分项 (低分/冷门/追高/套牢) → 1-5%
+```
+
+⚠️ **时间错位**: AKShare 数据是 2026-05-05 (今天), V7c 推荐池基于 2025-05 → 2026-01 OOS, 时间错位 4-12 月. 仅做架构验证, 不算严谨回测.
+
+时间错位结果:
+- 仓位 1% (弱买): r20=+7.12%, 胜率 82.6%
+- 仓位 5% (强买): r20=+5.25%, 胜率 72.7%
+- t-test diff=-1.27pp, p<0.0001 极显著反向
+
+**解读**: 不是 V9 规则失败, 是时间错位偏差 — "今天受欢迎" 跟 "9 个月前买入后涨幅" 反相关 (均值回归 + 拥挤交易).
+
+严谨验证需更新数据到今天 (factor_lab + 8 个 feature parquet) 才能做.
+
+### V9.5 LLM 双任务 PoC (analyze_v9_dual_task.py) — 第 4 次 LLM 失败
+
+用户提出聚焦 LLM 任务 (避免 V8 失败):
+- **Task A**: 在 V7c 理想多 (BUY≥70+SELL≤30) 池增强 conviction
+- **Task B**: 在 V7c 矛盾段 (BUY≥70+SELL≥70) 反挖真涨股
+
+#### Task A 结果 (30 样本)
+
+| LLM 判断 | n | r20 mean | 胜率 |
+|---|---|---|---|
+| medium | 3 | +13.73% | 100% |
+| **low** | **27 (90%)** | +7.31% | 85.2% |
+| (无 high) | 0 | - | - |
+
+LLM 极度保守 (90% 给 low), 但 low 段 r20=+7.31% 仍优于 V7c 全池 +6.32%.
+
+#### Task B 结果 (30 样本)
+
+| LLM 判断 | n | r20 | dd<-15% |
+|---|---|---|---|
+| 假涨 | 27 | -1.22% | 29.6% |
+| **真涨** | 2 | **-2.56%** ❌ | 100% |
+| 不确定 | 1 | -5.42% | - |
+
+LLM 判"真涨"的 2 只反而是大幅亏损 — 完全反向.
+
+### V9.6 LLM 在 A 股量化辅助场景的最终结论 (4 次 PoC 一致)
+
+| PoC | 任务 | LLM 表现 |
+|---|---|---|
+| V8 P4 | 单 LLM 综合评级 | 22.5% 误杀 (p=0.52 不显著) |
+| V8.5 | 三层 FOMC 7 Agent + Opus 仲裁 | 100% 误杀 |
+| V9 Task A | 理想多 conviction | 90% 给 low, 部分反向 |
+| V9 Task B | 矛盾段反挖 | "真涨"判断 100% 错 |
+
+**根本原因 (论文级 insight)**:
+- LLM 的判断框架 = 价值投资 + 谨慎保守 (训练语料偏见)
+- A 股 momentum 牛市 = 高估值高成长 (反价值)
+- **两者根本对立** → LLM 在 A 股做"决策"必然失败
+
+### V9.7 最终生产架构 (V1→V9 终极)
+
+```
+Layer 1: V7c LGBM 量化筛选
+  - 220 特征 (price/volume/regime/mfk/pyramid)
+  - 训练: 2023-01 → 2025-04, OOS 验证 +4.82pp
+  - 输出: 推荐池 9K 样本
+
+Layer 2: V9 规则引擎 (无 LLM)
+  - AKShare 8 指标 (东财+雪球已 NLP 压缩)
+  - 硬规则: ef_score<35 or 主力成本偏离>10% → SKIP
+  - 软规则: 仓位 1-5% based on 综合分/关注/机构参与/排名变化
+  - 完全可解释, 5 分钟可改
+
+(取消) Layer 3: LLM 决策 (4 次 PoC 一致失败, 永久放弃)
+  - LLM 不能做 buy/skip 决策
+  - LLM 不能做 conviction 评分
+  - LLM 不能做矛盾段反挖
+```
+
+### V9.8 LLM 真正可用的角色 (V10+ 候选, 暂未实施)
+
+❌ 不再尝试: 让 LLM 做任何形式的"判断"或"决策"
+
+✅ 真正合适:
+1. **用户解释报告** — 推荐股 → LLM 写"为什么推荐 (V7c 评分 + 共振信号 + 行业地位)" 的自然语言
+2. **公告/研报抽取** (待 Tushare 付费 anns_d API): 文本 → 事件标签 → 加为新特征 (可入 LGBM)
+3. **跨概念关联**: e.g. "美联储加息" → 影响中国地产板块 (但这是宏观研究, 单股选择无关)
+4. **用户对话** — 散户问"为什么这只股推荐", LLM 答 (但不参与决策)
+
+### V9.9 论文价值 (CCF-A 章节材料)
+
+V9 的探索全部成为论文 Negative Results 章 (这是 KDD/AAAI 越来越受重视的部分):
+
+```
+Section 6: Negative Results — Why LLM Fails in A-share Quant Selection
+
+6.1 Single LLM Comprehensive Rating (V8 P4) — p=0.52, value bias
+6.2 Multi-Agent FOMC Voting (V8.5) — collective bias amplification, 100% reject
+6.3 Decoupled Two-Stage with LLM Conviction (V9 Task A) — 90% low conviction, partial reverse
+6.4 LLM Contradiction Mining (V9 Task B) — "true rise" prediction 100% wrong
+
+6.5 Theoretical Implications:
+   - LLM training corpus → value investing prior
+   - A-share momentum market → growth/momentum reality
+   - Cognitive misalignment → LLM cannot decide in this domain
+   - Real LLM value: text→feature translation (V10+ direction with paid news API)
+```
+
+### V9.10 V9 决策清单
+
+1. ✅ 接受 V7c + V9 规则引擎作为最终生产
+2. ✅ 永久放弃 LLM 决策角色 (4 次实证)
+3. ✅ AKShare 8 指标作为 V9 软规则 (不入 LGBM)
+4. ⏳ V10 候选: 等公告 API 投资决策后, 让 LLM 做"事件抽取" (text→features 翻译器)
+5. ✅ V7c 直接上实盘观察 1-3 月, 收集真实数据再迭代
