@@ -1846,3 +1846,70 @@ Solution: Use LLM only as text→feature translator (NOT decider).
    - per-ticker SQLite db (避免并发竞争)
 
 V11 可借鉴 #1 (TradingMemoryLog) 用于实战累积决策日志, 但 LLM 不参与决策, 仅记录 V7c+V9 的判断 + 后续真实结果.
+
+### V10.10 撤回 "LLM 视觉失败" 结论 (重要修正, 2026-05-06)
+
+**用户提出关键质疑**: 检查 LLM 实际 reasoning 后, 发现 V10 LLM 视觉**真的看到了图**:
+
+```
+600020.SH: "日线下行趋势明确, 均线空头排列, 周线二次冲高回落"
+           "MACD零轴下方弱势, KDJ低位钝化"
+301413.SZ: "周线顶部M头+日线放量冲高后MACD顶背离"
+           "突破后巨量长上影线, 典型诱多派发形态"
+603893.SH: "周线双底突破+日线缩量洗盘后放量突破"
+           "短期涨幅过大需警惕回调"
+```
+
+**这是真正的专业技术分析**, 不是泛泛回答.
+
+**修正后真正结论**:
+- LLM 视觉**能力强** (key_pattern 描述专业准确)
+- LLM 视觉判断"涨/跌方向"在 V7c 推荐池上**反向**:
+  - 理想多 + LLM reject (100%): r20=+5.05% (LLM 认为弱形态但实际仍涨)
+  - 矛盾段 + LLM "真涨" (10): r20=-3.11% (LLM 看到上涨形态但实际诱多)
+  - 矛盾段 + LLM "假涨" (15): r20=-1.03% (LLM 看到派发但实际反而稳)
+
+**深层原因 (需要 V11 验证)**:
+- V10 prompt 强迫 LLM 给二元 confirm/reject + 给 V7c 上下文 → 触发 RLHF 谨慎偏见
+- LLM 看图能力没问题, **是 prompt design 错了**
+- V11 改用"多场景概率分布 + 盲测 + 长历史" 方法重测
+
+### V10.11 GitHub LLM 读 K 线最佳实践研究 (2026-05-06)
+
+调研 5 个高价值参考:
+
+1. **[tradermonty/claude-trading-skills](https://github.com/tradermonty/claude-trading-skills) ⭐⭐⭐**
+   - `technical-analyst` skill: 5 域分析 (趋势/支撑阻力/MA/成交量/形态) + 2-4 概率加权场景
+   - 不让 LLM 给二元决策, 让它输出概率分布 + invalidation level
+   - 10 节 markdown 报告模板
+
+2. **[Vespa314/chan.py](https://github.com/Vespa314/chan.py)** + **[waditu/czsc](https://github.com/waditu/czsc)**
+   - 缠论本地算法库
+   - 分型/笔/中枢/三类买卖点
+
+3. **ElliottAgents (MDPI 2024)**
+   - 7 Agent 协同 + Fibonacci + Elliott Wave 5 推动 3 修正
+
+4. **[HKUDS/Vibe-Trading](https://github.com/HKUDS/Vibe-Trading)**
+   - 74 modular skills (candlestick/ichimoku/elliott/smc)
+
+5. **arxiv 2506.16813** "Integrating Traditional Technical Analysis with AI"
+   - Multi-Agent + 传统 TA 融合
+
+**核心 insight**: LLM 视觉读 K 线**最佳做法是输出概率分布 (非二元决策), 给 5 域系统分析, 多时间框架对照**.
+
+### V10.12 V11 设计 — 5 大改进 (将于 2026-05-06 实施)
+
+| 改进 | V10 错误 | V11 正确 |
+|---|---|---|
+| 1. 决策格式 | 强迫二元 confirm/reject | **多场景概率分布** (Bull/Base/Bear/Alt) |
+| 2. 时间框架 | 日 60 + 周 60 (太短) | **月 240 + 周 60 + 日 60** (3 时间框架) |
+| 3. 上下文 | 给 LLM "V7c 已推荐" → 触发反方思维 | **盲测**, 不给 V7c 信息 |
+| 4. 专业框架 | 泛泛"形态/趋势" | 显式 **缠论 + Elliott + Dow** 视角 |
+| 5. 输出解析 | 裸 json.loads (markdown fence 失败) | **Pydantic** + 鲁棒解析 |
+
+V11 评估维度:
+- 校准度 (bull_prob=0.5 段实际胜率应接近 50%)
+- 集中度 (bull_prob>=0.7 vs <0.3 段 r20 差异)
+- 多场景命中率 (invalidation level 失效率)
+- V7c 4 象限交叉 (V7c 推荐 + bull_prob 高 vs 低 段)
