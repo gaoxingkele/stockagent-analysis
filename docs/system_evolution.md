@@ -1720,3 +1720,129 @@ Section 6: Negative Results — Why LLM Fails in A-share Quant Selection
 3. ✅ AKShare 8 指标作为 V9 软规则 (不入 LGBM)
 4. ⏳ V10 候选: 等公告 API 投资决策后, 让 LLM 做"事件抽取" (text→features 翻译器)
 5. ✅ V7c 直接上实盘观察 1-3 月, 收集真实数据再迭代
+
+---
+
+## 阶段 V10: 视觉 K 线 LLM PoC ❌ 完成 (2026-05-06) — 第 5 次 LLM 失败
+
+### V10.1 设计动机 (用户洞察)
+
+V8/V9 LLM 失败被诊断为"数据重叠 LGBM". 用户提出 **LLM 真正比较优势**:
+- 多模态视觉 (LGBM 看不到 K 线图形态)
+- NLP 文本理解 (LGBM 不能读新闻)
+
+V10 决定测试: **真正的视觉 LLM** (双图日线+周线) 是否成功?
+
+### V10.2 实施
+
+复用现有 `chart_generator.generate_kline_chart()` (16x11 in, 130 dpi):
+- 主图蜡烛 + MA5/10/20/60/120/250 + 布林带 + 趋势线
+- 成交量 + MACD + RSI + KDJ
+
+**严格无未来信息**: `read_tdx()` 硬过滤 `if di > end_date: continue`
+- 日线: 最近 60 个交易日
+- 周线: 最近 60 个交易周
+
+50 样本 (25 理想多 + 25 矛盾段, V7c OOS 推荐池抽样).
+
+LLM: Sonnet 4.6 视觉, 双图同时传入, 4 象限场景化 prompt.
+
+### V10.3 结果 — 100% 失败
+
+#### Task A 理想多 (25 样本)
+
+| LLM 判断 | n | r20 mean | 胜率 |
+|---|---|---|---|
+| **reject** | **25 (100%)** | +5.05% | 68% |
+
+Sonnet 4.6 视觉 **100% 拒绝**所有 V7c 推荐, 但这些股实际仍 r20=+5.05% (盈利).
+
+#### Task B 矛盾段 (25 样本)
+
+| LLM 判断 | n | r20 | dd<-15% |
+|---|---|---|---|
+| **真涨** | 10 | **-3.11%** | 30% |
+| 假涨 | 15 | -1.03% | 33% |
+
+LLM 标"真涨"的反而亏 -2.09pp 更多 (p=0.71 不显著但反向).
+
+成本: $0.097, 50 样本完整跑完.
+
+### V10.4 5 次 LLM 失败的统一规律 (论文级 insight)
+
+| PoC | 输入模态 | 任务 | 结果 |
+|---|---|---|---|
+| V8 P4 | 文本 (数字) | 综合评级 | p=0.52 不显著 |
+| V8.5 FOMC | 文本+7 Agent投票 | 仲裁决策 | 100% 误杀 |
+| V9-A | 文本+AKShare | conviction | 90% low, 反向 |
+| V9-B | 文本+AKShare | 矛盾反挖 | "真涨" 100% 错 |
+| **V10-A** | **🆕 视觉双图** | 理想多确认 | **100% reject** |
+| **V10-B** | **🆕 视觉双图** | 矛盾段解谜 | "真涨"比"假涨"还差 |
+
+### V10.5 根本原因升级 (推翻之前理解)
+
+❌ **之前以为**: LLM 看相同数字跟 LGBM 重叠 → V8/V9 失败
+✅ **V10 推翻**: V10 视觉用 LGBM 看不到的图, 依然失败 → **数据模态不是根因**
+
+#### 真正根因 (新结论)
+
+| LLM 判断框架 (训练偏见) | A 股 momentum 牛市现实 |
+|---|---|
+| 价值投资 (PE 高就警惕) | 反价值, 拥抱高 PE 高成长 |
+| 风险厌恶 (倾向 reject/skip) | 高 beta wins, 风险偏好 |
+| 形态识别 "超买" 警告 | momentum 市超买后还涨 |
+| RLHF 谨慎一致性 | 短期跟随 momentum |
+
+**两个判断框架根本对立** — 这是 cognitive misalignment, 跟数据模态/输入种类无关.
+
+### V10.6 LLM 在 A 股决策上是 "无信息" (非反向信号)
+
+V10-A 的 reject 25 股 r20=+5.05% (vs V7c 平均 +6.31%):
+- 不正确 (reject 的还在涨)
+- 不反向 (跟着 LLM 反做也只是赚 5%)
+- **LLM 决策 ≈ 随机噪音**
+
+### V10.7 论文新结论 (CCF-A 强 contribution)
+
+```
+Section 6: Why LLM Cannot Decide in A-share Quant Selection
+           (5 Failure Modes Across Input Modalities)
+
+Convergent Failure Pattern (V8.P4 + V8.5 + V9.A + V9.B + V10):
+- 5 different LLM application modes, all fail
+- Both text and image input fail equally  ⭐ NEW V10
+- Root cause: LLM judgment framework, NOT input modality
+- Cognitive misalignment between LLM training distribution
+  and A-share market dynamics is irreducible.
+
+Solution: Use LLM only as text→feature translator (NOT decider).
+```
+
+### V10.8 V10 决策清单
+
+1. ✅ 视觉 LLM 也彻底失败, 跟文本 LLM 一致 (5 次累积证据)
+2. ✅ V7c + V9 规则引擎是最终架构 (无 LLM 决策)
+3. ✅ V10 PoC 完整保留作为论文 Section 6.5 反例 (输入模态不是根因)
+4. ✅ 100 张 K 线 PNG 保留 (output/v10/charts/), 后续可作 paper figure
+5. ❌ 永久放弃 LLM 任何形式的"判断/决策/评分"
+6. ✅ LLM 唯一有用的角色: 用户对话解释 + 公告/研报抽取 (text→features)
+
+### V10.9 借鉴 TradingAgents 原版的 3 个新模式 (V11+ 候选)
+
+近期拉取更新发现 TradingAgents (arXiv 2412.20138) 有 3 个值得借鉴模式:
+
+1. **TradingMemoryLog** ⭐⭐⭐
+   - append-only markdown 决策日志, 跨股+跨时间
+   - HTML 注释作硬分隔符
+   - pending → resolved 状态机, 加 reflection
+
+2. **Pydantic Structured Output** ⭐⭐
+   - Buy/Overweight/Hold/Underweight/Sell 5 tier
+   - Native structured: OpenAI json_schema, Anthropic tool-use
+   - 解决 V10 重跑前的 markdown fence 解析问题
+
+3. **LangGraph SqliteSaver Checkpoint** ⭐
+   - 长流程崩溃恢复
+   - per-ticker SQLite db (避免并发竞争)
+
+V11 可借鉴 #1 (TradingMemoryLog) 用于实战累积决策日志, 但 LLM 不参与决策, 仅记录 V7c+V9 的判断 + 后续真实结果.
