@@ -1446,3 +1446,124 @@ LLM skip 的 10 个样本理由 **几乎全部都是 "PE 极高 / 估值过高"*
 1. 非结构化数据抽取 (公告事件、研报观点、新闻情绪)
 2. 跨语种/跨行业的概念关联 (e.g. "美联储加息" → 中国地产板块影响)
 3. 用户对话理解 (对答式选股助手, 不是预测)
+
+---
+
+## 阶段 V8.5 (FOMC 三层架构): 集体偏见放大 — PoC 否定 ❌ 完成 (2026-05-05)
+
+### V8.5.1 三层架构设计
+
+借鉴 Fed FOMC 投票机制 + Multi-Agent 辩论:
+```
+Layer 1: V7c LGBM 量化筛选 (本地, 免费)
+Layer 2: 7 票投票 (1 V7c + 6 LLM Agent) + dot plot + Sonnet 4.6 视觉解读
+Layer 3: Opus 4.7 仲裁 (最终决策 + 仓位建议)
+```
+
+**6 LLM Agent**:
+- TrendMomentum / CapitalLiquidity / SentimentFlow / Contrast (DeepSeek V3.2)
+- Fundamental / RiskGuard (Sonnet 4.6)
+
+模型升级: claude-opus-4-6 → **claude-opus-4-7** (Cloubic 验证调通)
+
+### V8.5.2 PoC 实验 (analyze_v8_3layer_poc.py)
+
+- 48 样本 (V7c 推荐池跨 8 月分散, 计划 50 实际可用 48)
+- 总耗时: 33 分钟 (1978s)
+- 成本: **$2.54** (远低于 $21 预算)
+
+### V8.5.3 毁灭级结果
+
+| 配置 | n | r20 mean |
+|---|---|---|
+| V7c baseline (推荐池) | 48 | **+7.12%** ⭐ |
+| V7c + 7 票多数 (n_buy≥4) | **0** | nan |
+| V7c + 7 票强共识 (n_buy≥6) | **0** | nan |
+| V7c + Vision LLM buy | **0** | nan |
+| **V7c + Layer 3 Opus 4.7 buy** | **0** | nan |
+
+**所有 48 只股票, Layer 3 Opus 4.7 100% 拒绝**.
+
+但这些股票:
+- 实际平均 r20 = +7.12% (V7c 真 alpha 表现)
+- 远超沪深300 同期 +2.19%
+
+**LLM 体系把所有真 alpha 票全部误杀**.
+
+### V8.5.4 数据观察 (典型样本)
+
+```
+[11/48] 603177.SH 20250625 n_buy=1/7 vision=skip final=skip
+[12/48] 002186.SZ 20250625 n_buy=1/7 vision=skip final=skip
+[15/48] 001326.SZ 20250724 n_buy=2/7 vision=skip final=skip
+... 几乎所有: n_buy=1/7, final=skip
+```
+
+**唯一投 buy 的就是 V7c LGBM 量化票, 6 个 LLM 全部 skip**.
+
+### V8.5.5 颠覆性发现: 集体偏见放大 (Collective Bias Amplification)
+
+**论文级 insight**: "Multi-Agent voting fails when all agents share training bias."
+
+| 期望 vs 现实 | |
+|---|---|
+| 期望 | 7 个不同视角投票降低单 LLM 偏见 |
+| 现实 | 6 个 LLM 都来自相同 Cloubic 路由 (DeepSeek + Sonnet), 都受**互联网价值投资文献**训练 |
+| 结果 | 6 Agent 集体喊 "PE 太高 / 估值贵 / skip", **Layer 3 Opus 4.7 跟随被洗脑** |
+| 教训 | **集体不是中和偏见, 而是放大偏见** |
+
+类比: Solomon Asch 从众实验的 LLM 版本 — 群体认知偏差 (Groupthink) 在 ML 时代复现.
+
+### V8.5.6 vs V8 (单 LLM P4 PoC) 对比
+
+| 维度 | P4 单 LLM PoC | V8.5 三层 Multi-Agent | 结论 |
+|---|---|---|---|
+| skip 率 | 22.5% | **100%** ❌ | Multi-Agent **更糟** |
+| 价值偏见 | 部分激活 | **完全激活** | 集体放大 |
+| 共识机制 | 无 | 7 票 + Vision + Opus | 共识反成败因 |
+| 成本 | $0.016 | $2.54 | 高 158x |
+| 实际 alpha 损失 | 误杀 22.5% | 误杀 **100%** | 灾难性 |
+
+### V8.5.7 论文反例章节材料 (CCF-A)
+
+这是 V1→V8 全程**最具学术价值的反例**, 直接成为论文 Negative Results 章:
+
+```
+Section 6: Why LLM Multi-Agent Voting Fails in A-share Quant Selection
+
+6.1 Single LLM Comprehensive Rating (P4)
+    200 samples, p=0.52, value bias detected
+6.2 Multi-Agent FOMC Voting (V8.5)
+    48 samples, Opus 4.7 arbiter rejected 100% of true alpha picks
+    Collective bias amplification, not mitigation
+6.3 Implications
+    - Same training corpus → same biases (DeepSeek + Sonnet 共享 RLHF)
+    - Multi-agent ≠ multi-perspective when training source is correlated
+    - Real LLM value: extracting orthogonal info from unstructured data
+    - User-LLM dialogue ≠ LLM decision-making in quant context
+```
+
+### V8.5.8 LLM 应用最终结论 (V1→V8.5)
+
+❌ **不擅长**:
+- 单/多 LLM 综合评级 (P4 + V8.5 双重否定)
+- A 股 momentum 市价值判断 (训练语料偏见)
+- 灾难性事件预警 (看相同数据)
+- 投票决策 (集体偏见放大)
+
+✅ **真正可能有用**:
+- 非结构化数据抽取 (公告/研报/新闻) — V9+ 待探索 (需付费数据)
+- 用户对话解释 (推荐池 → LLM 解释为什么推荐, 不是 LLM 决策)
+- 用户教育 (帮散户理解量化逻辑)
+
+### V8.5.9 V8.5 决策
+
+✅ **保留 V7c 作为最终主推荐** (无 LLM 介入)
+❌ **彻底放弃 LLM 决策角色** — 不再尝试任何 LLM 投票/仲裁机制
+✅ **LLM 改为辅助角色**: 推荐池 → LLM 写解释报告 (用户友好), 但仓位决策完全交给 V7c
+
+**最终生产架构** (扁平):
+```
+V7c LGBM (Layer 1) → 推荐池 → 实战入场
+LLM 角色: 给用户写"为什么这只股被推荐"的自然语言报告
+```
