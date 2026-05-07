@@ -32,7 +32,7 @@ OUT_DIR = ROOT / "output" / "cogalpha_features"
 OUT_DIR.mkdir(exist_ok=True)
 TDX = os.getenv("TDX_DIR", "D:/tdx")
 START = "20230101"
-END   = "20260126"
+END   = "20260420"
 
 
 def read_tdx(market, code):
