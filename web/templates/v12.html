@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% block title %}V12 评分中心{% endblock %}
+
+{% block content %}
+<div x-data="v12App()" x-init="init()" class="space-y-6">
+
+  <!-- Header + 日期选择 + 触发按钮 -->
+  <div class="card p-5 flex flex-wrap items-center gap-4 justify-between">
+    <div>
+      <div class="text-lg font-semibold">V12 级联评分中心</div>
+      <div class="text-xs text-text-muted mt-1">
+        Layer 1 V7c LGBM 主推 (5 铁律) + Layer 2 V11 LLM 视觉救出矛盾段
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <label class="text-sm text-text-muted">日期</label>
+      <select x-model="date" @change="loadRecommend()" class="text-sm">
+        <template x-for="d in dates" :key="d">
+          <option :value="d" x-text="formatDate(d)"></option>
+        </template>
+      </select>
+      <button class="btn btn-ghost" @click="runMarket()" :disabled="busy.market">
+        <span x-show="!busy.market">🧮 跑全市场推理</span>
+        <span x-show="busy.market" class="text-text-muted">推理中...</span>
+        <span class="text-text-dim text-xs">5 pt</span>
+      </button>
+      <button class="btn btn-primary" @click="runLlmFilter()" :disabled="busy.llm">
+        <span x-show="!busy.llm">👁 跑 LLM 视觉过滤</span>
+        <span x-show="busy.llm" class="text-text-muted">过滤中...</span>
+        <span class="text-text-dim text-xs">1 pt/股</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 进度面板 (有任务运行时显示) -->
+  <template x-if="activeProgress.show">
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div class="font-medium" x-text="activeProgress.title"></div>
+        <div class="text-xs text-text-muted">
+          <span x-text="activeProgress.phase"></span>
+          <span class="mx-2">·</span>
+          <span x-text="activeProgress.percent + '%'"></span>
+          <span x-show="activeProgress.elapsed" class="mx-2">·</span>
+          <span x-show="activeProgress.elapsed" x-text="activeProgress.elapsed + 's'"></span>
+        </div>
+      </div>
+      <div class="progress mb-3"><div :style="`width: ${activeProgress.percent}%`"></div></div>
+      <div class="text-sm text-text" x-text="activeProgress.message"></div>
+
+      <!-- 详细事件日志 -->
+      <div class="mt-4 max-h-64 overflow-y-auto border border-line rounded p-3 bg-bg space-y-1">
+        <template x-for="(ev, i) in activeProgress.events" :key="i">
+          <div class="text-xs flex gap-2 items-start">
+            <span class="text-text-dim shrink-0 w-16" x-text="ev.ts"></span>
+            <span class="text-accent shrink-0 w-20" x-text="ev.phase"></span>
+            <span class="text-text-muted shrink-0 w-10 text-right" x-text="ev.percent + '%'"></span>
+            <span class="text-text" x-text="ev.message"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
+
+  <!-- 推荐统计 -->
+  <template x-if="recommend">
+    <div class="grid grid-cols-4 gap-3">
+      <div class="card p-4">
+        <div class="text-xs text-text-muted mb-1">V12 总数</div>
+        <div class="text-2xl font-semibold" x-text="recommend.total"></div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-text-muted mb-1">V7c 主推</div>
+        <div class="text-2xl font-semibold text-success" x-text="recommend.main_count"></div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-text-muted mb-1">V11 救出</div>
+        <div class="text-2xl font-semibold text-accent" x-text="recommend.rescued_count"></div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-text-muted mb-1">最高 r20_pred</div>
+        <div class="text-2xl font-semibold text-warn"
+             x-text="recommend.items[0] ? '+' + recommend.items[0].r20_pred.toFixed(2) + '%' : '—'"></div>
+      </div>
+    </div>
+  </template>
+
+  <!-- V12 推荐表 -->
+  <template x-if="recommend && recommend.items.length">
+    <div class="card overflow-hidden">
+      <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+        <div class="font-medium">V12 推荐 (按 r20_pred 降序)</div>
+        <div class="flex gap-2 text-xs">
+          <button class="btn btn-ghost text-xs py-1" @click="filterMode='all'"
+                  :class="filterMode==='all' ? 'border-accent text-accent' : ''">全部</button>
+          <button class="btn btn-ghost text-xs py-1" @click="filterMode='main'"
+                  :class="filterMode==='main' ? 'border-success text-success' : ''">仅 V7c 主推</button>
+          <button class="btn btn-ghost text-xs py-1" @click="filterMode='rescued'"
+                  :class="filterMode==='rescued' ? 'border-accent text-accent' : ''">仅 V11 救出</button>
+        </div>
+      </div>
+      <table class="w-full text-sm">
+        <thead class="text-xs text-text-muted bg-bg">
+          <tr>
+            <th class="px-3 py-2 text-left">#</th>
+            <th class="px-3 py-2 text-left">代码</th>
+            <th class="px-3 py-2 text-left">行业</th>
+            <th class="px-3 py-2 text-right">buy</th>
+            <th class="px-3 py-2 text-right">sell</th>
+            <th class="px-3 py-2 text-right">r20_pred</th>
+            <th class="px-3 py-2 text-center">象限</th>
+            <th class="px-3 py-2 text-center">来源</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="r in filteredItems" :key="r.ts_code">
+            <tr class="border-t border-line hover:bg-bg-hover">
+              <td class="px-3 py-2 text-text-dim" x-text="r.rank"></td>
+              <td class="px-3 py-2 font-mono">
+                <a :href="`/stock/${r.ts_code}/history`" class="hover:text-accent" x-text="r.ts_code"></a>
+              </td>
+              <td class="px-3 py-2 text-text-muted" x-text="r.industry || '—'"></td>
+              <td class="px-3 py-2 text-right" x-text="r.buy_score.toFixed(1)"></td>
+              <td class="px-3 py-2 text-right"
+                  :class="r.sell_score < 30 ? 'text-success' : (r.sell_score >= 70 ? 'text-danger' : 'text-warn')"
+                  x-text="r.sell_score.toFixed(1)"></td>
+              <td class="px-3 py-2 text-right text-warn"
+                  x-text="(r.r20_pred >= 0 ? '+' : '') + r.r20_pred.toFixed(2) + '%'"></td>
+              <td class="px-3 py-2 text-center">
+                <span class="badge" :class="quadrantClass(r.quadrant)" x-text="r.quadrant"></span>
+              </td>
+              <td class="px-3 py-2 text-center text-xs">
+                <span class="badge"
+                      :class="r.v12_source === 'V7c-main' ? 'badge-success' : 'badge-accent'"
+                      x-text="r.v12_source === 'V7c-main' ? 'V7c 主推' : 'V11 救'"></span>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </template>
+
+  <template x-if="recommend && recommend.items.length === 0">
+    <div class="card p-8 text-center text-text-muted">
+      <div class="text-sm">该日期无 V12 推荐数据</div>
+      <div class="text-xs mt-2">点击上方"跑全市场推理"按钮启动</div>
+    </div>
+  </template>
+
+  <!-- 单股查询 -->
+  <div class="card p-5">
+    <div class="font-medium mb-3">单股 V12 实时评分</div>
+    <div class="flex gap-2 items-center">
+      <input x-model="symbolQuery" placeholder="如: 600779.SH" class="text-sm w-48 font-mono">
+      <button class="btn btn-ghost" @click="scoreOne()">查询</button>
+      <span x-show="symbolQuery && !singleResult && !busy.score" class="text-xs text-text-muted">输入完整代码</span>
+      <span x-show="busy.score" class="text-xs text-text-muted">查询中(~5s)...</span>
+    </div>
+    <template x-if="singleResult">
+      <div class="mt-4 grid grid-cols-4 gap-3 text-sm">
+        <div><div class="text-xs text-text-muted">buy</div><div x-text="singleResult.buy_score.toFixed(1)"></div></div>
+        <div><div class="text-xs text-text-muted">sell</div><div x-text="singleResult.sell_score.toFixed(1)"></div></div>
+        <div><div class="text-xs text-text-muted">r20_pred</div><div class="text-warn" x-text="(singleResult.r20_pred>=0?'+':'')+singleResult.r20_pred.toFixed(2)+'%'"></div></div>
+        <div><div class="text-xs text-text-muted">象限</div><div><span class="badge" :class="quadrantClass(singleResult.quadrant)" x-text="singleResult.quadrant"></span></div></div>
+        <div><div class="text-xs text-text-muted">V7c 推荐</div><div x-text="singleResult.v7c_recommend ? '✓' : '×'"></div></div>
+        <div><div class="text-xs text-text-muted">pyr_velocity_20_60</div><div x-text="singleResult.pyr_velocity_20_60?.toFixed(4) || '—'"></div></div>
+        <div><div class="text-xs text-text-muted">f1_neg1</div><div x-text="singleResult.f1_neg1?.toFixed(4) || '—'"></div></div>
+        <div><div class="text-xs text-text-muted">f2_pos1</div><div x-text="singleResult.f2_pos1?.toFixed(4) || '—'"></div></div>
+      </div>
+    </template>
+  </div>
+</div>
+
+<script>
+function v12App() {
+  return {
+    date: '',
+    dates: [],
+    recommend: null,
+    busy: { market: false, llm: false, score: false },
+    filterMode: 'all',
+    symbolQuery: '',
+    singleResult: null,
+    activeProgress: {
+      show: false, title: '', phase: '', percent: 0, message: '', elapsed: 0,
+      events: [], _startTs: null, _es: null,
+    },
+
+    async init() {
+      await this.loadDates();
+      if (this.dates.length) {
+        this.date = this.dates[this.dates.length - 1];
+        await this.loadRecommend();
+      }
+    },
+
+    async loadDates() {
+      const r = await api('/api/v12/dates'); if (!r) return;
+      const j = await r.json();
+      this.dates = j.dates || [];
+    },
+
+    async loadRecommend() {
+      if (!this.date) return;
+      this.recommend = null;
+      const r = await fetch(`/api/v12/recommend?date=${this.date}`, {credentials:'include'});
+      if (r.status === 404) { this.recommend = {date: this.date, total:0, main_count:0, rescued_count:0, items:[]}; return; }
+      this.recommend = await r.json();
+    },
+
+    formatDate(d) { return `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`; },
+
+    quadrantClass(q) {
+      return ({
+        '理想多': 'badge-success', '矛盾段': 'badge-warn',
+        '主流空': 'badge-danger', '沉寂': 'badge-accent', '中性区': 'badge-accent',
+      })[q] || 'badge-accent';
+    },
+
+    get filteredItems() {
+      if (!this.recommend) return [];
+      if (this.filterMode === 'main') return this.recommend.items.filter(x => x.v12_source === 'V7c-main');
+      if (this.filterMode === 'rescued') return this.recommend.items.filter(x => x.v12_source !== 'V7c-main');
+      return this.recommend.items;
+    },
+
+    _attachSse(resultId, title, onDone) {
+      this.activeProgress.show = true;
+      this.activeProgress.title = title;
+      this.activeProgress.phase = 'connecting';
+      this.activeProgress.percent = 0;
+      this.activeProgress.message = '建立 SSE 连接...';
+      this.activeProgress.events = [];
+      this.activeProgress._startTs = Date.now();
+      this.activeProgress.elapsed = 0;
+
+      // elapsed 更新计时器
+      const tick = setInterval(() => {
+        if (!this.activeProgress.show) { clearInterval(tick); return; }
+        this.activeProgress.elapsed = Math.floor((Date.now() - this.activeProgress._startTs) / 1000);
+      }, 1000);
+
+      const es = new EventSource(`/api/results/${resultId}/stream`, {withCredentials: true});
+      this.activeProgress._es = es;
+
+      const handleProgress = (data) => {
+        this.activeProgress.phase = data.phase || '';
+        this.activeProgress.percent = data.percent || 0;
+        this.activeProgress.message = data.message || '';
+        const tsStr = (data.ts || '').slice(11, 19);
+        this.activeProgress.events.push({
+          ts: tsStr, phase: data.phase || '', percent: data.percent || 0,
+          message: data.message || '',
+        });
+        // 自动滚动到最新
+        this.$nextTick(() => {
+          const log = document.querySelector('.max-h-64.overflow-y-auto');
+          if (log) log.scrollTop = log.scrollHeight;
+        });
+      };
+
+      es.addEventListener('progress', e => { try { handleProgress(JSON.parse(e.data)); } catch{} });
+      es.addEventListener('done', e => {
+        try {
+          const data = JSON.parse(e.data);
+          this.activeProgress.message = `✓ 完成 (${this.activeProgress.elapsed}s)`;
+          this.activeProgress.percent = 100;
+          this.activeProgress.events.push({
+            ts: (data.ts || '').slice(11,19), phase: 'done', percent: 100,
+            message: `完成: final_score=${data.final_score} extra=${JSON.stringify(data.extra||{})}`,
+          });
+        } catch{}
+        es.close();
+        clearInterval(tick);
+        if (onDone) onDone();
+      });
+      es.addEventListener('failed', e => {
+        try {
+          const data = JSON.parse(e.data);
+          this.activeProgress.message = `✗ 失败: ${data.error || '未知'} (退款 ${data.refunded || 0} pt)`;
+        } catch{}
+        es.close();
+        clearInterval(tick);
+        if (onDone) onDone();
+      });
+      es.onerror = () => { /* 自动重连; SSE 默认行为 */ };
+    },
+
+    async runMarket() {
+      if (this.busy.market) return;
+      this.busy.market = true;
+      try {
+        const r = await api('/api/v12/jobs/market', {
+          method: 'POST', body: JSON.stringify({date: this.date})
+        });
+        if (!r.ok) { alert('启动失败: ' + (await r.text()).slice(0, 200)); return; }
+        const j = await r.json();
+        this._attachSse(j.result_id, `V12 全市场推理 (${this.formatDate(this.date)})`,
+                        async () => {
+                          this.busy.market = false;
+                          await this.loadDates();
+                          await this.loadRecommend();
+                        });
+      } catch(e) { alert('错误: ' + e.message); this.busy.market = false; }
+    },
+
+    async runLlmFilter() {
+      if (this.busy.llm) return;
+      if (!confirm(`将对 ${this.date} 全部矛盾段股票跑 LLM 视觉过滤, 1pt/股 (~$0.015/股 LLM 成本). 继续?`)) return;
+      this.busy.llm = true;
+      try {
+        const r = await api('/api/v12/jobs/llm-filter', {
+          method: 'POST', body: JSON.stringify({date: this.date})
+        });
+        if (!r.ok) { alert('启动失败: ' + (await r.text()).slice(0, 200)); this.busy.llm = false; return; }
+        const j = await r.json();
+        this._attachSse(j.result_id, `V11 LLM 视觉过滤 (${this.formatDate(this.date)})`,
+                        async () => {
+                          this.busy.llm = false;
+                          await this.loadRecommend();
+                        });
+      } catch(e) { alert('错误: ' + e.message); this.busy.llm = false; }
+    },
+
+    async scoreOne() {
+      const sym = this.symbolQuery.trim().toUpperCase();
+      if (!sym) return;
+      this.busy.score = true; this.singleResult = null;
+      try {
+        const r = await fetch(`/api/v12/score/${sym}?date=${this.date}`, {credentials:'include'});
+        if (!r.ok) { alert(`查询失败: ${(await r.text()).slice(0,200)}`); return; }
+        this.singleResult = await r.json();
+      } finally { this.busy.score = false; }
+    },
+  };
+}
+</script>
+{% endblock %}

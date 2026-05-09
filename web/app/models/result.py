@@ -15,6 +15,8 @@ from ..core.db import Base, TimestampMixin
 class AnalysisType(str, enum.Enum):
     full = "full"               # LLM 全量评分(20pt 或 缓存 10pt)
     quant_only = "quant_only"   # 仅量化评分(1pt)
+    v12_market = "v12_market"   # V12 全市场 LGBM 推理(5pt)
+    v12_llm_filter = "v12_llm_filter"  # V12 矛盾段 LLM 视觉过滤 (按股 1pt + LLM 成本)
 
 
 class ResultStatus(str, enum.Enum):
@@ -73,6 +75,7 @@ class AnalysisResult(Base, TimestampMixin):
     expert_scores_json: Mapped[dict | None] = mapped_column(JSON)        # full only
     score_components_json: Mapped[dict | None] = mapped_column(JSON)     # full only
     quant_components_json: Mapped[dict | None] = mapped_column(JSON)     # 两类都有(quant_only 必有)
+    extra_data_json: Mapped[dict | None] = mapped_column(JSON)           # V12 用 (推荐快照/LLM 视觉结果)
 
     # 错误处理
     error_message: Mapped[str | None] = mapped_column(Text)

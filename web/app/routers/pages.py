@@ -113,6 +113,17 @@ async def stock_history_page(
     return _render(request, "stock_history.html", user, lang, symbol=symbol.upper())
 
 
+@router.get("/v12", response_class=HTMLResponse)
+async def v12_page(
+    request: Request,
+    user: Annotated[User | None, Depends(get_current_user_optional)],
+    lang: Annotated[str, Depends(get_lang)],
+):
+    if user is None:
+        return RedirectResponse("/login")
+    return _render(request, "v12.html", user, lang)
+
+
 @router.get("/share", response_class=HTMLResponse)
 async def share_page(
     request: Request,

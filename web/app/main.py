@@ -59,11 +59,12 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=str(settings.web_root / "static")), name="static")
 
 # 路由注册
-from .routers import admin, admin_logs, analysis, auth, healthcheck, i18n, pages, users   # noqa: E402
+from .routers import admin, admin_logs, analysis, auth, healthcheck, i18n, pages, users, v12   # noqa: E402
 app.include_router(auth.router)
 app.include_router(i18n.router)
 app.include_router(users.router)
 app.include_router(analysis.router)
+app.include_router(v12.router)
 app.include_router(healthcheck.router)
 app.include_router(admin.router)
 app.include_router(admin_logs.router)
