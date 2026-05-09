@@ -102,7 +102,7 @@ def load_oos():
 
 def predict_model(df: pd.DataFrame, model_name: str) -> np.ndarray:
     d = PROD_DIR / model_name
-    booster = lgb.Booster(model_file=str(d / "classifier.txt"))
+    booster = lgb.Booster(model_str=(d / "classifier.txt").read_text(encoding="utf-8"))
     meta = json.loads((d / "feature_meta.json").read_text(encoding="utf-8"))
     feat_cols = meta["feature_cols"]
     industry_map = meta.get("industry_map", {})

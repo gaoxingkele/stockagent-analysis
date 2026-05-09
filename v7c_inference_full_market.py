@@ -34,7 +34,7 @@ def _map_anchored(v, p5, p50, p95):
 
 def predict_model(df, name):
     d = PROD_DIR / name
-    booster = lgb.Booster(model_file=str(d / "classifier.txt"))
+    booster = lgb.Booster(model_str=(d / "classifier.txt").read_text(encoding="utf-8"))
     meta = json.loads((d / "feature_meta.json").read_text(encoding="utf-8"))
     feat_cols = meta["feature_cols"]
     industry_map = meta.get("industry_map", {})

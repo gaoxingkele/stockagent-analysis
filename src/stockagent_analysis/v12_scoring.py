@@ -78,10 +78,11 @@ class V12Scorer:
 
     # ──────── 模型加载 ────────
     def _load_models(self):
+        # 用 model_str 而非 model_file 避开 LightGBM 4.x + Python 3.14 + Windows 的 race
         if self._models: return
         for name in ["r10_v4_all", "r20_v4_all", "sell_10_v6", "sell_20_v6"]:
             d = self.prod_dir / name
-            booster = lgb.Booster(model_file=str(d / "classifier.txt"))
+            booster = lgb.Booster(model_str=(d / "classifier.txt").read_text(encoding="utf-8"))
             meta = json.loads((d / "feature_meta.json").read_text(encoding="utf-8"))
             self._models[name] = (booster, meta)
 
