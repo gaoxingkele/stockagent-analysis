@@ -110,6 +110,8 @@
             <th class="px-3 py-2 text-right">r20_pred</th>
             <th class="px-3 py-2 text-center">象限</th>
             <th class="px-3 py-2 text-center">来源</th>
+            <th class="px-3 py-2 text-center" title="MA60 横盘度: 过去 20 日 |close-MA60|/MA60<5% 比例">横盘%</th>
+            <th class="px-3 py-2 text-center" title="僵尸区: 横盘≥90% 且 MA60 走平/下">僵尸</th>
           </tr>
         </thead>
         <tbody>
@@ -133,6 +135,14 @@
                 <span class="badge"
                       :class="r.v12_source === 'V7c-main' ? 'badge-success' : 'badge-accent'"
                       x-text="r.v12_source === 'V7c-main' ? 'V7c 主推' : 'V11 救'"></span>
+              </td>
+              <td class="px-3 py-2 text-center text-xs"
+                  x-text="r.zombie_days_pct !== null && r.zombie_days_pct !== undefined ? (r.zombie_days_pct*100).toFixed(0)+'%' : '—'"
+                  :class="(r.zombie_days_pct ?? 0) >= 0.9 ? 'text-danger font-medium' : 'text-text-muted'"></td>
+              <td class="px-3 py-2 text-center text-xs">
+                <span x-show="r.is_zombie === true" class="badge badge-danger">🚨</span>
+                <span x-show="r.is_zombie === false" class="text-text-dim">✓</span>
+                <span x-show="r.is_zombie === null || r.is_zombie === undefined" class="text-text-dim">—</span>
               </td>
             </tr>
           </template>

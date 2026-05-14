@@ -35,6 +35,10 @@ class V12RecommendItem(BaseModel):
     sell_20_v6_prob: Optional[float] = None
     quadrant: str
     v12_source: str   # V7c-main / V11-rescued-contradiction
+    # V7c 6 铁律新增 zombie 字段
+    is_zombie: Optional[bool] = None
+    zombie_days_pct: Optional[float] = None
+    ma60_slope_short: Optional[float] = None
 
 
 class V12RecommendResponse(BaseModel):

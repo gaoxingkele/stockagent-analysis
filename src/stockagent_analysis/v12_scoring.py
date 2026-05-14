@@ -234,7 +234,10 @@ class V12Scorer:
         s20s = _map_anchored(df["sell_20_v6_prob"].values, *SELL20_V6)
         df["sell_score"] = 0.5 * s10s + 0.5 * s20s
 
-        if cb: cb("classify", 92, "4 象限分类 + 5 铁律...", None)
+        if cb: cb("zombie_filter", 90, "计算僵尸区过滤 (第 6 铁律)...", None)
+        df = self._enrich_zombie(df, date)
+
+        if cb: cb("classify", 92, "4 象限分类 + 6 铁律...", None)
         df["quadrant"] = [classify_quadrant(b, s) for b, s in
                            zip(df["buy_score"], df["sell_score"])]
         df["v7c_recommend"] = self._apply_v7c_rules(df)
@@ -271,19 +274,66 @@ class V12Scorer:
         }
 
     def _apply_v7c_rules(self, df: pd.DataFrame) -> pd.Series:
-        """V7c 5 条铁律 (除仓位约束)."""
+        """V7c 6 条铁律 (除仓位约束).
+
+        新增第 6 条 (来自量化访谈共识, 88% 交易员实践):
+        - is_zombie = False (回避横盘僵尸区)
+          僵尸区: 过去 20 日 |close-MA60|/MA60<5% 比例≥90% AND MA60 斜率<=0.003
+        """
         if "pyr_velocity_20_60" in df.columns:
             p35 = df["pyr_velocity_20_60"].quantile(0.35)
         else:
             return ((df["buy_score"] >= 70) & (df["sell_score"] <= 30))
-        if "f1_neg1" not in df.columns or "f2_pos1" not in df.columns:
-            return ((df["buy_score"] >= 70) & (df["buy_score"] <= 85) &
-                    (df["sell_score"] <= 30) & (df["pyr_velocity_20_60"] < p35))
-        return ((df["buy_score"] >= 70) & (df["buy_score"] <= 85) &
+        base = ((df["buy_score"] >= 70) & (df["buy_score"] <= 85) &
                 (df["sell_score"] <= 30) &
-                (df["pyr_velocity_20_60"] < p35) &
-                (df["f1_neg1"].abs() < 0.005) &
-                (df["f2_pos1"].abs() < 0.005))
+                (df["pyr_velocity_20_60"] < p35))
+        if "f1_neg1" in df.columns and "f2_pos1" in df.columns:
+            base = base & (df["f1_neg1"].abs() < 0.005) & (df["f2_pos1"].abs() < 0.005)
+        # 第 6 铁律: zombie 过滤
+        if "is_zombie" in df.columns:
+            base = base & (~df["is_zombie"].fillna(False).astype(bool))
+        return base
+
+    def _enrich_zombie(self, df: pd.DataFrame, date: str) -> pd.DataFrame:
+        """对全市场加 is_zombie 列 (来自 daily cache 计算 MA60 横盘度).
+
+        缓存: 同一日只算一次 (放进 _factor_cache).
+        """
+        from .zombie_filter import compute_zombie_factors
+
+        daily_cache_dir = self.root / "output" / "tushare_cache" / "daily"
+        files = sorted(daily_cache_dir.glob("*.parquet"))
+        end_int = int(date)
+        # 只读最近 200 天足够算 MA60 + 20 日 lookback
+        recent_files = [f for f in files if int(f.stem) <= end_int][-200:]
+        parts = [pd.read_parquet(f) for f in recent_files]
+        big = pd.concat(parts, ignore_index=True)
+        big["trade_date"] = big["trade_date"].astype(str)
+        big = big.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
+
+        zombie_rows = []
+        for ts, g in big.groupby("ts_code"):
+            if len(g) < 80:
+                zombie_rows.append({"ts_code": ts, "is_zombie": False,
+                                     "zombie_days_pct": 0, "ma60_slope_short": 0})
+                continue
+            z = compute_zombie_factors(g)
+            last = z[z["trade_date"] == date]
+            if last.empty:
+                last = z.tail(1)
+            r = last.iloc[0]
+            zombie_rows.append({
+                "ts_code": ts,
+                "is_zombie": bool(r["is_zombie"]),
+                "zombie_days_pct": float(r["zombie_days_pct"]) if pd.notna(r["zombie_days_pct"]) else 0,
+                "ma60_slope_short": float(r["ma60_slope_short"]) if pd.notna(r["ma60_slope_short"]) else 0,
+            })
+        zdf = pd.DataFrame(zombie_rows)
+        # merge 到 df, 覆盖同名列
+        for col in ["is_zombie", "zombie_days_pct", "ma60_slope_short"]:
+            if col in df.columns:
+                df = df.drop(columns=[col])
+        return df.merge(zdf, on="ts_code", how="left")
 
     def list_available_dates(self) -> list[str]:
         """从 ext2 parquet 文件的 trade_date 列扫描可用日期."""

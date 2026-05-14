@@ -17,7 +17,7 @@ OUT = ROOT / "output" / "tushare_cache" / "moneyflow"
 OUT.mkdir(parents=True, exist_ok=True)
 
 START = "20260421"
-END   = "20260508"
+END   = "20260512"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                     datefmt="%H:%M:%S")

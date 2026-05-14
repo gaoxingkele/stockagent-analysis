@@ -107,6 +107,9 @@ def read_recommend(date: str) -> dict:
             "sell_20_v6_prob": float(r["sell_20_v6_prob"]) if pd.notna(r.get("sell_20_v6_prob")) else None,
             "quadrant": str(r.get("quadrant", "")),
             "v12_source": str(r.get("v12_source", "V7c-main")),
+            "is_zombie": bool(r["is_zombie"]) if pd.notna(r.get("is_zombie")) else None,
+            "zombie_days_pct": float(r["zombie_days_pct"]) if pd.notna(r.get("zombie_days_pct")) else None,
+            "ma60_slope_short": float(r["ma60_slope_short"]) if pd.notna(r.get("ma60_slope_short")) else None,
         })
     main = sum(1 for x in items if x["v12_source"] == "V7c-main")
     rescued = len(items) - main
@@ -281,7 +284,7 @@ async def _do_v12_market(factory, result_id: int, date: str):
                 from stockagent_analysis.v12_scoring import V12Scorer
                 scorer = V12Scorer.get(settings.project_root)
                 df = scorer.score_market(date, cb=cb)
-                # 保存 csv (兼容现有路径)
+                # 保存 csv (兼容现有路径), 包含 zombie 字段
                 out_dir = settings.project_root / "output" / "v12_inference"
                 out_dir.mkdir(parents=True, exist_ok=True)
                 main_pool = df[df["v7c_recommend"] == True].copy()
