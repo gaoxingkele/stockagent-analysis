@@ -23,9 +23,9 @@ EXT_DIR     = ROOT / "output" / "factor_lab_3y" / "factor_groups_extension"
 EXT_DIR.mkdir(exist_ok=True)
 
 START      = "20240101"
-END        = "20260513"
+END        = "20260514"
 NEW_START  = "20260421"
-NEW_END    = "20260513"
+NEW_END    = "20260514"
 
 
 def load_all_daily():

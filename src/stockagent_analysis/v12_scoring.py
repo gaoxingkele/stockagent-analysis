@@ -27,9 +27,11 @@ import pandas as pd
 
 ProgressCb = Optional[Callable[[str, int, str, Optional[dict]], None]]
 
-# 锚点 (与 v7c_inference_0508.py 一致)
-R10_ANCHOR = (-1.44, 0.22, 2.40)
-R20_ANCHOR = (-7.78, -1.18, 8.76)
+# 锚点 (V15 重训 2026-05-15, 训练区间 20230101-20260213)
+# V4 旧锚: r10(-1.44,0.22,2.40) / r20(-7.78,-1.18,8.76)
+R10_ANCHOR = (0.02, 0.69, 1.82)
+R20_ANCHOR = (-4.45, 1.99, 13.19)
+# sell 模型已屏蔽 (用户决策 2026-05-15), 锚点保留兼容旧代码
 SELL10_V6 = (0.18, 0.48, 0.78)
 SELL20_V6 = (0.05, 0.43, 0.87)
 
@@ -79,8 +81,10 @@ class V12Scorer:
     # ──────── 模型加载 ────────
     def _load_models(self):
         # 用 model_str 而非 model_file 避开 LightGBM 4.x + Python 3.14 + Windows 的 race
+        # 2026-05-15: 切到 V15 (r10/r20 重训, IC 提升 2-12x), sell 已屏蔽
         if self._models: return
-        for name in ["r10_v4_all", "r20_v4_all", "sell_10_v6", "sell_20_v6"]:
+        # r10/r20: V15; sell_10/sell_20: 保留 V6 (虽然不用但 v12 推理路径仍读)
+        for name in ["r10_v15_all", "r20_v15_all", "sell_10_v6", "sell_20_v6"]:
             d = self.prod_dir / name
             booster = lgb.Booster(model_str=(d / "classifier.txt").read_text(encoding="utf-8"))
             meta = json.loads((d / "feature_meta.json").read_text(encoding="utf-8"))
@@ -219,10 +223,10 @@ class V12Scorer:
         if cb: cb("init", 0, f"启动 V12 全市场推理 {date}", None)
         df = self.load_factors_for_date(date, cb=cb)
 
-        if cb: cb("predict", 75, "LightGBM 4 模型推理...", {"n_stocks": len(df)})
+        if cb: cb("predict", 75, "LightGBM 4 模型推理 (V15 r10/r20 + V6 sell)...", {"n_stocks": len(df)})
         df = df.copy()
-        df["r10_pred"] = self.predict_one(df, "r10_v4_all")
-        df["r20_pred"] = self.predict_one(df, "r20_v4_all")
+        df["r10_pred"] = self.predict_one(df, "r10_v15_all")
+        df["r20_pred"] = self.predict_one(df, "r20_v15_all")
         df["sell_10_v6_prob"] = self.predict_one(df, "sell_10_v6")
         df["sell_20_v6_prob"] = self.predict_one(df, "sell_20_v6")
 
@@ -276,16 +280,23 @@ class V12Scorer:
     def _apply_v7c_rules(self, df: pd.DataFrame) -> pd.Series:
         """V7c 6 条铁律 (除仓位约束).
 
-        新增第 6 条 (来自量化访谈共识, 88% 交易员实践):
-        - is_zombie = False (回避横盘僵尸区)
-          僵尸区: 过去 20 日 |close-MA60|/MA60<5% 比例≥90% AND MA60 斜率<=0.003
+        2026-05-15 调整: 屏蔽 sell_score ≤ 30 这条 (派发判断翻车率高,
+        0508→0514 实测被 sell 标记的"派发"股反而是大涨王: 普冉+33% / 澜起+26% / 长川+15%).
+
+        现行铁律 (5 条, 编号保留):
+        1. buy_score ∈ [70, 85]
+        2. (已屏蔽) sell_score ≤ 30
+        3. pyr_velocity_20_60 < p35
+        4. |f1_neg1| < 0.005
+        5. |f2_pos1| < 0.005
+        6. NOT is_zombie  (横盘 ≥90% + MA60 走平/下)
         """
         if "pyr_velocity_20_60" in df.columns:
             p35 = df["pyr_velocity_20_60"].quantile(0.35)
         else:
-            return ((df["buy_score"] >= 70) & (df["sell_score"] <= 30))
+            return ((df["buy_score"] >= 70))
+        # 屏蔽 sell_score ≤ 30
         base = ((df["buy_score"] >= 70) & (df["buy_score"] <= 85) &
-                (df["sell_score"] <= 30) &
                 (df["pyr_velocity_20_60"] < p35))
         if "f1_neg1" in df.columns and "f2_pos1" in df.columns:
             base = base & (df["f1_neg1"].abs() < 0.005) & (df["f2_pos1"].abs() < 0.005)
