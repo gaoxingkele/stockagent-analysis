@@ -245,16 +245,25 @@ class V12Scorer:
         if cb: cb("policy_heat", 90, "加载政策面热度 (LLM 央视分析)...", None)
         df = self._enrich_policy(df, date, cb)
 
+        if cb: cb("regime_monitor", 91, "Regime 监控 + 仓位建议...", None)
+        regime_info = self._get_regime_info(date)
+
         if cb: cb("classify", 92, "4 象限分类 + 6 铁律...", None)
         df["quadrant"] = [classify_quadrant(b, s) for b, s in
                            zip(df["buy_score"], df["sell_score"])]
         df["v7c_recommend"] = self._apply_v7c_rules(df)
 
+        # Regime 仓位建议 (作为 df.attrs 而非每行列, 仓位是全局)
+        df.attrs["regime_info"] = regime_info
+
         n_main = int(df["v7c_recommend"].sum())
         n_contra = int((df["quadrant"] == "矛盾段").sum())
+        pos_ratio = regime_info.get("position_ratio", 1.0)
         if cb: cb("done", 100,
-                  f"完成: V7c 主推 {n_main} 股, 矛盾段 {n_contra} 股待 LLM 反挖",
-                  {"main": n_main, "contradiction": n_contra, "total": len(df)})
+                  f"完成: V7c 主推 {n_main} 股, 矛盾段 {n_contra} 股, "
+                  f"建议仓位 {pos_ratio*100:.0f}% ({regime_info.get('dominant_regime_3d','?')})",
+                  {"main": n_main, "contradiction": n_contra, "total": len(df),
+                   "position_ratio": pos_ratio, "regime": regime_info.get("dominant_regime_3d")})
         return df
 
     def score_stock(self, ts_code: str, date: str) -> dict:
@@ -349,6 +358,15 @@ class V12Scorer:
             if col in df.columns:
                 df = df.drop(columns=[col])
         return df.merge(zdf, on="ts_code", how="left")
+
+    def _get_regime_info(self, date: str) -> dict:
+        """Regime 监控 + 仓位建议."""
+        try:
+            from .regime_monitor import RegimeMonitor
+            return RegimeMonitor.get_position_ratio(date)
+        except Exception as e:
+            return {"position_ratio": 1.0, "current_regime": "unknown",
+                     "triggers": [], "error": str(e)}
 
     def _enrich_policy(self, df: pd.DataFrame, date: str, cb: ProgressCb = None) -> pd.DataFrame:
         """加载当日政策面 LLM 分析结果, 给每股加 policy_benefit + policy_heat_score 字段."""
