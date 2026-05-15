@@ -256,6 +256,19 @@ class V12Scorer:
         # 行业分散硬约束 (单行业 ≤ 30%)
         df = self.apply_industry_diversification(df, cap=0.30)
 
+        # 池子分类 (1.4): 每股按优先级分配到唯一池
+        if cb: cb("pool_classify", 94, "池子分类 (6 实战池)...", None)
+        # 先 merge stock_basic name (排除 ST 用)
+        try:
+            basic_p = self.root / "output" / "tushare_cache" / "stock_basic.parquet"
+            if basic_p.exists() and "name" not in df.columns:
+                basic = pd.read_parquet(basic_p)[["ts_code", "name"]]
+                df = df.merge(basic, on="ts_code", how="left")
+        except Exception:
+            pass
+        from .pool_classifier import assign_all
+        df = assign_all(df)
+
         # Regime 仓位建议 (作为 df.attrs 而非每行列, 仓位是全局)
         df.attrs["regime_info"] = regime_info
 
