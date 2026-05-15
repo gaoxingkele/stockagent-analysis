@@ -238,8 +238,11 @@ class V12Scorer:
         s20s = _map_anchored(df["sell_20_v6_prob"].values, *SELL20_V6)
         df["sell_score"] = 0.5 * s10s + 0.5 * s20s
 
-        if cb: cb("zombie_filter", 90, "计算僵尸区过滤 (第 6 铁律)...", None)
+        if cb: cb("zombie_filter", 88, "计算僵尸区过滤 (第 6 铁律)...", None)
         df = self._enrich_zombie(df, date)
+
+        if cb: cb("policy_heat", 90, "加载政策面热度 (LLM 央视分析)...", None)
+        df = self._enrich_policy(df, date, cb)
 
         if cb: cb("classify", 92, "4 象限分类 + 6 铁律...", None)
         df["quadrant"] = [classify_quadrant(b, s) for b, s in
@@ -345,6 +348,37 @@ class V12Scorer:
             if col in df.columns:
                 df = df.drop(columns=[col])
         return df.merge(zdf, on="ts_code", how="left")
+
+    def _enrich_policy(self, df: pd.DataFrame, date: str, cb: ProgressCb = None) -> pd.DataFrame:
+        """加载当日政策面 LLM 分析结果, 给每股加 policy_benefit + policy_heat_score 字段."""
+        import json
+        policy_p = self.root / "output" / "news_sentiment" / f"cctv_{date}.json"
+        if not policy_p.exists():
+            df["policy_benefit"] = False
+            df["policy_heat_score"] = 0.0
+            df["policy_theme"] = ""
+            return df
+        try:
+            data = json.loads(policy_p.read_text(encoding="utf-8"))
+        except Exception:
+            df["policy_benefit"] = False
+            df["policy_heat_score"] = 0.0
+            df["policy_theme"] = ""
+            return df
+        # 板块 -> 热度分 + 主题
+        sector_to_heat = {}
+        sector_to_theme = {}
+        for t in data.get("themes", []):
+            heat = float(t.get("heat_score", 0))
+            topic = str(t.get("topic", ""))[:30]
+            for s in t.get("benefit_sectors", []):
+                if heat > sector_to_heat.get(s, 0):
+                    sector_to_heat[s] = heat
+                    sector_to_theme[s] = topic
+        df["policy_heat_score"] = df["industry"].fillna("").map(sector_to_heat).fillna(0.0)
+        df["policy_theme"] = df["industry"].fillna("").map(sector_to_theme).fillna("")
+        df["policy_benefit"] = df["policy_heat_score"] >= 70
+        return df
 
     def list_available_dates(self) -> list[str]:
         """从 ext2 parquet 文件的 trade_date 列扫描可用日期."""
