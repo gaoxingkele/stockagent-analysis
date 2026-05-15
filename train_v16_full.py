@@ -37,11 +37,19 @@ def train_regressor_full(name, df, feat_cols, industries, y_col,
                                          categories=industries.categories).codes
     feat_cols = list(feat_cols)
     if "industry_id" not in feat_cols: feat_cols.append("industry_id")
-    if len(df) > train_subsample:
-        df = df.sample(n=train_subsample, random_state=42).reset_index(drop=True)
 
-    # 内部 90/10 split for early stopping
-    train, val = train_test_split(df, test_size=0.1, random_state=42)
+    # 时序 split: 取最后 10% 交易日作 val (避免 random_split time leakage)
+    df = df.sort_values("trade_date")
+    unique_dates = sorted(df["trade_date"].unique())
+    cutoff = unique_dates[int(len(unique_dates) * 0.9)]
+    train_full = df[df["trade_date"] < cutoff]
+    val = df[df["trade_date"] >= cutoff]
+    print(f"  [{name}] 时序 split: train_end={cutoff[:-1]}xx, val_start={cutoff}", flush=True)
+
+    if len(train_full) > train_subsample:
+        train = train_full.sample(n=train_subsample, random_state=42).reset_index(drop=True)
+    else:
+        train = train_full.reset_index(drop=True)
     print(f"  [{name}] train={len(train):,} val={len(val):,} feat={len(feat_cols)}", flush=True)
 
     X_train = train[feat_cols].astype("float32"); y_train = train[y_col].astype("float32")
