@@ -269,6 +269,12 @@ class V12Scorer:
         from .pool_classifier import assign_all
         df = assign_all(df)
 
+        # 仓位计算 (1.3 Kelly): 每股 position_size (考虑 regime 减仓)
+        if cb: cb("position_sizing", 96, "Kelly 仓位计算...", None)
+        from .position_manager import calc_positions_batch
+        rp = regime_info.get("position_ratio", 1.0)
+        df = calc_positions_batch(df, total_portfolio=1.0, regime_position_ratio=rp)
+
         # Regime 仓位建议 (作为 df.attrs 而非每行列, 仓位是全局)
         df.attrs["regime_info"] = regime_info
 
