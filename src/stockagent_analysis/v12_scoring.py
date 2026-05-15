@@ -253,6 +253,9 @@ class V12Scorer:
                            zip(df["buy_score"], df["sell_score"])]
         df["v7c_recommend"] = self._apply_v7c_rules(df)
 
+        # 行业分散硬约束 (单行业 ≤ 30%)
+        df = self.apply_industry_diversification(df, cap=0.30)
+
         # Regime 仓位建议 (作为 df.attrs 而非每行列, 仓位是全局)
         df.attrs["regime_info"] = regime_info
 
@@ -289,6 +292,35 @@ class V12Scorer:
             "f1_neg1": float(r["f1_neg1"]) if "f1_neg1" in r and pd.notna(r["f1_neg1"]) else None,
             "f2_pos1": float(r["f2_pos1"]) if "f2_pos1" in r and pd.notna(r["f2_pos1"]) else None,
         }
+
+    @staticmethod
+    def apply_industry_diversification(df: pd.DataFrame,
+                                         target_n: int = 30,
+                                         cap: float = 0.30) -> pd.DataFrame:
+        """对 V7c 主推按行业 cap 过滤, 避免单一板块过度集中.
+
+        逻辑 (按最终持仓约 target_n 只为基数):
+          - max_per_industry = max(2, int(target_n × cap))
+          - 默认 target_n=30, cap=0.30 → 单行业 max 9 只
+          - 按 r20_pred 降序遍历 V7c 主推, 超上限的同行业股跳过
+          - 加新字段 v7c_recommend_diversified (bool)
+        """
+        df = df.copy()
+        df["v7c_recommend_diversified"] = False
+        main = df[df["v7c_recommend"] == True].sort_values("r20_pred", ascending=False)
+        if len(main) == 0:
+            return df
+        max_per_ind = max(2, int(target_n * cap))
+        counts: dict[str, int] = {}
+        keep_idx = []
+        for idx, row in main.iterrows():
+            ind = str(row.get("industry") or "unknown")
+            if counts.get(ind, 0) >= max_per_ind:
+                continue
+            counts[ind] = counts.get(ind, 0) + 1
+            keep_idx.append(idx)
+        df.loc[keep_idx, "v7c_recommend_diversified"] = True
+        return df
 
     def _apply_v7c_rules(self, df: pd.DataFrame) -> pd.Series:
         """V7c 6 条铁律 (除仓位约束).
