@@ -18,7 +18,7 @@ OUT = ROOT / "output" / "tushare_cache" / "daily"
 OUT.mkdir(parents=True, exist_ok=True)
 
 START = "20240101"
-END   = "20260514"
+END   = "20260515"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                     datefmt="%H:%M:%S")
