@@ -99,31 +99,28 @@ def assign_pool(row: pd.Series, percentiles: Optional[dict] = None) -> Optional[
         and _safe_get(row, "buy_score") > 60):
         return "pool5_policy_wave"
 
-    # 池 7-9: 多窗口共识 (用 r5/r10/r20 相对差异, r5 推理分布窄但相对位置仍有用)
-    name = str(row.get("name") or "")
-    is_st = "ST" in name.upper() or "*ST" in name
-    buy_r5 = _safe_get(row, "buy_r5_score", default=None)
-    buy_r10 = _safe_get(row, "buy_r10_score", default=None)
-    buy_r20 = _safe_get(row, "buy_r20_score", default=None)
-    if buy_r5 is not None and buy_r10 is not None and buy_r20 is not None and not is_st:
-        gap_r5_r20 = buy_r20 - buy_r5   # >0: r20 比 r5 强 (长强短弱); <0: 反之
-
-        # 池 7: 三层共识金字塔 (r5+r10+r20 全部高) ★ 最强信号
-        if (buy_r5 >= 65 and buy_r10 >= 65 and buy_r20 >= 65
-            and not row.get("is_zombie", False)):
-            return "pool7_pyramid_strong"
-
-        # 池 8: 等回调买 (r20 显著高于 r5 + r20 极强 → 长期强短期弱, 等回调)
-        if (gap_r5_r20 >= 40 and buy_r20 >= 85
-            and not row.get("is_zombie", False)):
-            return "pool8_pullback_long"
-
-        # 池 9: 短线脉冲 (r5 显著高于 r10/r20, 短期强但中长期弱)
-        # 因 r5 推理分布窄, 用 r5 - r10 + r5 - r20 综合判断
-        if (buy_r5 - buy_r10 >= 15 and buy_r5 - buy_r20 >= 20
-            and buy_r5 >= 60
-            and not row.get("is_zombie", False)):
-            return "pool9_pulse_short"
+    # 池 7-9: 多窗口共识 (V12.17 暂时禁用, 60 日 OOS 反向)
+    # 等 0605 V17 真实 r20 完整周期验证后再启用, 或用 V18 重训模型后启用
+    # 字段 buy_r5/r10/r20_score 仍输出 (供 1H 钻取 + WEB 展示用)
+    DISABLE_MULTI_WINDOW_POOLS = True
+    if not DISABLE_MULTI_WINDOW_POOLS:
+        name = str(row.get("name") or "")
+        is_st = "ST" in name.upper() or "*ST" in name
+        buy_r5 = _safe_get(row, "buy_r5_score", default=None)
+        buy_r10 = _safe_get(row, "buy_r10_score", default=None)
+        buy_r20 = _safe_get(row, "buy_r20_score", default=None)
+        if buy_r5 is not None and buy_r10 is not None and buy_r20 is not None and not is_st:
+            gap_r5_r20 = buy_r20 - buy_r5
+            if (buy_r5 >= 75 and buy_r10 >= 75 and buy_r20 >= 75
+                and not row.get("is_zombie", False)):
+                return "pool7_pyramid_strong"
+            if (gap_r5_r20 >= 40 and buy_r20 >= 85
+                and not row.get("is_zombie", False)):
+                return "pool8_pullback_long"
+            if (buy_r5 - buy_r10 >= 15 and buy_r5 - buy_r20 >= 20
+                and buy_r5 >= 60
+                and not row.get("is_zombie", False)):
+                return "pool9_pulse_short"
 
     # 池 6: 强势股回调 (买分≥85 表示强势, 排除 ST/极端 100 + 排除矛盾段)
     name = str(row.get("name") or "")
