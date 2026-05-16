@@ -47,6 +47,19 @@ POOL_CONFIG = {
         "name": "强势股回调", "desc": "龙头休整", "target_share": 0.10,
         "max_pos_per_stock": 0.02, "holding_days": 12,
     },
+    # 多窗口共识池 (Sprint 4.3, V12.16)
+    "pool7_pyramid_strong": {
+        "name": "三层共识金字塔", "desc": "r5+r10+r20 全高", "target_share": 0.15,
+        "max_pos_per_stock": 0.04, "holding_days": 15,
+    },
+    "pool8_pullback_long": {
+        "name": "等回调买入", "desc": "r5 低 + r20 高 (先跌后涨)", "target_share": 0.05,
+        "max_pos_per_stock": 0.02, "holding_days": 20,
+    },
+    "pool9_pulse_short": {
+        "name": "短线脉冲", "desc": "r5 高 + r20 低 (5 日快进快出)", "target_share": 0.03,
+        "max_pos_per_stock": 0.01, "holding_days": 5,
+    },
 }
 
 
@@ -85,6 +98,32 @@ def assign_pool(row: pd.Series, percentiles: Optional[dict] = None) -> Optional[
     if (_safe_get(row, "policy_heat_score") >= 70
         and _safe_get(row, "buy_score") > 60):
         return "pool5_policy_wave"
+
+    # 池 7-9: 多窗口共识 (用 r5/r10/r20 相对差异, r5 推理分布窄但相对位置仍有用)
+    name = str(row.get("name") or "")
+    is_st = "ST" in name.upper() or "*ST" in name
+    buy_r5 = _safe_get(row, "buy_r5_score", default=None)
+    buy_r10 = _safe_get(row, "buy_r10_score", default=None)
+    buy_r20 = _safe_get(row, "buy_r20_score", default=None)
+    if buy_r5 is not None and buy_r10 is not None and buy_r20 is not None and not is_st:
+        gap_r5_r20 = buy_r20 - buy_r5   # >0: r20 比 r5 强 (长强短弱); <0: 反之
+
+        # 池 7: 三层共识金字塔 (r5+r10+r20 全部高) ★ 最强信号
+        if (buy_r5 >= 65 and buy_r10 >= 65 and buy_r20 >= 65
+            and not row.get("is_zombie", False)):
+            return "pool7_pyramid_strong"
+
+        # 池 8: 等回调买 (r20 显著高于 r5 + r20 极强 → 长期强短期弱, 等回调)
+        if (gap_r5_r20 >= 40 and buy_r20 >= 85
+            and not row.get("is_zombie", False)):
+            return "pool8_pullback_long"
+
+        # 池 9: 短线脉冲 (r5 显著高于 r10/r20, 短期强但中长期弱)
+        # 因 r5 推理分布窄, 用 r5 - r10 + r5 - r20 综合判断
+        if (buy_r5 - buy_r10 >= 15 and buy_r5 - buy_r20 >= 20
+            and buy_r5 >= 60
+            and not row.get("is_zombie", False)):
+            return "pool9_pulse_short"
 
     # 池 6: 强势股回调 (买分≥85 表示强势, 排除 ST/极端 100 + 排除矛盾段)
     name = str(row.get("name") or "")

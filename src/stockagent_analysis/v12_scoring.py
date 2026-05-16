@@ -27,11 +27,12 @@ import pandas as pd
 
 ProgressCb = Optional[Callable[[str, int, str, Optional[dict]], None]]
 
-# 锚点 (V16 重训 2026-05-15, 训练区间 20230101-20260413, val 时序后 10%)
+# 锚点 (V16/V17 重训 2026-05-15/17)
 # V4: r10(-1.44,0.22,2.40) / r20(-7.78,-1.18,8.76)
 # V15: r10(0.02,0.69,1.82) / r20(-4.45,1.99,13.19)
-R10_ANCHOR = (-1.76, 0.60, 3.60)
-R20_ANCHOR = (-7.11, 2.12, 13.48)
+R5_ANCHOR = (0.03, 0.74, 1.51)         # V17 (重训 2026-05-17, IC=0.135 RankIC=0.184)
+R10_ANCHOR = (-1.76, 0.60, 3.60)        # V16
+R20_ANCHOR = (-7.11, 2.12, 13.48)       # V16
 # sell 模型已屏蔽 (用户决策 2026-05-15), 锚点保留兼容旧代码
 SELL10_V6 = (0.18, 0.48, 0.78)
 SELL20_V6 = (0.05, 0.43, 0.87)
@@ -84,8 +85,8 @@ class V12Scorer:
         # 用 model_str 而非 model_file 避开 LightGBM 4.x + Python 3.14 + Windows 的 race
         # 2026-05-15: 切到 V16 (训练区间扩到 20260413, 多 60 日数据)
         if self._models: return
-        # r10/r20: V16; sell_10/sell_20: 保留 V6 (虽然不用但 v12 推理路径仍读)
-        for name in ["r10_v16_all", "r20_v16_all", "sell_10_v6", "sell_20_v6"]:
+        # r5/r10/r20: V17/V16; sell_10/sell_20: 保留 V6 (虽然不用但 v12 推理路径仍读)
+        for name in ["r5_v17_all", "r10_v16_all", "r20_v16_all", "sell_10_v6", "sell_20_v6"]:
             d = self.prod_dir / name
             booster = lgb.Booster(model_str=(d / "classifier.txt").read_text(encoding="utf-8"))
             meta = json.loads((d / "feature_meta.json").read_text(encoding="utf-8"))
@@ -224,17 +225,22 @@ class V12Scorer:
         if cb: cb("init", 0, f"启动 V12 全市场推理 {date}", None)
         df = self.load_factors_for_date(date, cb=cb)
 
-        if cb: cb("predict", 75, "LightGBM 4 模型推理 (V16 r10/r20 + V6 sell)...", {"n_stocks": len(df)})
+        if cb: cb("predict", 75, "LightGBM 5 模型推理 (V17 r5 + V16 r10/r20 + V6 sell)...", {"n_stocks": len(df)})
         df = df.copy()
+        df["r5_pred"] = self.predict_one(df, "r5_v17_all")
         df["r10_pred"] = self.predict_one(df, "r10_v16_all")
         df["r20_pred"] = self.predict_one(df, "r20_v16_all")
         df["sell_10_v6_prob"] = self.predict_one(df, "sell_10_v6")
         df["sell_20_v6_prob"] = self.predict_one(df, "sell_20_v6")
 
-        if cb: cb("anchor", 88, "锚定 0-100 分 + 双向合成...", None)
+        if cb: cb("anchor", 88, "锚定 0-100 分 (三层 r5/r10/r20)...", None)
+        s5 = _map_anchored(df["r5_pred"].values, *R5_ANCHOR)
         s10 = _map_anchored(df["r10_pred"].values, *R10_ANCHOR)
         s20 = _map_anchored(df["r20_pred"].values, *R20_ANCHOR)
-        df["buy_score"] = 0.5 * s10 + 0.5 * s20
+        df["buy_r5_score"] = s5
+        df["buy_r10_score"] = s10
+        df["buy_r20_score"] = s20
+        df["buy_score"] = 0.5 * s10 + 0.5 * s20    # 向后兼容
         s10s = _map_anchored(df["sell_10_v6_prob"].values, *SELL10_V6)
         s20s = _map_anchored(df["sell_20_v6_prob"].values, *SELL20_V6)
         df["sell_score"] = 0.5 * s10s + 0.5 * s20s
