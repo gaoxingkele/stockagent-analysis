@@ -54,31 +54,42 @@ class StockNewsAnalyzer:
     def __init__(self, cloubic_api_key: str):
         self.client = OpenAI(api_key=cloubic_api_key, base_url=CLOUBIC_BASE)
 
-    def fetch_news(self, symbol: str, lookback_days: int = 14) -> list[dict]:
-        """拉单股新闻 (akshare 东方财富, symbol 是 6 位数字 不带后缀)."""
+    def fetch_news(self, symbol: str, lookback_days: int = 30) -> list[dict]:
+        """拉单股公告 (东方财富 API, symbol 是 6 位数字 不带后缀)."""
+        import requests
+        from datetime import datetime, timedelta
+        url = "https://np-anotice-stock.eastmoney.com/api/security/ann"
+        params = {
+            "sr": -1, "page_size": 30, "page_index": 1,
+            "ann_type": "A", "client_source": "web",
+            "stock_list": symbol,
+            "f_node": 0, "s_node": 0,
+        }
         try:
-            import akshare as ak
-            df = ak.stock_news_em(symbol=symbol)
-            if df is None or df.empty: return []
-            # 字段: 关键词 / 新闻标题 / 新闻内容 / 发布时间 / 文章来源 / 新闻链接
-            from datetime import datetime, timedelta
-            cutoff = datetime.now() - timedelta(days=lookback_days)
-            news = []
-            for _, r in df.iterrows():
-                try:
-                    pub = pd.to_datetime(r.get("发布时间"))
-                    if pub < cutoff: continue
-                except Exception:
-                    pass
-                news.append({
-                    "title": str(r.get("新闻标题", ""))[:100],
-                    "content": str(r.get("新闻内容", ""))[:500],
-                    "time": str(r.get("发布时间", "")),
-                    "src": str(r.get("文章来源", "")),
-                })
-            return news[:30]   # 限制 30 条
-        except Exception as e:
+            r = requests.get(url, params=params, timeout=10,
+                              headers={"User-Agent": "Mozilla/5.0"})
+            d = r.json()
+            if not d.get("success") or "data" not in d: return []
+            items = d["data"].get("list", [])
+        except Exception:
             return []
+
+        cutoff = datetime.now() - timedelta(days=lookback_days)
+        news = []
+        for it in items:
+            t = it.get("display_time", "")[:10]
+            try:
+                pub = datetime.strptime(t, "%Y-%m-%d")
+                if pub < cutoff: continue
+            except Exception:
+                pass
+            news.append({
+                "title": str(it.get("title", ""))[:150],
+                "time": t,
+                "type": str(it.get("columns", [{}])[0].get("column_name", "")
+                             if it.get("columns") else "")[:20],
+            })
+        return news[:25]
 
     def analyze(self, symbol: str, lookback_days: int = 14) -> dict:
         """完整流程: 拉新闻 → LLM → 输出."""
@@ -88,9 +99,9 @@ class StockNewsAnalyzer:
                      "catalyst_type": "无", "key_events": [],
                      "hotness": 0, "n_news": 0}
 
-        news_text = "\n\n".join(
-            f"[{n['time'][:10]}] {n['title']}\n{n['content'][:300]}"
-            for n in news[:20]
+        news_text = "\n".join(
+            f"[{n['time']}] ({n.get('type','')}) {n['title']}"
+            for n in news[:25]
         )
 
         try:
