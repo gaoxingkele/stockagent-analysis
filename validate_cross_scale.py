@@ -18,7 +18,7 @@ from scipy import stats
 import lightgbm as lgb
 
 ROOT = Path(__file__).resolve().parent
-F1H = ROOT / "output" / "1h_factors" / "factors.parquet"
+F1H = ROOT / "output" / "1h_factors" / "factors_v2.parquet"
 PROD = ROOT / "output" / "production"
 V12_DIR = ROOT / "output" / "v7c_full_inference"
 OUT = ROOT / "output" / "cross_scale"
@@ -40,8 +40,8 @@ def main():
     print(f"   {len(df):,} 行 × {df['ts_code'].nunique()} 股 × {df['trade_date'].nunique()} 日")
 
     # 加载模型
-    print(f"[2] 加载 1H R20 模型 r20_1h_v1")
-    d = PROD / "r20_1h_v1"
+    print(f"[2] 加载 1H R20 模型 r20_1h_v2")
+    d = PROD / "r20_1h_v2"
     booster = lgb.Booster(model_str=(d / "classifier.txt").read_text(encoding="utf-8"))
     meta = json.loads((d / "feature_meta.json").read_text(encoding="utf-8"))
     feat_cols = meta["feature_cols"]
@@ -52,7 +52,9 @@ def main():
     print(f"   OOS 1H bars: {len(oos):,}")
     # clip 同 train
     for c in feat_cols:
-        oos[c] = oos[c].clip(-200, 200)
+        if c not in oos.columns:
+            oos[c] = 0.0
+        oos[c] = oos[c].replace([np.inf, -np.inf], np.nan).clip(-200, 200)
     X = oos[feat_cols].astype("float32")
     oos["pred_1h_r20"] = booster.predict(X)
 
