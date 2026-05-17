@@ -32,9 +32,11 @@ def main():
     print(f"  {len(df):,} 行 × {len(df.columns)} 列")
     print(f"  时间: {df['trade_time'].min()} → {df['trade_time'].max()}")
 
-    # label = r20_1h (5 日 forward)
+    # label = r20_1h (5 日 forward), 去除除权异常 |label| > 50%
     df = df.dropna(subset=["r20_1h"])
-    print(f"  有 r20_1h label: {len(df):,} 行")
+    n0 = len(df)
+    df = df[df["r20_1h"].abs() <= 50].copy()
+    print(f"  有 r20_1h label: {n0:,} → 去除 |label|>50%: {len(df):,} ({(n0-len(df))/n0*100:.2f}% 删)")
 
     # 时序 split
     df["trade_date"] = df["trade_date"].astype(str)
@@ -43,11 +45,17 @@ def main():
     print(f"  train: {len(train):,} (< {TRAIN_END_DATE})")
     print(f"  val:   {len(val):,} (≥ {TRAIN_END_DATE})")
 
-    # 特征列 (排除元数据 + label)
-    EXCLUDE = {"ts_code", "trade_time", "trade_date", "close", "r4_1h", "r20_1h", "r40_1h"}
+    # 特征列: 排除元数据 + label + 原始价格/量 (跨股不可比)
+    EXCLUDE = {"ts_code", "trade_time", "trade_date", "close", "r4_1h", "r20_1h", "r40_1h",
+                 "ma5", "ma10", "ma20", "ma60", "vol_ma20"}
     feat_cols = [c for c in df.columns
                   if c not in EXCLUDE and pd.api.types.is_numeric_dtype(df[c])]
     print(f"  特征列: {len(feat_cols)}")
+
+    # 特征 winsorize (clip 到 [-200, +200], 避免极端值污染 LGBM split)
+    for c in feat_cols:
+        train[c] = train[c].clip(-200, 200)
+        val[c] = val[c].clip(-200, 200)
 
     # subsample (内存控制)
     if len(train) > 2_000_000:
