@@ -65,7 +65,8 @@ def compute_r5_labels(daily_cache_dir: Path, start: str, end: str) -> pd.DataFra
 
 def train_r5_regressor(train_df, val_df, feat_cols, industries,
                        train_subsample=1_800_000):
-    name = "r5_v17_all"
+    # 2026-05-21: ST 排除重训, _nost 保留对照
+    name = "r5_v17_all_nost"
     out_dir = OUT_BASE / name
     out_dir.mkdir(exist_ok=True)
 

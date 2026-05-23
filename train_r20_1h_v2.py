@@ -30,6 +30,15 @@ def main():
     print(f"  {len(df):,} 行 × {len(df.columns)} 列")
     print(f"  时间: {df['trade_time'].min()} → {df['trade_time'].max()}")
 
+    # ST 源头排除 (2026-05-21 起强制)
+    basic_p = ROOT / "output" / "tushare_cache" / "stock_basic.parquet"
+    if basic_p.exists():
+        basic = pd.read_parquet(basic_p)[["ts_code", "name"]].drop_duplicates("ts_code")
+        st_codes = set(basic[basic["name"].fillna("").str.contains("ST", regex=False)]["ts_code"])
+        before = len(df)
+        df = df[~df["ts_code"].isin(st_codes)].reset_index(drop=True)
+        print(f"  ST 排除: {before - len(df):,} 行 ({len(st_codes)} 只 ST)", flush=True)
+
     df = df.dropna(subset=["r20_1h"])
     n0 = len(df)
     df = df[df["r20_1h"].abs() <= 50].copy()
@@ -73,7 +82,7 @@ def main():
              callbacks=[lgb.early_stopping(150, first_metric_only=True),
                           lgb.log_evaluation(50)])
 
-    out_dir = OUT_BASE / "r20_1h_v2"
+    out_dir = OUT_BASE / "r20_1h_v2_nost"   # 2026-05-21 ST 排除重训
     out_dir.mkdir(exist_ok=True)
     clf.booster_.save_model(str(out_dir / "classifier.txt"))
     Path(out_dir / "feature_meta.json").write_text(json.dumps({

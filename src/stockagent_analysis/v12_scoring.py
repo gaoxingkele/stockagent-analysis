@@ -27,12 +27,15 @@ import pandas as pd
 
 ProgressCb = Optional[Callable[[str, int, str, Optional[dict]], None]]
 
-# 锚点 (V16/V17 重训 2026-05-15/17)
-# V4: r10(-1.44,0.22,2.40) / r20(-7.78,-1.18,8.76)
-# V15: r10(0.02,0.69,1.82) / r20(-4.45,1.99,13.19)
-R5_ANCHOR = (0.03, 0.74, 1.51)         # V17 (重训 2026-05-17, IC=0.135 RankIC=0.184)
-R10_ANCHOR = (-1.76, 0.60, 3.60)        # V16
-R20_ANCHOR = (-7.11, 2.12, 13.48)       # V16
+# 锚点 (2026-05-22 _nost 重训, ST 源头排除)
+# 历史:
+#   V4: r10(-1.44,0.22,2.40) / r20(-7.78,-1.18,8.76)
+#   V15: r10(0.02,0.69,1.82) / r20(-4.45,1.99,13.19)
+#   V17 (含 ST): r5(0.03,0.74,1.51) IC 0.135
+#   V16 (含 ST): r10(-1.76,0.60,3.60) / r20(-7.11,2.12,13.48)
+R5_ANCHOR = (-0.21, 0.82, 1.80)        # V17_nost (RankIC 0.185, +37%)
+R10_ANCHOR = (-3.55, 0.56, 6.91)        # V16_nost (RankIC 0.308)
+R20_ANCHOR = (-7.10, 2.45, 14.08)       # V16_nost (RankIC 0.395)
 # sell 模型已屏蔽 (用户决策 2026-05-15), 锚点保留兼容旧代码
 SELL10_V6 = (0.18, 0.48, 0.78)
 SELL20_V6 = (0.05, 0.43, 0.87)
@@ -81,16 +84,28 @@ class V12Scorer:
             return cls._instance
 
     # ──────── 模型加载 ────────
+    # 模型版本映射 (2026-05-22: 切到 _nost 版本, ST 源头排除)
+    # 推理路径用别名 ("r5_v17_all" 等), 物理文件名是 _nost 后缀
+    MODEL_ALIAS = {
+        "r5_v17_all":  "r5_v17_all_nost",
+        "r10_v16_all": "r10_v16_all_nost",
+        "r20_v16_all": "r20_v16_all_nost",
+        "sell_10_v6":  "sell_10_v6",          # sell 模型已屏蔽, 仍读保兼容
+        "sell_20_v6":  "sell_20_v6",
+        "r5_v17_long": "r5_v17_long_nost",    # P1 反向过滤
+    }
+
     def _load_models(self):
         # 用 model_str 而非 model_file 避开 LightGBM 4.x + Python 3.14 + Windows 的 race
-        # 2026-05-15: 切到 V16 (训练区间扩到 20260413, 多 60 日数据)
+        # 2026-05-22: 全切到 _nost (ST 源头排除, 见 [[r1模型ST偏见证伪]])
         if self._models: return
-        # r5/r10/r20: V17/V16; sell_10/sell_20: 保留 V6 (虽然不用但 v12 推理路径仍读)
-        for name in ["r5_v17_all", "r10_v16_all", "r20_v16_all", "sell_10_v6", "sell_20_v6"]:
-            d = self.prod_dir / name
+        for alias, real_name in self.MODEL_ALIAS.items():
+            d = self.prod_dir / real_name
+            if not (d / "classifier.txt").exists():
+                continue
             booster = lgb.Booster(model_str=(d / "classifier.txt").read_text(encoding="utf-8"))
             meta = json.loads((d / "feature_meta.json").read_text(encoding="utf-8"))
-            self._models[name] = (booster, meta)
+            self._models[alias] = (booster, meta)
 
     def predict_one(self, df: pd.DataFrame, name: str) -> np.ndarray:
         self._load_models()
@@ -107,8 +122,13 @@ class V12Scorer:
         return booster.predict(df[feat_cols])
 
     # ──────── 因子矩阵加载 ────────
-    def load_factors_for_date(self, date: str, cb: ProgressCb = None) -> pd.DataFrame:
-        """date 格式 YYYYMMDD. 返回当日全市场因子横截面."""
+    def load_factors_for_date(self, date: str, cb: ProgressCb = None,
+                                exclude_st: bool = True) -> pd.DataFrame:
+        """date 格式 YYYYMMDD. 返回当日全市场因子横截面.
+
+        exclude_st: 默认 True. 数据加载源头排除 ST 股
+                      (2026-05-21 起强制, 见 r1 模型 ST 偏见教训).
+        """
         if date in self._factor_cache:
             return self._factor_cache[date]
 
@@ -125,6 +145,18 @@ class V12Scorer:
         df_fl = pd.concat(fl_parts, ignore_index=True).drop_duplicates(
             subset=["ts_code", "trade_date"], keep="last"
         )
+
+        # ST 源头排除
+        if exclude_st:
+            basic_p = self.root / "output" / "tushare_cache" / "stock_basic.parquet"
+            if basic_p.exists():
+                basic = pd.read_parquet(basic_p)[["ts_code", "name"]].drop_duplicates("ts_code")
+                st_codes = set(basic[basic["name"].fillna("").str.contains("ST", regex=False)]["ts_code"])
+                before = len(df_fl)
+                df_fl = df_fl[~df_fl["ts_code"].isin(st_codes)].reset_index(drop=True)
+                if cb: cb("load_factor_lab", 10,
+                            f"ST 排除: {before - len(df_fl)} 股 (源头过滤)", None)
+
         if cb: cb("load_factor_lab", 15, f"factor_lab 加载完成 {len(df_fl)} 股", {"n": len(df_fl)})
 
         # 选择 ext 文件名后缀: 取最大日期的 ext_{mmdd}
@@ -262,6 +294,11 @@ class V12Scorer:
         # 行业分散硬约束 (单行业 ≤ 30%)
         df = self.apply_industry_diversification(df, cap=0.30)
 
+        # P1 R5 反向过滤: V7c 主推荐池 → 留 R5 评分 Bottom 30% (短期超跌)
+        # 长 OOS 142 日 d5_bot30 Sharpe 2.70, 月化 ~+2.40% (V7c 基础 +4.82pp 之外的独立增量)
+        if cb: cb("r5_reverse", 93, "R5 反向过滤 (Bottom 30% 短期超跌)...", None)
+        df = self.apply_r5_reverse_filter(df)
+
         # 池子分类 (1.4): 每股按优先级分配到唯一池
         if cb: cb("pool_classify", 94, "池子分类 (6 实战池)...", None)
         # 先 merge stock_basic name (排除 ST 用)
@@ -285,13 +322,16 @@ class V12Scorer:
         df.attrs["regime_info"] = regime_info
 
         n_main = int(df["v7c_recommend"].sum())
+        n_r5filtered = int(df["v7c_recommend_r5filtered"].sum()) if "v7c_recommend_r5filtered" in df.columns else 0
         n_contra = int((df["quadrant"] == "矛盾段").sum())
         pos_ratio = regime_info.get("position_ratio", 1.0)
         if cb: cb("done", 100,
-                  f"完成: V7c 主推 {n_main} 股, 矛盾段 {n_contra} 股, "
+                  f"完成: V7c 主推 {n_main} 股 (R5 反向过滤后 {n_r5filtered} 股), "
+                  f"矛盾段 {n_contra} 股, "
                   f"建议仓位 {pos_ratio*100:.0f}% ({regime_info.get('dominant_regime_3d','?')})",
-                  {"main": n_main, "contradiction": n_contra, "total": len(df),
-                   "position_ratio": pos_ratio, "regime": regime_info.get("dominant_regime_3d")})
+                  {"main": n_main, "r5filtered": n_r5filtered, "contradiction": n_contra,
+                   "total": len(df), "position_ratio": pos_ratio,
+                   "regime": regime_info.get("dominant_regime_3d")})
         return df
 
     def score_stock(self, ts_code: str, date: str) -> dict:
@@ -347,37 +387,105 @@ class V12Scorer:
         df.loc[keep_idx, "v7c_recommend_diversified"] = True
         return df
 
-    def _apply_v7c_rules(self, df: pd.DataFrame) -> pd.Series:
-        """V7c 6 条铁律 (除仓位约束).
+    def apply_r5_reverse_filter(self, df: pd.DataFrame,
+                                   bottom_pct: float = 0.30) -> pd.DataFrame:
+        """P1 R5 反向过滤: V7c 主推荐池内按 r5_long_pred 升序留 Bottom N%.
 
-        2026-05-15 调整: 屏蔽 sell_score ≤ 30 这条 (派发判断翻车率高,
-        0508→0514 实测被 sell 标记的"派发"股反而是大涨王: 普冉+33% / 澜起+26% / 长川+15%).
+        原理 (142 日长 OOS 验证):
+          - 单纯 V7c 主推荐 月化 α +4.82pp
+          - 在 V7c 池内 r5_v17_long Bottom 30% (短期最弱) 反而 r20 = +2.40%/月 Sharpe 2.70
+          - "先下蹲后起跳" 金融直觉的量化印证
 
-        现行铁律 (5 条, 编号保留):
-        1. buy_score ∈ [70, 85]
-        2. (已屏蔽) sell_score ≤ 30
-        3. pyr_velocity_20_60 < p35
-        4. |f1_neg1| < 0.005
-        5. |f2_pos1| < 0.005
-        6. NOT is_zombie  (横盘 ≥90% + MA60 走平/下)
+        输出新列:
+          - r5_long_pred: r5_v17_long 模型预测 (全市场, NaN 表示推理失败)
+          - r5_long_rank_in_pool: 在 V7c 主推荐池内的 pct rank (0=最低, 1=最高), 池外为 NaN
+          - v7c_recommend_r5filtered: bool, V7c 主推荐 & 池内排名 < bottom_pct
+
+        如果 r5_v17_long 模型不存在 (回退兼容), 直接 copy v7c_recommend.
         """
+        df = df.copy()
+        if "r5_v17_long" not in self._models:
+            df["r5_long_pred"] = np.nan
+            df["r5_long_rank_in_pool"] = np.nan
+            df["v7c_recommend_r5filtered"] = df["v7c_recommend"].astype(bool)
+            return df
+        # 全市场推理 (Bottom 30% 只在主推荐池内截取)
+        try:
+            df["r5_long_pred"] = self.predict_one(df, "r5_v17_long")
+        except Exception:
+            df["r5_long_pred"] = np.nan
+            df["r5_long_rank_in_pool"] = np.nan
+            df["v7c_recommend_r5filtered"] = df["v7c_recommend"].astype(bool)
+            return df
+
+        # 在 v7c_recommend = True 的子集内做 pct rank
+        # method="first" 避免并列值导致大量股 rank = 同一中点 (实测 method="average"
+        # 在 200 股池上会让 25% 分位都跳到 0.316, 无法过滤)
+        df["r5_long_rank_in_pool"] = np.nan
+        mask = df["v7c_recommend"].astype(bool) & df["r5_long_pred"].notna()
+        if mask.sum() > 0:
+            ranks = df.loc[mask, "r5_long_pred"].rank(pct=True, method="first")
+            df.loc[mask, "r5_long_rank_in_pool"] = ranks
+        df["v7c_recommend_r5filtered"] = (
+            df["v7c_recommend"].astype(bool)
+            & df["r5_long_rank_in_pool"].notna()
+            & (df["r5_long_rank_in_pool"] < bottom_pct)
+        )
+        return df
+
+    def _apply_v7c_rules(self, df: pd.DataFrame, p_buy_top: float = 0.05,
+                            industry_mom_excl: float = 0.10) -> pd.Series:
+        """V7c 铁律 (v4 加行业 momentum 过滤).
+
+        历史:
+          - v1 (2026-05-04): buy_score [70, 85] 绝对阈值, sell_score ≤ 30
+          - v2 (2026-05-15): 屏蔽 sell_score (派发判断翻车)
+          - v3 (2026-05-23): buy_score 绝对阈值 → r20_pred top 5% 相对排名
+            原因: 长 OOS 验证发现绝对阈值在 OOS 期 60% 日子空池 (锚点漂移),
+                  改相对排名后覆盖率 32%→100%, 月化 α +0.46pp→+1.10pp, Sharpe 0.37→1.29
+          - v4 (2026-05-23): 加行业 60d momentum 过滤, 排除最差 10% 行业
+            原因: 202603 灾难月分析发现化工/能源类已下跌 60 日, R5 反向推送的"短期超跌"
+                  反而继续跌. 行业大趋势坏时"先下蹲后起跳"不成立.
+                  长 OOS 验证: α +0.77→+0.88pp Sharpe 0.88→1.02 (m_excl=0.10), 0 灾难月
+
+        现行铁律:
+        1. r20_pred 当日 top p_buy_top (默认 5%)
+        2. pyr_velocity_20_60 < p35
+        3. |f1_neg1| < 0.005, |f2_pos1| < 0.005
+        4. NOT is_zombie
+        5. industry_mom_60d_rank >= industry_mom_excl (默认 0.10, 排除最差 10% 行业)
+        """
+        # 1. r20_pred 当日 top 5%
+        if "r20_pred" not in df.columns:
+            return ((df["buy_score"] >= 70) & (df["buy_score"] <= 85))
+        r20_rank = df["r20_pred"].rank(pct=True, method="first")
+        base = r20_rank >= (1 - p_buy_top)
+
+        # 2. pyr_velocity
         if "pyr_velocity_20_60" in df.columns:
             p35 = df["pyr_velocity_20_60"].quantile(0.35)
-        else:
-            return ((df["buy_score"] >= 70))
-        # 屏蔽 sell_score ≤ 30
-        base = ((df["buy_score"] >= 70) & (df["buy_score"] <= 85) &
-                (df["pyr_velocity_20_60"] < p35))
+            base = base & (df["pyr_velocity_20_60"] < p35)
+
+        # 3. f1/f2
         if "f1_neg1" in df.columns and "f2_pos1" in df.columns:
             base = base & (df["f1_neg1"].abs() < 0.005) & (df["f2_pos1"].abs() < 0.005)
-        # 第 6 铁律: zombie 过滤
+
+        # 4. zombie
         if "is_zombie" in df.columns:
             base = base & (~df["is_zombie"].fillna(False).astype(bool))
+
+        # 5. industry momentum 过滤 (v4 新增)
+        # NaN rank 保留 (新股/行业缺失不误排), 只过滤明确 rank < excl 阈值
+        if "industry_mom_60d_rank" in df.columns and industry_mom_excl > 0:
+            ind_ok = df["industry_mom_60d_rank"].isna() | \
+                       (df["industry_mom_60d_rank"] >= industry_mom_excl)
+            base = base & ind_ok
         return base
 
     def _enrich_zombie(self, df: pd.DataFrame, date: str) -> pd.DataFrame:
         """对全市场加 is_zombie 列 (来自 daily cache 计算 MA60 横盘度).
 
+        同时一并计算 industry_mom_60d_rank (用 daily cache, 复用 IO).
         缓存: 同一日只算一次 (放进 _factor_cache).
         """
         from .zombie_filter import compute_zombie_factors
@@ -385,13 +493,14 @@ class V12Scorer:
         daily_cache_dir = self.root / "output" / "tushare_cache" / "daily"
         files = sorted(daily_cache_dir.glob("*.parquet"))
         end_int = int(date)
-        # 只读最近 200 天足够算 MA60 + 20 日 lookback
+        # 读最近 200 天 (zombie MA60 + industry mom 60d 共用)
         recent_files = [f for f in files if int(f.stem) <= end_int][-200:]
         parts = [pd.read_parquet(f) for f in recent_files]
         big = pd.concat(parts, ignore_index=True)
         big["trade_date"] = big["trade_date"].astype(str)
         big = big.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
 
+        # zombie
         zombie_rows = []
         for ts, g in big.groupby("ts_code"):
             if len(g) < 80:
@@ -410,11 +519,39 @@ class V12Scorer:
                 "ma60_slope_short": float(r["ma60_slope_short"]) if pd.notna(r["ma60_slope_short"]) else 0,
             })
         zdf = pd.DataFrame(zombie_rows)
-        # merge 到 df, 覆盖同名列
         for col in ["is_zombie", "zombie_days_pct", "ma60_slope_short"]:
             if col in df.columns:
                 df = df.drop(columns=[col])
-        return df.merge(zdf, on="ts_code", how="left")
+        df = df.merge(zdf, on="ts_code", how="left")
+
+        # 行业 60d momentum (v4 优化, 排除最差 10% 行业)
+        # 每股 close[t-1] / close[t-61] - 1 → 行业内均值 → 当日 pct rank
+        try:
+            big["close_prev"] = big.groupby("ts_code")["close"].shift(1)
+            # 取 date 当天的 close_prev 和 60 日前的 close
+            df_date = big[big["trade_date"] == date].copy()
+            # 60 日前 close: 取 big 中 trade_date < date 的倒数第 61 行
+            # 用每个 ts_code 找到 date 的索引, 向前数 61 个 trade_date 取 close
+            # 简化做法: big 已按 ts_code, trade_date 排序, 用 shift(61) 全表
+            big["close_60d_ago"] = big.groupby("ts_code")["close"].shift(61)
+            big["mom_60d"] = big["close"] / big["close_60d_ago"] - 1
+            mom_at = big[big["trade_date"] == date][["ts_code", "mom_60d"]]
+            df = df.merge(mom_at, on="ts_code", how="left")
+            # 行业内均值
+            ind_avg = df.dropna(subset=["mom_60d"]).groupby("industry")["mom_60d"].mean()
+            df["industry_mom_60d"] = df["industry"].map(ind_avg)
+            # 当日全市场行业 pct rank (按行业排序, 越大越好)
+            # 用 unique industry → rank → 回填
+            ind_unique = df[["industry", "industry_mom_60d"]].drop_duplicates("industry")
+            ind_unique["industry_mom_60d_rank"] = ind_unique["industry_mom_60d"].rank(
+                pct=True, method="first")
+            df = df.merge(ind_unique[["industry", "industry_mom_60d_rank"]],
+                            on="industry", how="left")
+        except Exception as e:
+            # 兜底: 若 daily cache 不够 60+1 天, 全 NaN, 铁律 5 不生效
+            df["industry_mom_60d"] = np.nan
+            df["industry_mom_60d_rank"] = np.nan
+        return df
 
     def _get_regime_info(self, date: str) -> dict:
         """Regime 监控 + 仓位建议."""

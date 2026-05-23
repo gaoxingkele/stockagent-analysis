@@ -120,8 +120,12 @@ def main():
                   if c not in EXCLUDE and pd.api.types.is_numeric_dtype(df[c])]
     print(f"基础特征列: {len(feat_cols)}", flush=True)
 
-    train_one("r5_v17_long", df, feat_cols, industries, "r5")
-    train_one("r20_v16_long", df, feat_cols, industries, "r20")
+    # 2026-05-21: ST 排除后重训, 新版本号 _nost 保留对照 (旧版有 ST 偏见)
+    train_one("r5_v17_long_nost", df, feat_cols, industries, "r5")
+    train_one("r20_v16_long_nost", df, feat_cols, industries, "r20")
+    # r10 一并训, 之前没 long 版
+    if "r10" in df.columns:
+        train_one("r10_v16_long_nost", df, feat_cols, industries, "r10")
 
     print(f"\n总耗时 {time.time()-t0:.0f}s")
 

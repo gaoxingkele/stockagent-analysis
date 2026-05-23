@@ -52,7 +52,14 @@ def _load_concat(main_path: Path, ext_globs: list, columns=None):
     return big
 
 
-def load_window(start, end, with_mfk=False):
+def load_window(start, end, with_mfk=False, exclude_st=True):
+    """加载窗口数据.
+
+    exclude_st: 默认 True. ST 股 (含 *ST/SST/PT 前缀) 在数据源头排除.
+                  原因: ST 涨跌停 ±5%/低价/高政策风险/实盘不可买, 训练样本含 ST
+                  会让模型学到伪 alpha (2026-05-21 r1 模型 ST 偏见教训).
+                  仅在做"ST 专项研究"时显式 exclude_st=False.
+    """
     print(f"  load factor_lab (主 + ext + ext2)...", flush=True)
     parts = []
     for p in sorted((ROOT / "output/factor_lab_3y/factor_groups").glob("*.parquet")):
@@ -67,6 +74,18 @@ def load_window(start, end, with_mfk=False):
         if not df.empty: parts.append(df)
     full = pd.concat(parts, ignore_index=True).drop_duplicates(
         subset=["ts_code","trade_date"], keep="last").reset_index(drop=True)
+
+    # ST 源头排除 (2026-05-21 起强制)
+    if exclude_st:
+        basic_p = ROOT / "output/tushare_cache/stock_basic.parquet"
+        if basic_p.exists():
+            basic = pd.read_parquet(basic_p)[["ts_code", "name"]].drop_duplicates("ts_code")
+            st_set = set(basic[basic["name"].fillna("").str.contains("ST", regex=False)]["ts_code"])
+            before = len(full)
+            full = full[~full["ts_code"].isin(st_set)].reset_index(drop=True)
+            print(f"    ST 排除: {before - len(full):,} 行 ({len(st_set)} 只 ST 股)", flush=True)
+        else:
+            print(f"    ⚠️ ST 排除跳过: stock_basic.parquet 不存在", flush=True)
     # factor_lab 主 parquet 含 forward label r5/r10/r20/r30/r40/dd*, 必须删除
     forward_labels = ["r5","r10","r20","r30","r40","dd5","dd10","dd20","dd30","dd40",
                        "max_gain_10","max_dd_10","max_gain_20","max_dd_20","entry_open","is_clean"]

@@ -114,8 +114,9 @@ def main():
     print(f"特征列数: {len(feat_cols)}\n", flush=True)
 
     print(f"[2/2] 训练 r10/r20 模型 (内部 90/10 val + early stop)...\n", flush=True)
-    train_regressor_full("r10_v16_all", train_df, feat_cols, industries, "r10")
-    train_regressor_full("r20_v16_all", train_df, feat_cols, industries, "r20")
+    # 2026-05-21: ST 排除重训, _nost 保留对照
+    train_regressor_full("r10_v16_all_nost", train_df, feat_cols, industries, "r10")
+    train_regressor_full("r20_v16_all_nost", train_df, feat_cols, industries, "r20")
 
     print(f"\n=== 完成, 总耗时 {time.time()-t0:.0f}s ===", flush=True)
 

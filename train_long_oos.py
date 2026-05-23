@@ -33,6 +33,15 @@ def train(src, label, out_name, exclude_cols, lr=0.03, leaves=63, patience=150):
     df["trade_date"] = df["trade_date"].astype(str)
     print(f"  {len(df):,} × {len(df.columns)}", flush=True)
 
+    # ST 源头排除 (2026-05-21 起强制, 见 feedback_st_exclude_at_source)
+    basic_p = ROOT / "output" / "tushare_cache" / "stock_basic.parquet"
+    if basic_p.exists():
+        basic = pd.read_parquet(basic_p)[["ts_code", "name"]].drop_duplicates("ts_code")
+        st_codes = set(basic[basic["name"].fillna("").str.contains("ST", regex=False)]["ts_code"])
+        before = len(df)
+        df = df[~df["ts_code"].isin(st_codes)].reset_index(drop=True)
+        print(f"  ST 排除: {before - len(df):,} 行 ({len(st_codes)} 只 ST)", flush=True)
+
     df = df.dropna(subset=[label])
     df = df[df[label].abs() <= 20].copy()
     train_df = df[df["trade_date"] < TRAIN_END_DATE]
@@ -100,13 +109,14 @@ def main():
     t0 = time.time()
     print("=== 长 OOS 重训 (cut at 20250930, OOS ~140 日) ===\n")
 
-    # r20_1h_v2_long (用 factors_v2, label r20_1h)
-    train(F2, "r20_1h", "r20_1h_v2_long",
+    # 2026-05-21: ST 排除重训, _nost 保留对照
+    # r20_1h_v2_long_nost (用 factors_v2, label r20_1h)
+    train(F2, "r20_1h", "r20_1h_v2_long_nost",
           exclude_cols={"ts_code","trade_time","trade_date","r4_1h","r20_1h","r40_1h",
                           "ma5","ma10","ma20","ma60","vol_ma20","close"})
 
-    # r1_next_open_v3_long (用 factors_v3, label r1_next_open)
-    train(F3, "r1_next_open", "r1_next_open_v3_long",
+    # r1_next_open_v3_long_nost (用 factors_v3, label r1_next_open)
+    train(F3, "r1_next_open", "r1_next_open_v3_long_nost",
           exclude_cols={"ts_code","trade_time","trade_date",
                           "r4_1h","r20_1h","r40_1h",
                           "r1_next_open","r4_next_morn","r8_next_day"})
