@@ -73,7 +73,9 @@ def build_dual_track(df: pd.DataFrame,
                        max_a_stocks: int = 8,    # v3: 调小 (V7c v3 池约 10-30 股)
                        max_b_stocks: int = 15,
                        industry_cap_per_track: float = 0.20,  # v5: 单轨内行业 cap
-                       cross_track_industry_cap: float = 0.20  # v6: 跨轨累计行业 cap (= cap_in 一致最佳)
+                       cross_track_industry_cap: float = 0.20,  # v6: 跨轨累计行业 cap (= cap_in 一致最佳)
+                       sort_signal: str = "pump_score",  # v10: 'pump_score'(默认)/'r5_long_rank'
+                       pump_down_excl_threshold: float = 0.60  # v11: pump_down ≥ 此值 硬过滤 (双 OOS 网格甜点)
                        ) -> dict:
     """构建双轨持仓清单 + 仓位.
 
@@ -99,23 +101,49 @@ def build_dual_track(df: pd.DataFrame,
     df = df.copy()
     n_v7c = int(df["v7c_recommend"].sum())
 
-    # V7c 主推荐 + 有 r5_long_rank 的股
+    # v11: 跌启动子硬过滤 (pump_down >= threshold 的股直接排除)
+    # 新 OOS Sharpe 1.78 → 2.02, 双 OOS 网格 0.60 为甜点
+    n_filtered_pump_down = 0
+    if (pump_down_excl_threshold < 1.0 and "pump_down_score" in df.columns):
+        before_filter = df["v7c_recommend"].astype(bool).sum()
+        df.loc[df["pump_down_score"] >= pump_down_excl_threshold, "v7c_recommend"] = False
+        after_filter = df["v7c_recommend"].astype(bool).sum()
+        n_filtered_pump_down = before_filter - after_filter
+
+    # v10: 按 sort_signal 选择排序键
+    # pump_score: 高=好 (启动子概率 0-1), 降序选 Top
+    # r5_long_rank: 低=好 (短期超跌反向), 升序选 Bot
+    if sort_signal == "pump_score" and "pump_score_rank_in_pool" in df.columns:
+        rank_col = "pump_score_rank_in_pool"
+        ascending = False   # pump 高的优先
+    else:
+        rank_col = "r5_long_rank_in_pool"
+        ascending = True    # r5 低的优先 (反向)
+
+    # V7c 主推荐 + 有排序键的股
     pool = df[
         df["v7c_recommend"].astype(bool)
-        & df["r5_long_rank_in_pool"].notna()
-    ].sort_values("r5_long_rank_in_pool", ascending=True).copy()
+        & df[rank_col].notna()
+    ].sort_values(rank_col, ascending=ascending).copy()
+    # 同时填 r5_long_rank_in_pool 作为辅助列 (兼容 _apply_industry_cap 用)
+    if "r5_long_rank_in_pool" not in pool.columns:
+        pool["r5_long_rank_in_pool"] = pool[rank_col]
+    elif sort_signal == "pump_score":
+        # 用 pump_score_rank 重新作为 cap 排序键 (越高越优先保留)
+        pool["r5_long_rank_in_pool"] = 1 - pool["pump_score_rank_in_pool"]  # 反向, cap 内仍用升序逻辑
 
     if len(pool) == 0:
         empty = pd.DataFrame(columns=df.columns)
         return {"track_a": empty, "track_b": empty,
                  "summary": {"n_a": 0, "n_b": 0, "n_v7c": n_v7c,
                               "alloc": {"a": track_a_pct, "b": track_b_pct, "cash": cash_pct},
-                              "per_stock_a_pct": 0.0, "per_stock_b_pct": 0.0}}
+                              "per_stock_a_pct": 0.0, "per_stock_b_pct": 0.0,
+                              "sort_signal": sort_signal}}
 
-    # Track A: r5_long_rank 最低的 max_a_stocks 个
+    # Track A: 排序后前 max_a_stocks 个 (pump 高 或 r5 低)
     a_pool = pool.head(max_a_stocks).copy()
-    # 注: a_bottom_pct/b_bottom_pct 参数保留作为可选硬上限 (默认不强制)
-    if a_bottom_pct < 1.0:
+    # 注: a_bottom_pct/b_bottom_pct 参数保留作为可选硬上限 (默认不强制, 仅 r5 模式生效)
+    if a_bottom_pct < 1.0 and sort_signal != "pump_score":
         a_pool = a_pool[a_pool["r5_long_rank_in_pool"] < a_bottom_pct]
 
     # v5: A 轨内行业 cap (默认 ≤ 20% 资金, 避免单行业集中)
@@ -129,7 +157,7 @@ def build_dual_track(df: pd.DataFrame,
     # Track B: 从 pool 中 A 已选剩余的股 (与 A 不重叠)
     b_candidates = pool[~pool["ts_code"].isin(a_pool["ts_code"])]
     b_pool = b_candidates.head(max_b_stocks).copy()
-    if b_bottom_pct < 1.0:
+    if b_bottom_pct < 1.0 and sort_signal != "pump_score":
         b_pool = b_pool[b_pool["r5_long_rank_in_pool"] < b_bottom_pct]
 
     # v5+v6: B 轨先轨内 cap, 然后跨轨 cap (用 A 已占的行业 alloc)
@@ -159,6 +187,9 @@ def build_dual_track(df: pd.DataFrame,
             "alloc": {"a": track_a_pct, "b": track_b_pct, "cash": cash_pct},
             "per_stock_a_pct": per_a, "per_stock_b_pct": per_b,
             "a_bottom_pct": a_bottom_pct, "b_bottom_pct": b_bottom_pct,
+            "sort_signal": sort_signal,
+            "pump_down_excl_threshold": pump_down_excl_threshold,
+            "n_filtered_pump_down": int(n_filtered_pump_down),
         },
     }
 

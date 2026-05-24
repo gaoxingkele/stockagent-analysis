@@ -41,6 +41,11 @@ def main():
                      help="B 轨分散过滤 R5 Bot 上限 (v3 默认 1.0 不过滤)")
     ap.add_argument("--max-a", type=int, default=8)
     ap.add_argument("--max-b", type=int, default=15)
+    ap.add_argument("--sort-signal", type=str, default="pump_score",
+                     choices=["pump_score", "r5_long_rank"],
+                     help="V7c 池内排序信号 (默认 pump_score v10 启动子, 'r5_long_rank' 为 v6 旧版)")
+    ap.add_argument("--pump-down-excl", type=float, default=0.60,
+                     help="跌启动子硬过滤阈值 (v11, 默认 0.60 是网格甜点; 1.0=不过滤)")
     args = ap.parse_args()
 
     from stockagent_analysis.v12_scoring import V12Scorer
@@ -75,6 +80,8 @@ def main():
         b_bottom_pct=args.b_bottom_pct,
         max_a_stocks=args.max_a,
         max_b_stocks=args.max_b,
+        sort_signal=args.sort_signal,
+        pump_down_excl_threshold=args.pump_down_excl,
     )
     s = res["summary"]
     print(f"  轨 A (集中 Bot {s['a_bottom_pct']*100:.0f}%): {s['n_a']} 股, 单仓 {s['per_stock_a_pct']*100:.2f}%",

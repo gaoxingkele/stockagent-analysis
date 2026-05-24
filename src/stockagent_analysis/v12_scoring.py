@@ -87,12 +87,14 @@ class V12Scorer:
     # 模型版本映射 (2026-05-22: 切到 _nost 版本, ST 源头排除)
     # 推理路径用别名 ("r5_v17_all" 等), 物理文件名是 _nost 后缀
     MODEL_ALIAS = {
-        "r5_v17_all":  "r5_v17_all_nost",
-        "r10_v16_all": "r10_v16_all_nost",
-        "r20_v16_all": "r20_v16_all_nost",
-        "sell_10_v6":  "sell_10_v6",          # sell 模型已屏蔽, 仍读保兼容
-        "sell_20_v6":  "sell_20_v6",
-        "r5_v17_long": "r5_v17_long_nost",    # P1 反向过滤
+        "r5_v17_all":   "r5_v17_all_nost",
+        "r10_v16_all":  "r10_v16_all_nost",
+        "r20_v16_all":  "r20_v16_all_nost",
+        "sell_10_v6":   "sell_10_v6",          # sell 模型已屏蔽, 仍读保兼容
+        "sell_20_v6":   "sell_20_v6",
+        "r5_v17_long":  "r5_v17_long_nost",    # P1 反向过滤
+        "r5_pump":      "r5_pump_lgbm_v1",     # v10 启动子分类器 (2026-05-24 上线)
+        "r5_pump_down": "r5_pump_down_lgbm_v1", # v11 跌启动子分类器 (2026-05-24 上线)
     }
 
     def _load_models(self):
@@ -299,6 +301,14 @@ class V12Scorer:
         if cb: cb("r5_reverse", 93, "R5 反向过滤 (Bottom 30% 短期超跌)...", None)
         df = self.apply_r5_reverse_filter(df)
 
+        # V10 启动子评分 (2026-05-24 上线, 新 OOS 验证 α +1.26pp/月)
+        if cb: cb("pump_score", 93, "启动子评分 (V7c 池内排序信号, 替代 r5 反向)...", None)
+        df = self.apply_pump_score(df)
+
+        # V11 跌启动子评分 (2026-05-24 上线, 双 OOS 验证 Sharpe 1.78→2.02 新 OOS)
+        if cb: cb("pump_down_score", 93, "跌启动子评分 (硬过滤 ≥0.60 排除)...", None)
+        df = self.apply_pump_down_score(df)
+
         # 池子分类 (1.4): 每股按优先级分配到唯一池
         if cb: cb("pool_classify", 94, "池子分类 (6 实战池)...", None)
         # 先 merge stock_basic name (排除 ST 用)
@@ -431,6 +441,64 @@ class V12Scorer:
             & df["r5_long_rank_in_pool"].notna()
             & (df["r5_long_rank_in_pool"] < bottom_pct)
         )
+        return df
+
+    def apply_pump_down_score(self, df: pd.DataFrame) -> pd.DataFrame:
+        """V11 跌启动子评分: r5_pump_down_lgbm_v1 输出 0-1 跌启动概率.
+
+        定义: 未来 5 日跌 ≥10% AND 反弹 ≤5% 的二分类概率.
+        实战用途: 硬过滤 (pump_down >= 0.60 的股从 V7c 池排除), 不用于做空.
+
+        双 OOS 验证 (PUMP_DOWN_EXCL_THRESHOLD = 0.60 网格甜点):
+          - 新 OOS Sharpe 1.78 → 2.02 (+0.24), α 2.65 → 3.36pp (+0.71pp)
+          - 旧 OOS 略让步 (Sharpe 1.44 → 1.35)
+          - 排除 12% 全市场, 尾部风险改善 (-1.47 → -1.36pp)
+
+        输出新列: pump_down_score (0-1 概率, 高=危险该排除)
+        """
+        df = df.copy()
+        if "r5_pump_down" not in self._models:
+            df["pump_down_score"] = np.nan
+            return df
+        try:
+            # LGBM binary booster.predict 直接输出 prob
+            df["pump_down_score"] = self.predict_one(df, "r5_pump_down")
+        except Exception:
+            df["pump_down_score"] = np.nan
+        return df
+
+    def apply_pump_score(self, df: pd.DataFrame) -> pd.DataFrame:
+        """V10 启动子评分: r5_pump_lgbm_v1 输出 0-1 启动概率.
+
+        定义: 未来 5 日涨 ≥10% AND 回撤 ≤5% 的二分类概率.
+
+        长 OOS 142 日 + 新 OOS (20260201-20260515) 双验证:
+          - V7c 池内按 pump_score 降序选 Top N 比 r5_long 反向 α 提升 +0.45 / +1.26pp/月
+          - Sharpe 1.33 → 1.44 (旧 OOS) / 1.43 → 1.78 (新 OOS)
+          - 灾难月数 +1 (202602 -1.47pp), 但整体净增益显著
+
+        输出新列:
+          - pump_score: 启动概率 (sigmoid 后 0-1)
+          - pump_score_rank_in_pool: V7c 池内 pump_score pct rank (高=好)
+        """
+        df = df.copy()
+        if "r5_pump" not in self._models:
+            df["pump_score"] = np.nan
+            df["pump_score_rank_in_pool"] = np.nan
+            return df
+        try:
+            # LGBM binary booster.predict 直接输出 prob, 不需 sigmoid (bug 修复 2026-05-24)
+            df["pump_score"] = self.predict_one(df, "r5_pump")
+        except Exception:
+            df["pump_score"] = np.nan
+            df["pump_score_rank_in_pool"] = np.nan
+            return df
+
+        df["pump_score_rank_in_pool"] = np.nan
+        mask = df["v7c_recommend"].astype(bool) & df["pump_score"].notna()
+        if mask.sum() > 0:
+            ranks = df.loc[mask, "pump_score"].rank(pct=True, method="first")
+            df.loc[mask, "pump_score_rank_in_pool"] = ranks
         return df
 
     def _apply_v7c_rules(self, df: pd.DataFrame, p_buy_top: float = 0.05,
