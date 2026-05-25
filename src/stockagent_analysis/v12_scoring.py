@@ -95,7 +95,7 @@ class V12Scorer:
         "r5_v17_long":  "r5_v17_long_nost",    # P1 反向过滤
         "r5_pump":      "r5_pump_lgbm_v1",     # v10 启动子分类器 (deprecated by v3b)
         "r5_pump_down": "r5_pump_down_lgbm_v1", # v11 跌启动子分类器 (deprecated by v3b)
-        "r5_pump_3way": "r5_pump_3way_lgbm_v3b", # v12 三分类 (用户对偶洞察, 2026-05-25 上线)
+        "r5_pump_3way": "r5_pump_3way_lgbm_v3c", # v3c label 时序约束 (2026-05-25 上线, 替代 v3b)
     }
 
     def _load_models(self):
@@ -305,8 +305,13 @@ class V12Scorer:
         # V12 三分类启动子 (2026-05-25 上线, 替代旧 v10/v11 两个二分类)
         # 用户对偶洞察: 涨/跌互斥, softmax 强制 P(涨)+P(跌)+P(中性)=1
         # precision@10: pump_up 26.6→28.0% (+1.4pp), pump_down 23.3→24.7% (+1.4pp)
-        if cb: cb("pump_3way", 93, "三分类启动子 (softmax 互斥, 替代旧 v10/v11)...", None)
+        if cb: cb("pump_3way", 93, "三分类启动子 (v3c label 时序约束)...", None)
         df = self.apply_pump_3way(df)
+
+        # 方案 B 推理后处理 (2026-05-25 撤掉):
+        # 实战回测验证: v3c+B 比纯 v3c α -0.21pp/月 Sharpe -0.17, 反向 hack
+        # 训练层修复 v3c (label past_r5 ≤ +8%) 已够, 不再叠推理层硬压制
+        # 函数 apply_pump_down_uptrend_suppression 保留代码作历史档案, 不再调用
 
         # 池子分类 (1.4): 每股按优先级分配到唯一池
         if cb: cb("pool_classify", 94, "池子分类 (6 实战池)...", None)
@@ -443,17 +448,22 @@ class V12Scorer:
         return df
 
     def apply_pump_3way(self, df: pd.DataFrame) -> pd.DataFrame:
-        """V12 三分类启动子 (2026-05-25 上线, 替代旧 pump_up + pump_down 两个二分类).
+        """V12 三分类启动子 (2026-05-25 v3c 上线, 替代 v3b).
 
-        用户对偶洞察: 涨/跌启动子互斥, softmax 三分类隐含强制 P(涨)+P(跌)+P(中性)=1,
-        训练时让模型同时学"对面是负样本", 区分力强化.
+        用户对偶洞察 (v1): 涨/跌启动子互斥, softmax 强制 P(涨)+P(跌)+P(中性)=1
+        用户对偶洞察 (v2 现货不对称): 跌启动高分不应出现在涨启动后的 r10-r20 上涨期内
+          → v3c 训练 label 加 past_r5 ≤ +8% 约束 (排除上涨期内的伪跌启动)
 
         类别: 0=中性, 1=跌启动子, 2=涨启动子
-        模型: r5_pump_3way_lgbm_v3b (无 class_weight)
+        模型: r5_pump_3way_lgbm_v3c
 
-        precision@10 实测对比 v1 二分类:
-          pump_up: 26.64% → 28.01% (+1.4pp)
-          pump_down: 23.29% → 24.73% (+1.4pp)
+        OOS 锚点后 P_down 误高% (≥全市场 80% 分位):
+          t+5: v3b 56.69% → v3c 28.04% (砍半 ✓)
+          t+3: v3b 50.53% → v3c 23.50%
+
+        precision@10 (val):
+          pump_up: v3b 28.0% → v3c 27.95% (持平)
+          pump_down: v3b 24.7% / 4.3x → v3c 20.1% / 4.06x (base rate 降, lift 微退)
 
         输出字段 (覆盖旧 pump_score / pump_down_score 兼容):
           pump_score        = P(涨)   (V11 集成排序信号)
@@ -499,6 +509,34 @@ class V12Scorer:
             df.loc[mask, "pump_down_rank_in_pool"] = (
                 df.loc[mask, "pump_down_score"].rank(pct=True, method="first")
             )
+        return df
+
+    def apply_pump_down_uptrend_suppression(self, df: pd.DataFrame,
+                                                past_r5_threshold: float = 0.08,
+                                                suppress_factor: float = 0.3) -> pd.DataFrame:
+        """方案 B (2026-05-25): past_r5 > +8% 的股, P_down *= 0.3.
+
+        数据驱动 (analyze_pump_down_in_uptrend_zone.py):
+          pump_up_true=1 锚点后 t+5 时 P_down "误高占比" 56.69%
+          (远高于全市场 20%, 全市场均值 0.0609 而锚点后 t+5 均值 0.1141, 近 2 倍).
+          v3b softmax 互斥并未阻止"刚启动还在涨的股被打 P_down 高分".
+
+        临时补丁: 推理时硬压制. v3c (label 时序约束重训) 上线后可移除.
+        同时重算 pump_down_rank_in_pool (基于压制后值).
+        """
+        if "past_r5" not in df.columns or "pump_down_score" not in df.columns:
+            return df
+        df = df.copy()
+        mask = (df["past_r5"] > past_r5_threshold) & df["pump_down_score"].notna()
+        if mask.sum() > 0:
+            df.loc[mask, "pump_down_score"] = df.loc[mask, "pump_down_score"] * suppress_factor
+            # rank 重算
+            if "pump_down_rank_in_pool" in df.columns:
+                v7c_mask = df["v7c_recommend"].astype(bool) & df["pump_down_score"].notna()
+                if v7c_mask.sum() > 0:
+                    df.loc[v7c_mask, "pump_down_rank_in_pool"] = (
+                        df.loc[v7c_mask, "pump_down_score"].rank(pct=True, method="first")
+                    )
         return df
 
     def apply_pump_down_score(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -663,6 +701,11 @@ class V12Scorer:
             big["mom_60d"] = big["close"] / big["close_60d_ago"] - 1
             mom_at = big[big["trade_date"] == date][["ts_code", "mom_60d"]]
             df = df.merge(mom_at, on="ts_code", how="left")
+            # past_r5: 过去 5 日累计涨幅 (方案 B 抑制 pump_down 上涨期内的误高)
+            big["close_5d_ago"] = big.groupby("ts_code")["close"].shift(5)
+            big["past_r5"] = big["close"] / big["close_5d_ago"] - 1
+            pr5 = big[big["trade_date"] == date][["ts_code", "past_r5"]]
+            df = df.merge(pr5, on="ts_code", how="left")
             # 行业内均值
             ind_avg = df.dropna(subset=["mom_60d"]).groupby("industry")["mom_60d"].mean()
             df["industry_mom_60d"] = df["industry"].map(ind_avg)
