@@ -75,7 +75,8 @@ def build_dual_track(df: pd.DataFrame,
                        industry_cap_per_track: float = 0.20,  # v5: 单轨内行业 cap
                        cross_track_industry_cap: float = 0.20,  # v6: 跨轨累计行业 cap (= cap_in 一致最佳)
                        sort_signal: str = "pump_score",  # v10: 'pump_score'(默认)/'r5_long_rank'
-                       pump_down_excl_threshold: float = 0.60  # v11: pump_down ≥ 此值 硬过滤 (双 OOS 网格甜点)
+                       pump_down_excl_threshold: float = 0.60,  # v11: pump_down 绝对阈值 (v1 模型)
+                       pump_down_excl_top_pct: float = 0.20  # v12: 排除 V7c 池内 P_down Top N% (抗模型分布漂移, 默认 20%)
                        ) -> dict:
     """构建双轨持仓清单 + 仓位.
 
@@ -101,10 +102,20 @@ def build_dual_track(df: pd.DataFrame,
     df = df.copy()
     n_v7c = int(df["v7c_recommend"].sum())
 
-    # v11: 跌启动子硬过滤 (pump_down >= threshold 的股直接排除)
-    # 新 OOS Sharpe 1.78 → 2.02, 双 OOS 网格 0.60 为甜点
+    # v11+v12: 跌启动子硬过滤
+    # 优先用 v12 pct rank (推荐, 抗概率漂移); 兼容 v11 绝对阈值
     n_filtered_pump_down = 0
-    if (pump_down_excl_threshold < 1.0 and "pump_down_score" in df.columns):
+    if pump_down_excl_top_pct > 0 and "pump_down_rank_in_pool" in df.columns and \
+       df["pump_down_rank_in_pool"].notna().any():
+        # v12: V7c 池内 P_down Top N% 排除
+        before_filter = df["v7c_recommend"].astype(bool).sum()
+        cutoff = 1 - pump_down_excl_top_pct   # rank > cutoff = Top N%
+        df.loc[(df["v7c_recommend"].astype(bool)) &
+                 (df["pump_down_rank_in_pool"] > cutoff), "v7c_recommend"] = False
+        after_filter = df["v7c_recommend"].astype(bool).sum()
+        n_filtered_pump_down = before_filter - after_filter
+    elif pump_down_excl_threshold < 1.0 and "pump_down_score" in df.columns:
+        # v11 兼容: 绝对阈值
         before_filter = df["v7c_recommend"].astype(bool).sum()
         df.loc[df["pump_down_score"] >= pump_down_excl_threshold, "v7c_recommend"] = False
         after_filter = df["v7c_recommend"].astype(bool).sum()
@@ -189,6 +200,7 @@ def build_dual_track(df: pd.DataFrame,
             "a_bottom_pct": a_bottom_pct, "b_bottom_pct": b_bottom_pct,
             "sort_signal": sort_signal,
             "pump_down_excl_threshold": pump_down_excl_threshold,
+            "pump_down_excl_top_pct": pump_down_excl_top_pct,
             "n_filtered_pump_down": int(n_filtered_pump_down),
         },
     }

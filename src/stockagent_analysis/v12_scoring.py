@@ -93,8 +93,9 @@ class V12Scorer:
         "sell_10_v6":   "sell_10_v6",          # sell 模型已屏蔽, 仍读保兼容
         "sell_20_v6":   "sell_20_v6",
         "r5_v17_long":  "r5_v17_long_nost",    # P1 反向过滤
-        "r5_pump":      "r5_pump_lgbm_v1",     # v10 启动子分类器 (2026-05-24 上线)
-        "r5_pump_down": "r5_pump_down_lgbm_v1", # v11 跌启动子分类器 (2026-05-24 上线)
+        "r5_pump":      "r5_pump_lgbm_v1",     # v10 启动子分类器 (deprecated by v3b)
+        "r5_pump_down": "r5_pump_down_lgbm_v1", # v11 跌启动子分类器 (deprecated by v3b)
+        "r5_pump_3way": "r5_pump_3way_lgbm_v3b", # v12 三分类 (用户对偶洞察, 2026-05-25 上线)
     }
 
     def _load_models(self):
@@ -301,13 +302,11 @@ class V12Scorer:
         if cb: cb("r5_reverse", 93, "R5 反向过滤 (Bottom 30% 短期超跌)...", None)
         df = self.apply_r5_reverse_filter(df)
 
-        # V10 启动子评分 (2026-05-24 上线, 新 OOS 验证 α +1.26pp/月)
-        if cb: cb("pump_score", 93, "启动子评分 (V7c 池内排序信号, 替代 r5 反向)...", None)
-        df = self.apply_pump_score(df)
-
-        # V11 跌启动子评分 (2026-05-24 上线, 双 OOS 验证 Sharpe 1.78→2.02 新 OOS)
-        if cb: cb("pump_down_score", 93, "跌启动子评分 (硬过滤 ≥0.60 排除)...", None)
-        df = self.apply_pump_down_score(df)
+        # V12 三分类启动子 (2026-05-25 上线, 替代旧 v10/v11 两个二分类)
+        # 用户对偶洞察: 涨/跌互斥, softmax 强制 P(涨)+P(跌)+P(中性)=1
+        # precision@10: pump_up 26.6→28.0% (+1.4pp), pump_down 23.3→24.7% (+1.4pp)
+        if cb: cb("pump_3way", 93, "三分类启动子 (softmax 互斥, 替代旧 v10/v11)...", None)
+        df = self.apply_pump_3way(df)
 
         # 池子分类 (1.4): 每股按优先级分配到唯一池
         if cb: cb("pool_classify", 94, "池子分类 (6 实战池)...", None)
@@ -441,6 +440,65 @@ class V12Scorer:
             & df["r5_long_rank_in_pool"].notna()
             & (df["r5_long_rank_in_pool"] < bottom_pct)
         )
+        return df
+
+    def apply_pump_3way(self, df: pd.DataFrame) -> pd.DataFrame:
+        """V12 三分类启动子 (2026-05-25 上线, 替代旧 pump_up + pump_down 两个二分类).
+
+        用户对偶洞察: 涨/跌启动子互斥, softmax 三分类隐含强制 P(涨)+P(跌)+P(中性)=1,
+        训练时让模型同时学"对面是负样本", 区分力强化.
+
+        类别: 0=中性, 1=跌启动子, 2=涨启动子
+        模型: r5_pump_3way_lgbm_v3b (无 class_weight)
+
+        precision@10 实测对比 v1 二分类:
+          pump_up: 26.64% → 28.01% (+1.4pp)
+          pump_down: 23.29% → 24.73% (+1.4pp)
+
+        输出字段 (覆盖旧 pump_score / pump_down_score 兼容):
+          pump_score        = P(涨)   (V11 集成排序信号)
+          pump_down_score   = P(跌)   (V11 集成硬过滤)
+          pump_neutral_score = P(中性)
+          pump_score_rank_in_pool = V7c 池内 P(涨) pct rank
+          pump_down_rank_in_pool  = V7c 池内 P(跌) pct rank (新, 抗概率分布漂移)
+        """
+        df = df.copy()
+        if "r5_pump_3way" not in self._models:
+            # 回退到旧 pump_up + pump_down (兼容)
+            df["pump_score"] = np.nan
+            df["pump_down_score"] = np.nan
+            df["pump_score_rank_in_pool"] = np.nan
+            df["pump_down_rank_in_pool"] = np.nan
+            return df
+        try:
+            # multiclass booster.predict 输出 [n, 3]
+            proba = self.predict_one(df, "r5_pump_3way")
+            if proba.ndim == 2 and proba.shape[1] == 3:
+                df["pump_neutral_score"] = proba[:, 0]
+                df["pump_down_score"] = proba[:, 1]
+                df["pump_score"] = proba[:, 2]
+            else:
+                raise ValueError(f"3way 模型输出 shape 异常: {proba.shape}")
+        except Exception as e:
+            print(f"  [apply_pump_3way] 推理失败 ({e}), 字段全 NaN", flush=True)
+            df["pump_score"] = np.nan
+            df["pump_down_score"] = np.nan
+            df["pump_neutral_score"] = np.nan
+            df["pump_score_rank_in_pool"] = np.nan
+            df["pump_down_rank_in_pool"] = np.nan
+            return df
+
+        # V7c 池内 pct rank (两个方向都算)
+        df["pump_score_rank_in_pool"] = np.nan
+        df["pump_down_rank_in_pool"] = np.nan
+        mask = df["v7c_recommend"].astype(bool) & df["pump_score"].notna()
+        if mask.sum() > 0:
+            df.loc[mask, "pump_score_rank_in_pool"] = (
+                df.loc[mask, "pump_score"].rank(pct=True, method="first")
+            )
+            df.loc[mask, "pump_down_rank_in_pool"] = (
+                df.loc[mask, "pump_down_score"].rank(pct=True, method="first")
+            )
         return df
 
     def apply_pump_down_score(self, df: pd.DataFrame) -> pd.DataFrame:
