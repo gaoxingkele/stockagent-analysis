@@ -23,9 +23,9 @@ EXT_DIR     = ROOT / "output" / "factor_lab_3y" / "factor_groups_extension"
 EXT_DIR.mkdir(exist_ok=True)
 
 START      = "20240101"
-END        = "20260515"
-NEW_START  = "20260421"
-NEW_END    = "20260515"
+END        = "20260527"
+NEW_START  = "20260527"
+NEW_END    = "20260527"
 
 
 def load_all_daily():
@@ -64,7 +64,7 @@ def process_group(group_path, ts_codes, templates, base_cols, daily_by_code):
     if not rows:
         return 0
     out = pd.concat(rows, ignore_index=True)
-    out_path = EXT_DIR / f"{group_path.stem}_ext2.parquet"
+    out_path = EXT_DIR / f"{group_path.stem}_ext4.parquet"
     out.to_parquet(out_path, index=False)
     return len(out)
 

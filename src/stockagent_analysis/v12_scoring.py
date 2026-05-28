@@ -498,9 +498,17 @@ class V12Scorer:
             df["pump_down_rank_in_pool"] = np.nan
             return df
 
-        # V7c 池内 pct rank (两个方向都算)
+        # pump_ratio_score: P_up / (P_down + 0.01)
+        # 2026-05-27 实战回测验证 (vs composite): α +2.078→+2.236 Sharpe 2.00→2.20,
+        # 最差月 -0.01→+0.97pp (灾难月 202602 反而 +2.29 vs composite -0.01).
+        # 用户对偶洞察 v3: ratio > N 越大越涨, ratio < 1 越小越跌, 1-2 震荡.
+        # softmax 已隐式优化类间互斥, 推理时取 ratio 是免费的"决断度"信号.
+        df["pump_ratio_score"] = df["pump_score"] / (df["pump_down_score"] + 0.01)
+
+        # V7c 池内 pct rank (3 个信号都算)
         df["pump_score_rank_in_pool"] = np.nan
         df["pump_down_rank_in_pool"] = np.nan
+        df["pump_ratio_rank_in_pool"] = np.nan
         mask = df["v7c_recommend"].astype(bool) & df["pump_score"].notna()
         if mask.sum() > 0:
             df.loc[mask, "pump_score_rank_in_pool"] = (
@@ -508,6 +516,9 @@ class V12Scorer:
             )
             df.loc[mask, "pump_down_rank_in_pool"] = (
                 df.loc[mask, "pump_down_score"].rank(pct=True, method="first")
+            )
+            df.loc[mask, "pump_ratio_rank_in_pool"] = (
+                df.loc[mask, "pump_ratio_score"].rank(pct=True, method="first")
             )
         return df
 

@@ -11,7 +11,7 @@ import tushare as ts
 pro = ts.pro_api(os.getenv("TUSHARE_TOKEN"))
 CACHE = ROOT / "output" / "tushare_cache" / "daily"
 
-START, END = "20260518", "20260522"
+START, END = "20260527", "20260527"
 trade_cal = pro.trade_cal(exchange="SSE", start_date=START, end_date=END, is_open="1")
 dates = trade_cal["cal_date"].tolist()
 print(f"交易日: {dates}", flush=True)
