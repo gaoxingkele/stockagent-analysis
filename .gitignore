@@ -35,3 +35,7 @@ add_doubao_provider.py
 .claude/
 Reference/
 logs_*.txt
+
+# research checkpoints (recomputable, large)
+research/cache/*.parquet
+research/cache/*.log

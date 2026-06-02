@@ -1,0 +1,41 @@
+{
+  "id": "T-001",
+  "title": "相位对齐事件研究 (ratio vs MA5 拐点, regime 分层, 零前视)",
+  "status": "sync",
+  "conclusion": "pump ratio 不领先 MA5 上拐点: 最大单日抬升(ignition)与拐点同步(τ0), 信号峰滞后+2d, 信号谷领先约-7d; ratio 是同步/确认型而非预测型信号。peak 偏移跨 regime 不变(+2d), 但 ignition 在震荡市(choppy)漂移到 -5d(轻度领先), 趋势/中性市保持 τ0 — 相位关系随 regime 非平稳, 为 T-002 留下直接证据。",
+  "method": {
+    "window": "20240601-20260101 (~19 月)",
+    "n_events": 190483,
+    "n_stocks": 5026,
+    "turning_point": "MA5 斜率滞后确认变号(slope(t)>0 & slope(t-1)<=0 在 t 日确认, 仅用截至 t 收盘价, 零前视), τ=0=确认日 = 上拐点(局部底)",
+    "ratio": "P_up/(P_down+0.01), v3c 3way 逐日 causal 推理 (proba[:,2]/(proba[:,1]+eps))",
+    "regime": "过去60日 MA5/MA60 上下穿次数 ma5_60_cross_60d (全 causal), 全样本 p20/p80 切 trend(<=1)/mid/choppy(>=3)",
+    "st_excluded": true,
+    "leakage_guard": "ratio 缓存落 research/cache/ (非 features/, 不触发黑名单); pump/ratio 全 causal; verify.py forward-field guard 通过"
+  },
+  "landmarks_days": {
+    "note": "<0=领先拐点τ0; ignition=最大单日抬升偏移; peak=信号顶; trough=信号谷; 地标在内区[-8,+8]搜索剔除边界水平漂移",
+    "all":    {"n": 190483, "trough": -7, "ignition": 0,  "peak": 2},
+    "trend":  {"n": 98225,  "trough": -7, "ignition": 0,  "peak": 2},
+    "mid":    {"n": 39713,  "trough": -6, "ignition": 0,  "peak": 2},
+    "choppy": {"n": 52545,  "trough": -7, "ignition": -5, "peak": 2}
+  },
+  "regime_invariance": {
+    "peak_invariant": true,
+    "ignition_invariant": false,
+    "comment": "peak 跨 regime 恒为 +2d; ignition 在 choppy 提前到 -5d(轻度领先), trend/mid/all 同步 τ0 → lead/lag 随 regime 漂移"
+  },
+  "raw_ratio_curve_all": [3.31, 2.91, 2.65, 2.52, 2.54, 2.75, 2.86, 2.99, 3.11, 3.13, 3.36, 3.51, 3.55, 3.51, 3.24, 3.11, 2.96, 2.93, 3.00, 3.15, 3.31],
+  "offsets": [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  "artifacts": [
+    "research/t001_phase_event_study.py",
+    "research/cache/ratio_series.parquet",
+    "research/cache/t001_results.json",
+    "research/cache/figs/t001_phase_curve.png"
+  ],
+  "caveats": [
+    "中间指标 (相位曲线/lead-lag) 仅描述, 不作 gate (SIGN-R03); 是否落地由 T-005 walk-forward α 决定",
+    "事件研究为描述性回溯; ratio@τ+k 的观察不构成可交易规则",
+    "status=sync 即'premise(ratio领先)被部分证伪'仍是合法完成 (SIGN-R02)"
+  ]
+}

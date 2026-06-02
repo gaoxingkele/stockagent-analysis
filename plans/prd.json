@@ -32,8 +32,10 @@
         "research/verdicts/T-001.json: status in {lead, sync, lag} + 一句话结论"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "lag (premise 被证伪) 也算完成, 结论本身是交付物。不得为了得到 lead 而调参。"
+      "passes": true,
+      "completed_at": "2026-06-02",
+      "verdict": "sync",
+      "notes": "lag (premise 被证伪) 也算完成, 结论本身是交付物。不得为了得到 lead 而调参。 [DONE] status=sync: ratio 不领先 MA5 上拐点, ignition 同步 τ0 / peak 滞后 +2d / trough 领先 -7d; peak 跨 regime 不变(+2d) 但 ignition 在 choppy 漂移到 -5d (非平稳, 接 T-002)。190483 事件/5026 股。"
     },
     {
       "id": "T-002",
