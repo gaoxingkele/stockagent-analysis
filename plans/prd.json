@@ -1,0 +1,108 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/ratio-phase",
+  "northStar": "判定『相位感知 / 动态窗口』对 pump ratio 是否带来经 walk-forward 验证、相对生产线 V12.31 的真 alpha;有就以 opt-in 方式落地,没有就把负结论文档化并停手。生产线 V12.31 全程冻结。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0 (纪律检查器全绿)",
+    "每个非 skip task 都产出工件 + research/verdicts/<id>.json (含 status 与一句话结论)",
+    "T-005 walk-forward gate 已评估 (PASS 落地 / REJECT 文档化, 两者都算完成)",
+    "生产线指纹未变: src/stockagent_analysis/v12_scoring.py 与生产模型文件 hash 与基线一致"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "循环启动时写死, 任何迭代不得修改 (SIGN-R01)",
+    "metric": "walk-forward 19 月, 与 V12.31 同协议同 harness apples-to-apples",
+    "pass_conditions": [
+      "Δα(月化) >= +0.30pp  相对 V12.31 walk-forward 基线",
+      "Sharpe 不低于基线",
+      "无新增灾难月 (最差月不低于基线最差月)",
+      "正 α 月占比不低于基线"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "T-001",
+      "title": "相位对齐事件研究 (ratio vs MA5 拐点, regime 分层, 零前视)",
+      "acceptanceCriteria": [
+        "拐点用滞后确认 (lagged-confirmed MA5 slope 变号), 绝不使用未来数据",
+        "对每只股把上拐点对齐 τ=0, 输出 regime 分层的 ratio 相位平均曲线 (±10 日)",
+        "量化 ratio 相对拐点的 lead/lag 天数 (按 regime 分层)",
+        "research/verify.py 的 leakage guard 通过 (无 forward-field)",
+        "research/verdicts/T-001.json: status in {lead, sync, lag} + 一句话结论"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "lag (premise 被证伪) 也算完成, 结论本身是交付物。不得为了得到 lead 而调参。"
+    },
+    {
+      "id": "T-002",
+      "title": "窗口非平稳检验 (ratio 短窗/长窗分解 + lead/lag 漂移)",
+      "acceptanceCriteria": [
+        "把 ratio 拆成短窗 vs 长窗特征贡献 (例: shap 或消融)",
+        "检验 lead/lag 是否随 regime (快市/慢市) 漂移, 给出量化漂移幅度",
+        "research/verdicts/T-002.json: status in {window_dynamic_needed, fixed_ok} + 结论",
+        "若 fixed_ok 则在 prd 中把 T-004 标记 skip:true"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "漂移 = 固定窗口不够的直接证据。依赖 T-001 完成。"
+    },
+    {
+      "id": "T-003",
+      "title": "ratio 轨迹特征 (Δratio/Δ²ratio/背离象限/自分位/距峰天数), 全因果",
+      "acceptanceCriteria": [
+        "构建 5 类轨迹特征, 全部 causal (仅用 t 及之前数据)",
+        "产出全历史 parquet 到 research/features/ratio_traj.parquet",
+        "research/verify.py forward-field 黑名单 guard 通过",
+        "单因子 IC / 分层 IC 仅作描述记录, 不作 gate",
+        "research/verdicts/T-003.json: status=built + IC 摘要"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "ratio 时序模型现在看不到 (逐日独立跑), 这是真正正交的增量。IC 好看不等于落地。"
+    },
+    {
+      "id": "T-004",
+      "title": "多尺度门控启动子 (最廉价动态窗口实现)",
+      "acceptanceCriteria": [
+        "K 个窗口尺度各训一个 pump 模型 (artifact 落 research/models/)",
+        "regime / run-length 门控集成, 输出动态窗口版 ratio",
+        "推理路径在样本日跑通, 不触碰生产模型",
+        "research/verdicts/T-004.json: status=built"
+      ],
+      "priority": 4,
+      "passes": false,
+      "skip": false,
+      "notes": "条件执行, 依赖 T-002 裁决为 window_dynamic_needed; 若 fixed_ok 由 T-002 置 skip:true。"
+    },
+    {
+      "id": "T-005",
+      "title": "walk-forward 决策 gate (vs V12.31 同协议 apples-to-apples)",
+      "acceptanceCriteria": [
+        "19 月 walk-forward, 独立训练/测试, 协议与 project_walk_forward_validation_0525 一致",
+        "同 harness 重跑 V12.31 baseline 做对照",
+        "报告 α(月化)/Sharpe/最差月/正α月占比 vs baseline",
+        "断言 preRegisteredGate.pass_conditions: 全满足 -> verdict=PASS, 否则 verdict=REJECT",
+        "research/verdicts/T-005.json: status in {PASS, REJECT} + 四项指标对照表"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "REJECT 不是错误, 是合法完成。禁止在同一段 OOS 上反复重调再试 (SIGN-R02)。"
+    },
+    {
+      "id": "T-006",
+      "title": "落地 (仅 T-005 PASS): opt-in 接进 v12_scoring",
+      "acceptanceCriteria": [
+        "以 opt-in 开关接入 src/stockagent_analysis/v12_scoring.py, 默认关闭",
+        "默认生产路径 (开关关) 输出与基线逐位一致",
+        "research/verdicts/T-006.json: status in {landed, skipped}"
+      ],
+      "priority": 6,
+      "passes": false,
+      "skip": true,
+      "skipReason": "条件任务: 仅当 T-005 verdict=PASS 时由迭代解除 skip; T-005 REJECT 则保持 skip 并写 verdict=skipped。",
+      "notes": "未 PASS 不落地, 直接合法完成。"
+    }
+  ]
+}

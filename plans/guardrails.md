@@ -1,61 +1,81 @@
-# Ralph Guardrails (Signs)
+# Ralph Guardrails — research/ratio-phase
 
-Learned constraints that prevent repeated failures. Each "sign" is a rule discovered through iteration failures. Add new signs as you encounter failure patterns.
+研究型循环的"signs"。核心与机械型 backlog 不同:**完成 = 产出工件 + 写下裁决(正/负都算完成)**,
+不是"把 α 做大"。这些 SIGN 直接编码本项目的反过拟合血泪教训。
 
-> "Progress should persist. Failures should evaporate." - The Ralph philosophy
-
----
-
-## Verification Signs
-
-### SIGN-001: Verify Before Complete
-**Trigger:** About to output completion promise
-**Instruction:** ALWAYS run the verification command (`pnpm verify` or equivalent) and confirm it passes before outputting `<promise>COMPLETE</promise>`
-**Reason:** Models tend to declare victory without proper verification
-
-### SIGN-002: Check All Tasks Before Complete
-**Trigger:** Completing a task in multi-task mode
-**Instruction:** Re-read prd.json and count remaining `passes: false` tasks. Only output completion promise when ALL tasks pass, not just the current one.
-**Reason:** Premature completion exits loop with work remaining
+> "Progress should persist. Failures should evaporate." — Ralph 哲学
+> 但在量化研究里还要加一句:**"宣布胜利的冲动必须被 walk-forward 和事前注册的 gate 中和。"**
 
 ---
 
-## Progress Signs
+## 反过拟合纪律 (本循环的灵魂)
 
-### SIGN-003: Document Learnings
-**Trigger:** Completing any task
-**Instruction:** Update progress.md with what was learned (patterns discovered, files modified, decisions made) before ending iteration
-**Reason:** Future iterations need context to avoid re-discovering the same patterns
+### SIGN-R01: 不许移门柱
+**Trigger:** 任何想修改 prd.json 里 `preRegisteredGate` 的时刻
+**Instruction:** gate 数值在循环启动时写死, 任何迭代**绝不**修改阈值/指标/协议。需要改 = 立刻停手交人。
+**Reason:** 研究循环若能调 gate, ralph 会一直磨到撞上目标 = 反向过拟合 OOS。见 feedback_quant_system_meta_lessons_0524。
 
-### SIGN-004: Small Focused Changes
-**Trigger:** Making changes per iteration
-**Instruction:** Keep changes small and focused. Commit incrementally when tests pass. Don't try to solve everything in one iteration.
-**Reason:** Large changes are harder to debug when verification fails
+### SIGN-R02: 负结果 = 合法完成
+**Trigger:** T-005 walk-forward 没达到 gate
+**Instruction:** 写 `verdict=REJECT` + 四项指标对照, task 置 `passes:true` 然后停。**禁止**在同一段 OOS 上反复重调特征/超参再试。
+**Reason:** "再调一版试试"正是反向过拟合的引擎。一次诚实的 REJECT 比十次 p-hack 的 PASS 值钱。
 
----
+### SIGN-R03: 中间指标 ≠ 落地
+**Trigger:** 看到 IC / precision / lead-lag 曲线变好, 想据此宣布成功或落地
+**Instruction:** 一律不作数。只有 T-005 的 walk-forward α 决定 ship。中间指标只写进 verdict 作描述。
+**Reason:** feedback_train_label_over_inference_hack: 中间指标改善 ≠ 实战 α 改善。v3c+B 教训 -0.21pp。
 
-## Task Management Signs
-
-### SIGN-005: Use Skip for Manual Tasks
-**Trigger:** Encountering a task that requires manual human intervention (creating accounts, API keys, dashboard configuration)
-**Instruction:** Set `skip: true` and `skipReason` in prd.json for tasks that cannot be automated. The Ralph loop will ignore skipped tasks and can complete without them.
-**Reason:** Allows loop to complete automatable work without blocking on manual steps
-
-### SIGN-006: Reference GitHub Issues in Commits
-**Trigger:** Committing changes for a prd.json task
-**Instruction:** Include `Fixes #N` or `Closes #N` in commit message body (where N is the `github_issue` from prd.json). Format: `fix: description\n\nFixes #61`
-**Reason:** Auto-closes GitHub issues when merged to main, maintains traceability
+### SIGN-R04: 泄漏自查是前置闸
+**Trigger:** 任何产出 IC / 回测 / 特征 parquet 之前
+**Instruction:** 先跑 `python research/verify.py` 的 leakage guard。撞 forward-field 黑名单 (r5/r10/r20/r30/r40/dd5-dd40 等) 即停。拐点 label 必须 lagged-confirmed。见到 IC>0.5 / Sharpe>10 先查泄漏和 ST。
+**Reason:** feedback_forward_label_assistant_fields + project_gate_1_fail: 研究首跑 RankIC 0.56 就是 forward 字段泄漏的假突破。
 
 ---
 
-## Project-Specific Signs
+## 生产安全 (绝对红线)
 
-Add signs below as you encounter project-specific failure patterns:
+### SIGN-R05: 生产线 V12.31 冻结
+**Trigger:** 任何迭代想动 src/stockagent_analysis/v12_scoring.py、生产模型文件、daily_top20_*.py
+**Instruction:** 一律禁止 (T-006 落地除外, 且必须 opt-in 默认关、生产路径逐位一致)。所有工作只在 research/ 下 + research/ratio-phase 分支。verify.py 会校验生产文件 hash。
+**Reason:** 生产线在跑实盘推荐, 任何意外改动 = 直接事故。
 
-<!-- Example format:
-### SIGN-XXX: [Descriptive Name]
-**Trigger:** [When this sign applies]
-**Instruction:** [What to do instead]
-**Reason:** [Why this matters]
-**Added after:** [Iteration N / date when learned]
+### SIGN-R06: ST 源头排除 + 全程分层
+**Trigger:** 加载任何训练/回测/推理数据
+**Instruction:** ST 在数据加载时就 filter (训练/回测/推理三处), 不是事后过滤。所有评估必带分层 (regime / 市值 / PE)。
+**Reason:** feedback_st_exclude_at_source + feedback_stratified_analysis: ST 偏见制造 IC 0.77 假信号; 单因子全市场 IC≈0 但分层后翻 5-10 倍。
+
+---
+
+## 执行纪律
+
+### SIGN-R07: 每次只改一处 + 改完重跑泄漏自查
+**Trigger:** 单次迭代
+**Instruction:** 保持改动小而聚焦, 一次推进一个 task。任何特征/label 改动后立即重跑 leakage guard。verify 通过才 commit。
+**Reason:** 大改难定位; 泄漏会在不经意的 join 里溜进来。
+
+### SIGN-R08: 长任务先 checkpoint
+**Trigger:** 特征构建 / 回测预计 >5 分钟
+**Instruction:** 第一版就要断点续跑 (parquet 分块 + 已完成跳过), 不能事后补。
+**Reason:** feedback_long_task_persistence: 超 5 分钟的第一版就要有 checkpoint。
+
+### SIGN-R09: 每迭代更新 progress.md
+**Trigger:** 结束任一迭代前
+**Instruction:** 写清本轮裁决、产出工件路径、下一步。fresh-context 每轮干净重启, 全靠 progress.md 续命。
+**Reason:** 否则下一轮重新发现同样的东西, 浪费迭代。
+
+### SIGN-R10: 完成前清点全部 task
+**Trigger:** 准备输出完成 promise
+**Instruction:** 重读 prd.json, 数剩余 `passes:false` 且非 skip 的 task。全部有 verdict 才 promise。
+**Reason:** 防止提前退出循环留下未完成的研究步骤。
+
+---
+
+## 项目专属 signs (循环中遇到失败再追加, append-only)
+
+<!--
+### SIGN-RXX: [名称]
+**Trigger:** ...
+**Instruction:** ...
+**Reason:** ...
+**Added after:** [迭代 N / 日期]
 -->
