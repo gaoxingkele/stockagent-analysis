@@ -94,7 +94,8 @@ def load_tasks() -> list[dict]:
     if not PRD.exists():
         violations.append(f"[VIOLATION] 缺 {PRD}")
         return []
-    return json.loads(PRD.read_text(encoding="utf-8")).get("tasks", [])
+    d = json.loads(PRD.read_text(encoding="utf-8"))
+    return d.get("features", d.get("tasks", []))
 
 
 def check_verdicts(tasks: list[dict]) -> None:

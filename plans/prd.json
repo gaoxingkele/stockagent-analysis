@@ -20,7 +20,7 @@
       "正 α 月占比不低于基线"
     ]
   },
-  "tasks": [
+  "features": [
     {
       "id": "T-001",
       "title": "相位对齐事件研究 (ratio vs MA5 拐点, regime 分层, 零前视)",
