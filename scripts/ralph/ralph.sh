@@ -384,7 +384,11 @@ EOF
   # Use claude CLI with print mode and JSON output to capture tokens
   # The prompt re-anchors from files every iteration
   # --dangerously-skip-permissions required for non-interactive mode
-  claude --print --output-format json --dangerously-skip-permissions \
+  # timeout + </dev/null: 防止内层 claude teardown 挂住 stdin/进程导致整个循环空转
+  # (Windows git-bash 嵌套 claude 已知问题, 见 2026-06-02 T-001 后卡死一天)
+  ITER_TIMEOUT="${ITER_TIMEOUT:-3600}"
+  timeout -k 30 "$ITER_TIMEOUT" \
+    claude --print --output-format json --dangerously-skip-permissions \
     "You are in a Ralph loop (fresh-context mode). Read .claude/ralph-state.local.md for instructions, \
      then read $PRD_FILE to find the next failing task, \
      and $PROGRESS_FILE for context. Follow all guardrails in the state file. \
@@ -392,7 +396,7 @@ EOF
      and update prd.json when complete. \
      CRITICAL: Complete ONE task then EXIT. Do NOT continue to other tasks. \
      Output <promise>COMPLETE</promise> only when ALL tasks pass." \
-    > "$JSON_FILE" 2>&1 || true
+    < /dev/null > "$JSON_FILE" 2>&1 || true
 
   CLAUDE_END=$(date +%s)
   CLAUDE_DURATION=$((CLAUDE_END - CLAUDE_START))
