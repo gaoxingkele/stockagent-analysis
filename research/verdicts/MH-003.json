@@ -1,0 +1,11 @@
+{
+  "id": "MH-003",
+  "status": "skipped",
+  "conclusion": "skip: MH-002 (2026-06-04) 判定 no_residual_signal — 动态 mh_* 残差 |IC|<=0.0011 (≪0.01 floor), 卦象信号被 公历月×板块 朴素对照解释完毕, 无独立残差。precondition (MH-002=residual_signal) 未满足, 不构建梅花特征排序臂, 廉价收手 (SIGN-R12)。",
+  "metrics": {
+    "precondition": "MH-002 == residual_signal",
+    "precondition_met": false,
+    "mh002_decision": "no_residual_signal"
+  },
+  "guardrails": ["SIGN-R12 消融未存活 → 不进 Phase-2", "SIGN-R02 廉价收手是合法完成"]
+}

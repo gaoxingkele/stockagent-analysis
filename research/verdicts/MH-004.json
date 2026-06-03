@@ -1,0 +1,12 @@
+{
+  "id": "MH-004",
+  "status": "skipped",
+  "conclusion": "skip: MH-002 (2026-06-04) 判定 no_residual_signal — 卦象消融未存活 (SIGN-R12), 无独立残差信号送进 19 月 walk-forward gate。precondition 未满足, gate 不评估, 廉价收手。",
+  "metrics": {
+    "precondition": "MH-002 == residual_signal (有独立残差才送 walk-forward)",
+    "precondition_met": false,
+    "mh002_decision": "no_residual_signal"
+  },
+  "note": "isGate 任务: 仅在有 Phase-1 残差信号时评估冻结 gate (preRegisteredGate)。本次 Phase-1 即廉价 REJECT, gate 未触发。",
+  "guardrails": ["SIGN-R01 gate 阈值未动", "SIGN-R12 消融未存活", "SIGN-R02 廉价收手是合法完成"]
+}
