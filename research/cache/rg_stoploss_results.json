@@ -1,0 +1,53 @@
+{
+  "window": [
+    "202410",
+    "202604"
+  ],
+  "n_months": 19,
+  "stop_primary_pct": 12.0,
+  "hold_days": 20,
+  "full": {
+    "mean": 7.013320794339463,
+    "worst": -3.1417661329133875,
+    "worst_id": "202412",
+    "disaster": 2,
+    "pos_ratio": 0.8421052631578947
+  },
+  "stop12": {
+    "mean": 6.474380640637541,
+    "worst": -3.770327717187946,
+    "worst_id": "202412",
+    "disaster": 4,
+    "pos_ratio": 0.7894736842105263
+  },
+  "delta_mean_all": -0.5389401537019212,
+  "delta_mean_momentum": -1.0017652256116212,
+  "delta_mean_reversal": -0.3209073851517312,
+  "n_momentum_months": 7,
+  "n_reversal_months": 10,
+  "other_stops": {
+    "stop8": {
+      "mean": 6.036862962514632,
+      "worst": -4.332312930724185,
+      "delta_mean": -0.9764578318248303
+    },
+    "stop12": {
+      "mean": 6.474380640637541,
+      "worst": -3.770327717187946,
+      "delta_mean": -0.5389401537019212
+    },
+    "stop15": {
+      "mean": 6.708088516341875,
+      "worst": -3.4009484258677274,
+      "delta_mean": -0.3052322779975881
+    }
+  },
+  "gate_conditions": {
+    "worst_month改善>=+0.5pp": false,
+    "动量月Δ>=+0.3pp": false,
+    "平均代价Δ>=-0.3pp": false,
+    "不新增灾难月": false
+  },
+  "gate_status": "REJECT",
+  "note": "apples: 两臂同 picks 仅出场规则不同; Δ=止损净效应。窗内不含实盘血洗 0508-0603 (需7月数据), 202602 极端动量月作代理。REJECT 合法完成 (SIGN-R02)。"
+}

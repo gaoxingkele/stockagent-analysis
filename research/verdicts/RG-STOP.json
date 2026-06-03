@@ -1,0 +1,29 @@
+{
+  "id": "RG-STOP",
+  "status": "REJECT",
+  "conclusion": "REJECT: V12.31 picks 加 -12% 收盘止损, 19 月 walk-forward 全期 Δ=-0.539pp 最差月 -3.14→-3.77 动量月 Δ=-1.002; gate 未过=['worst_month改善>=+0.5pp', '动量月Δ>=+0.3pp', '平均代价Δ>=-0.3pp', '不新增灾难月']. 窗内不含实盘血洗窗(7月数据后复检), 202602 代理。",
+  "metrics": {
+    "delta_mean_all_pp": -0.539,
+    "delta_mean_momentum_pp": -1.002,
+    "worst_full_pp": -3.142,
+    "worst_stop_pp": -3.77,
+    "disaster_full": 2,
+    "disaster_stop": 4
+  },
+  "gate_conditions": {
+    "worst_month改善>=+0.5pp": false,
+    "动量月Δ>=+0.3pp": false,
+    "平均代价Δ>=-0.3pp": false,
+    "不新增灾难月": false
+  },
+  "n_months": 19,
+  "window": [
+    "202410",
+    "202604"
+  ],
+  "artifacts": [
+    "research/cache/rg_stoploss_monthly.csv",
+    "research/cache/rg_stoploss_results.json"
+  ],
+  "note": "止损 tail risk 叠加; apples 两臂同 picks; 窗不含实盘血洗 0508-0603 (7月数据后另注册 gate 复检)。"
+}
