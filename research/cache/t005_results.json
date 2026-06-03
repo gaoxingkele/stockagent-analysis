@@ -1,0 +1,40 @@
+{
+  "window": [
+    "202410",
+    "202604"
+  ],
+  "n_months": 19,
+  "protocol": "walk-forward 24m lookback, monthly retrain, r20 pool model fixed (prod), apples-to-apples (sort col only diff)",
+  "baseline": {
+    "alpha_mean": 3.7543613619961067,
+    "alpha_median": 3.0869128581706926,
+    "alpha_std": 2.587435478364555,
+    "sharpe_mean": 4.0001586188800475,
+    "worst_month": -0.2024000964551521,
+    "worst_month_id": "202603",
+    "pos_alpha_ratio": 0.9473684210526315,
+    "disaster_months": 0,
+    "n_months": 19
+  },
+  "dynamic": {
+    "alpha_mean": 3.3969350413212185,
+    "alpha_median": 2.956073260127854,
+    "alpha_std": 2.5330626672890255,
+    "sharpe_mean": 3.7881456220008634,
+    "worst_month": -1.0312965763911526,
+    "worst_month_id": "202602",
+    "pos_alpha_ratio": 0.9473684210526315,
+    "disaster_months": 1,
+    "n_months": 19
+  },
+  "delta_alpha_pp": -0.3574263206748882,
+  "frac_switch_mean": 0.6464049405410813,
+  "gate_conditions": {
+    "delta_alpha>=+0.30pp": false,
+    "sharpe>=baseline": false,
+    "worst_month>=baseline": false,
+    "pos_alpha_ratio>=baseline": true
+  },
+  "gate_status": "REJECT",
+  "note": "Δα 等相对量是 gate; 绝对 α 含两臂共模 r20 池 lookahead, 不作判定 (SIGN-R03)。REJECT 合法完成, 禁止同段 OOS 重调 (SIGN-R02)。"
+}

@@ -95,8 +95,10 @@
         "research/verdicts/T-005.json: status in {PASS, REJECT} + 四项指标对照表"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": "REJECT 不是错误, 是合法完成。禁止在同一段 OOS 上反复重调再试 (SIGN-R02)。"
+      "passes": true,
+      "completed_at": "2026-06-03",
+      "verdict": "REJECT",
+      "notes": "REJECT 不是错误, 是合法完成。禁止在同一段 OOS 上反复重调再试 (SIGN-R02)。 [DONE] status=REJECT: 19 月 walk-forward (202410-202604, 24m lookback 月度重训, apples-to-apples 两臂唯一差异=池内排序列 ratio_s5 vs ratio_dyn) Δα=-0.357pp/月 (gate 需 +0.30pp), 4 条件仅 1 过 (正α月占比 94.7%=94.7% 持平; Δα/Sharpe 3.79<4.00/最差月 -1.031<-0.202 均不过)。动态窗口非但无增量反而轻微伤害 + 新增灾难月 202602 (dyn -1.031 vs base +0.789), 与 T-004 预判 (ratio_dyn 与 s5 相关 0.955 增量空间有限) 一致。相对 V12.31 固定窗口无可落地真 alpha → 不落地, T-006 保持 skip。生产指纹未变, leakage guard 0 违规。"
     },
     {
       "id": "T-006",
@@ -109,8 +111,9 @@
       "priority": 6,
       "passes": false,
       "skip": true,
+      "verdict": "skipped",
       "skipReason": "条件任务: 仅当 T-005 verdict=PASS 时由迭代解除 skip; T-005 REJECT 则保持 skip 并写 verdict=skipped。",
-      "notes": "未 PASS 不落地, 直接合法完成。"
+      "notes": "未 PASS 不落地, 直接合法完成。 [SKIPPED] T-005 verdict=REJECT (Δα=-0.357pp 不过 gate) → 不落地, 保持 skip, 生产线 V12.31 全程冻结未触碰。"
     }
   ]
 }

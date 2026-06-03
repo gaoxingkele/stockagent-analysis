@@ -17,8 +17,8 @@ walk-forward 19 月, 同协议同 harness 对照 V12.31:
 | T-002 窗口非平稳检验 | done | **window_dynamic_needed** (份额平稳 max漂移2.42pp; 但 ignition相位漂移5d 触发; 非平稳=相位非窗口配比) |
 | T-003 ratio 轨迹特征 (全因果) | done | **built** (5类11特征落库; 最强 ratio_div_strength RankIC +0.065 多头背离, regime 稳健; ratio_vel_3 +0.050) |
 | T-004 多尺度门控启动子 (依赖 T-002) | done | **built** (3 尺度 pump 模型 s3/s5/s10 + regime/run_len 门控; 切换 58% vs 固定s5; choppy→s3 95% / trend→s10) |
-| T-005 walk-forward 决策 gate | todo | — |
-| T-006 opt-in 落地 (依赖 T-005=PASS) | skip | — |
+| T-005 walk-forward 决策 gate | done | **REJECT** (Δα=-0.357pp 不过 +0.30pp gate; Sharpe 3.79<4.00; 最差月 -1.031<-0.202; 正α月占比 94.7% 持平) |
+| T-006 opt-in 落地 (依赖 T-005=PASS) | skip | **skipped** (T-005 REJECT → 不落地, 生产线冻结) |
 
 ## 关键约束 (摘自 guardrails)
 - 负结果=合法完成, 禁止在同段 OOS 反复重调 (R02)
@@ -53,3 +53,10 @@ walk-forward 19 月, 同协议同 harness 对照 V12.31:
   - 纪律: 选尺度分布/IC/相关全是中间指标, 仅描述非 gate (SIGN-R03); window_dynamic_needed 只解除 T-004 条件门, 不保证带 α — ship 唯由 T-005 walk-forward 决定。生产模型/v12_scoring 全程未碰 (SIGN-R05)。
   - 产出: research/t004_multiscale_gate.py / research/models/pump_scale_{3,5,10}/ / research/cache/t004_scale_ratios.parquet / research/features/dynamic_ratio.parquet / research/cache/t004_results.json / research/verdicts/T-004.json
   - 下一步 (T-005): walk-forward 决策 gate。19 月独立训练/测试, 协议同 project_walk_forward_validation_0525, 同 harness 重跑 V12.31 baseline 做 apples-to-apples 对照; 把 ratio_dyn (或其衍生 pump 信号) 接进 V7c 池内排序对照 V12.31 的 pump_ratio 默认。报告 α(月化)/Sharpe/最差月/正α月占比 vs baseline, 断言 preRegisteredGate 四条件 → PASS/REJECT。**REJECT 是合法完成, 禁止在同段 OOS 反复重调 (SIGN-R02)。** dynamic_ratio.parquet + 三尺度模型可复用。注意: ratio_dyn 与 s5(≈生产 v3c 档) 相关 0.955, 增量空间可能有限 — 须诚实按 walk-forward 数字定。
+- 迭代5 | T-005 walk-forward 决策 gate | 19 月 (202410-202604) 严格 walk-forward, 每月用前 24 月独立重训 3 个尺度 pump 模型 (s3/s5/s10, checkpoint 落 t005_wf_models/{month}/), r20 池模型沿用生产 r20_v16_long_nost (两臂共用不重训); apples-to-apples 两臂唯一差异 = V7c 池内排序列 (baseline=ratio_s5 ≈ V12.31 固定窗口 / dynamic=ratio_dyn 门控多尺度), 池/过滤/行业 cap/仓位/成本全一致 → 共模 r20 池 lookahead 在 Δα 相消, 只看相对量 (SIGN-R03)。修了上轮崩溃: trade_date 是 arrow large_string, pyarrow quantile 无 string kernel → 改按排序位置取 0.92 分位日做时间切分早停。耗时 23.1 min。
+  - **裁决 REJECT** (合法完成, SIGN-R02): Δα = **-0.357pp/月** (gate 需 ≥+0.30pp ✗); Sharpe 3.79 < baseline 4.00 ✗; 最差月 -1.031 < baseline -0.202 ✗ (新增灾难月 202602: dyn -1.031 vs base +0.789); 正 α 月占比 94.7% = 94.7% ✓ (4 条件仅 1 过)。
+  - **结论**: 动态窗口 ratio_dyn 非但无增量, 反而轻微伤害 + 新增灾难月。与 T-004 预判完全一致 (ratio_dyn 与 s5 相关 0.955, 门控切换 65% 但切换的是高相关尺度, 增量空间有限)。相对 V12.31 固定窗口**无可落地真 alpha → 不落地**, 负结论文档化。这是一次诚实的 REJECT, 中和了"动态窗口更高级所以应该更好"的直觉 — walk-forward 是唯一裁判 (SIGN-R03)。**未在同段 OOS 重调再试 (SIGN-R02)。**
+  - 月度 Δα 明细: 19 月中 6 月正 / 13 月负, 最好 +1.229 (202603) 最差 -2.003 (202509); 负偏 = 动态切换在 trend 月 (本就该用长窗) 偶尔切错。
+  - **T-006 = skipped**: T-005 REJECT → 落地门未解除, 不接 v12_scoring, 生产线 V12.31 全程冻结未触碰 (SIGN-R05)。verdict 写 status=skipped。
+  - 产出: research/t005_walk_forward_gate.py / research/cache/t005_monthly.csv / research/cache/t005_results.json / research/cache/t005_wf_models/ (19 月 × 3 尺度模型) / research/verdicts/T-005.json (REJECT) / research/verdicts/T-006.json (skipped)
+  - **循环完结**: T-001~T-005 全部产出工件 + 裁决 (sync / window_dynamic_needed / built / built / REJECT), T-006 skipped。verify.py exit 0 (leakage guard 0 违规, 生产指纹一致)。北极星已回答: 相位感知/动态窗口对 pump ratio **无 walk-forward 验证的真 alpha → 不落地**, 负结论文档化, 停手。
