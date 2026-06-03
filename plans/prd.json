@@ -63,8 +63,10 @@
         "research/verdicts/T-003.json: status=built + IC 摘要"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "ratio 时序模型现在看不到 (逐日独立跑), 这是真正正交的增量。IC 好看不等于落地。"
+      "passes": true,
+      "completed_at": "2026-06-03",
+      "verdict": "built",
+      "notes": "ratio 时序模型现在看不到 (逐日独立跑), 这是真正正交的增量。IC 好看不等于落地。 [DONE] status=built: 5 类 11 个全 causal 轨迹特征落 research/features/ratio_traj.parquet (191.8 万行/5055 股); 描述性 RankIC(fwd5) 最强 ratio_div_strength=+0.065 (多头背离, regime 间 +0.055~+0.075 稳健), ratio_vel_3=+0.050; 量级温和无泄漏(最强0.065<<0.5); 前向收益仅内存评估未入库, verify leakage guard 通过。IC 仅描述非 gate。"
     },
     {
       "id": "T-004",

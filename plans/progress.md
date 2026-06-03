@@ -15,7 +15,7 @@ walk-forward 19 月, 同协议同 harness 对照 V12.31:
 |----|------|------|
 | T-001 事件研究 (ratio vs MA5 拐点, lead/lag) | done | **sync** (ignition τ0 / peak +2d / trough -7d; choppy ignition 漂移 -5d) |
 | T-002 窗口非平稳检验 | done | **window_dynamic_needed** (份额平稳 max漂移2.42pp; 但 ignition相位漂移5d 触发; 非平稳=相位非窗口配比) |
-| T-003 ratio 轨迹特征 (全因果) | todo | — |
+| T-003 ratio 轨迹特征 (全因果) | done | **built** (5类11特征落库; 最强 ratio_div_strength RankIC +0.065 多头背离, regime 稳健; ratio_vel_3 +0.050) |
 | T-004 多尺度门控启动子 (依赖 T-002) | todo | — |
 | T-005 walk-forward 决策 gate | todo | — |
 | T-006 opt-in 落地 (依赖 T-005=PASS) | skip | — |
@@ -41,3 +41,9 @@ walk-forward 19 月, 同协议同 harness 对照 V12.31:
   - 注意 (SIGN-R03): SHAP份额/ignition漂移都是中间指标, 仅描述; ship 与否只由 T-005 walk-forward α 定。window_dynamic_needed 只解除 T-004 条件门, 不保证 T-004 带 α。
   - 产出: research/t002_window_nonstationarity.py / research/cache/t002_sample.parquet (复用免重算 load_window) / research/cache/t002_results.json / research/verdicts/T-002.json
   - 下一步 (T-003): 构建 5 类 ratio 轨迹特征 (Δratio/Δ²ratio/背离象限/自分位/距峰天数), 全 causal, 落 research/features/ratio_traj.parquet。注意 features/ 目录会触发 verify.py 黑名单 guard, 列名勿撞 forward-field。ratio_series.parquet 可复用。
+- 迭代3 | T-003 ratio 轨迹特征 | 复用 ratio_series.parquet + daily close, 构建 5 类全 causal 轨迹特征 (191.8 万行/5055 股), 落 research/features/ratio_traj.parquet (14 列, 入库前自检列名不撞 forward-field 黑名单)。特征: ①速度 ratio_vel_1/3/5 ②加速度 ratio_acc_1/3 ③背离象限 ratio_div_quad(-2/-1/1/2)+ratio_div_strength(各自 60d 滚动 std 归一后相减) ④自分位 ratio_selfpct_20/60 (rolling rank) ⑤距峰天数 ratio_days_since_hi/lo_60 (rolling argmax/min)。耗时 35s。
+  - **裁决 built**: 描述性 RankIC(fwd5, 仅内存评估前向收益未入库) 最强 = **ratio_div_strength +0.0654** (ratio 升势快于价格的多头背离, regime 间 +0.0548~+0.0752 稳健); ratio_vel_3 +0.0495 / ratio_vel_5 +0.0446 次之; ratio_days_since_hi_60 +0.0242; div_quad -0.0232 (离散象限编码方向, 用连续 div_strength); acc_1/selfpct/days_since_lo 偏弱。量级温和 (最强 0.065 << 0.5 阈值, 无泄漏/ST 红旗)。
+  - **正交性印证**: div_strength 跨 regime 稳健 + vel_3 最强, 与 T-002 "非平稳来自相位/时序而非窗口配比" 一致 → T-004 门控应优先纳入轨迹速度 (vel_3) + 背离强度 (div_strength)。
+  - 纪律: IC 仅描述非 gate (SIGN-R03); ship 只由 T-005 walk-forward α 定。脚本入库前自检 + verify.py leakage guard 双通过 (0 违规, 生产指纹未变)。控制台需 PYTHONUTF8=1 (Δ²/中文在 GBK 控制台会 UnicodeEncodeError)。
+  - 产出: research/t003_ratio_trajectory.py / research/features/ratio_traj.parquet / research/cache/t003_results.json / research/verdicts/T-003.json
+  - 下一步 (T-004): 多尺度门控启动子。依 T-002 裁决 (skip:false), 对 K 个窗口尺度各训 pump 模型落 research/models/, regime/run-length 门控集成输出动态窗口版 ratio, 推理路径样本日跑通不碰生产模型。T-003 的轨迹特征 (尤其 vel_3/div_strength) 可作门控输入候选。ratio_series.parquet + ratio_traj.parquet 均可复用。

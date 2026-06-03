@@ -39,4 +39,5 @@ logs_*.txt
 # research checkpoints (recomputable, large)
 research/cache/*.parquet
 research/cache/*.log
+research/features/*.parquet
 scripts/ralph/runs/

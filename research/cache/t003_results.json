@@ -1,0 +1,121 @@
+{
+  "window": [
+    "20240601",
+    "20260101"
+  ],
+  "n_rows": 1917972,
+  "n_stocks": 5055,
+  "feature_cols": [
+    "ratio_vel_1",
+    "ratio_vel_3",
+    "ratio_vel_5",
+    "ratio_acc_1",
+    "ratio_acc_3",
+    "ratio_div_quad",
+    "ratio_div_strength",
+    "ratio_selfpct_20",
+    "ratio_selfpct_60",
+    "ratio_days_since_hi_60",
+    "ratio_days_since_lo_60"
+  ],
+  "feature_categories": {
+    "1_velocity_dratio": [
+      "ratio_vel_1",
+      "ratio_vel_3",
+      "ratio_vel_5"
+    ],
+    "2_accel_d2ratio": [
+      "ratio_acc_1",
+      "ratio_acc_3"
+    ],
+    "3_divergence_quadrant": [
+      "ratio_div_quad",
+      "ratio_div_strength"
+    ],
+    "4_self_percentile": [
+      "ratio_selfpct_20",
+      "ratio_selfpct_60"
+    ],
+    "5_days_since_peak": [
+      "ratio_days_since_hi_60",
+      "ratio_days_since_lo_60"
+    ]
+  },
+  "coverage_notna": {
+    "ratio_vel_1": 0.9974,
+    "ratio_vel_3": 0.9921,
+    "ratio_vel_5": 0.9868,
+    "ratio_acc_1": 0.9947,
+    "ratio_acc_3": 0.9842,
+    "ratio_div_quad": 1.0,
+    "ratio_div_strength": 0.9369,
+    "ratio_selfpct_20": 0.9763,
+    "ratio_selfpct_60": 0.95,
+    "ratio_days_since_hi_60": 0.95,
+    "ratio_days_since_lo_60": 0.95
+  },
+  "descriptive_ic": {
+    "overall": {
+      "ratio_vel_1": 0.0178,
+      "ratio_vel_3": 0.0495,
+      "ratio_vel_5": 0.0446,
+      "ratio_acc_1": 0.0002,
+      "ratio_acc_3": 0.0204,
+      "ratio_div_quad": -0.0232,
+      "ratio_div_strength": 0.0654,
+      "ratio_selfpct_20": 0.0134,
+      "ratio_selfpct_60": 0.0138,
+      "ratio_days_since_hi_60": 0.0242,
+      "ratio_days_since_lo_60": 0.003
+    },
+    "by_regime": {
+      "trend": {
+        "ratio_vel_1": 0.0164,
+        "ratio_vel_3": 0.047,
+        "ratio_vel_5": 0.0459,
+        "ratio_acc_1": -0.0014,
+        "ratio_acc_3": 0.016,
+        "ratio_div_quad": -0.0194,
+        "ratio_div_strength": 0.0647,
+        "ratio_selfpct_20": 0.0156,
+        "ratio_selfpct_60": 0.0172,
+        "ratio_days_since_hi_60": 0.0291,
+        "ratio_days_since_lo_60": 0.0045
+      },
+      "mid": {
+        "ratio_vel_1": 0.0142,
+        "ratio_vel_3": 0.0404,
+        "ratio_vel_5": 0.0296,
+        "ratio_acc_1": 0.0011,
+        "ratio_acc_3": 0.0192,
+        "ratio_div_quad": -0.0292,
+        "ratio_div_strength": 0.0752,
+        "ratio_selfpct_20": 0.0001,
+        "ratio_selfpct_60": -0.005,
+        "ratio_days_since_hi_60": 0.0235,
+        "ratio_days_since_lo_60": -0.0019
+      },
+      "choppy": {
+        "ratio_vel_1": 0.0184,
+        "ratio_vel_3": 0.0509,
+        "ratio_vel_5": 0.0448,
+        "ratio_acc_1": 0.0013,
+        "ratio_acc_3": 0.0238,
+        "ratio_div_quad": -0.0155,
+        "ratio_div_strength": 0.0548,
+        "ratio_selfpct_20": 0.014,
+        "ratio_selfpct_60": 0.0145,
+        "ratio_days_since_hi_60": 0.0171,
+        "ratio_days_since_lo_60": -0.0018
+      }
+    },
+    "fwd_horizon": 5,
+    "regime_cut": {
+      "cross_p20": 1.0,
+      "cross_p80": 3.0
+    },
+    "n_eval_rows": 1917972,
+    "note": "RankIC 描述性, 非 gate (SIGN-R03); 前向收益仅内存计算未入库"
+  },
+  "causal_note": "全部 diff/shift(+k)/过去窗口 rolling, 零 shift(-k); 前向收益仅内存评估未入库"
+}
