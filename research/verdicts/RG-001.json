@@ -1,0 +1,20 @@
+{
+  "id": "RG-001",
+  "status": "built",
+  "conclusion": "因果动量-regime 检测器建成: 825 个交易日分类 (momentum 29% / mixed 16% / reversal 55%); 核心信号=过去[t-40,t-20]动量分档的[t-20,t]已实现 D9-D0 持续性价差 (两窗连续全过去, 零前视); 因果性自检 causal_ok=True (抹未来价格重算 spread 差<1e-6)。 已知动量月 202605 被判 momentum 占比 83%, 与审计吻合。 分布/吻合度仅描述, ship 由 RG-004 walk-forward 定 (SIGN-R03)。",
+  "metrics": {
+    "n_classified_days": 825,
+    "regime_distribution": {
+      "reversal": 0.5467,
+      "momentum": 0.2909,
+      "mixed": 0.1624
+    },
+    "causal_ok": true,
+    "known_202605_momentum_frac": 0.833
+  },
+  "artifacts": [
+    "research/features/regime_timeline.parquet",
+    "research/cache/rg001_results.json"
+  ],
+  "note": "regime 是后续 RG-002/003/004 的地基; 全 causal, ST 源头排除; 固定阈值仅描述非拟合, 不构成 ship 决策 (SIGN-R03)。"
+}

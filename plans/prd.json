@@ -32,8 +32,9 @@
         "research/verdicts/RG-001.json: status=built + regime 分布摘要"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "regime 必须 causal。这是后续一切的地基。"
+      "passes": true,
+      "completed_at": "2026-06-03",
+      "notes": "regime 必须 causal。这是后续一切的地基。 [DONE] research/rg001_regime_detector.py -> regime_timeline.parquet (825 日); 因果自检 abs_diff=0; momentum 29%/mixed 16%/reversal 55%; 已知动量月 202605 判 momentum 83% spread +8.87pp, 202606 momentum 100% +13.39pp 印证审计。"
     },
     {
       "id": "RG-002",

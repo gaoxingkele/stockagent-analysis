@@ -15,7 +15,7 @@ walk-forward 验证能改善动量月而不伤反转月才落地; 否则负结�
 ## 任务台账
 | id | 状态 | 裁决 |
 |----|------|------|
-| RG-001 因果动量-regime 检测器 | todo | — |
+| RG-001 因果动量-regime 检测器 | **done** | built (causal_ok, 202605/202606 印证) |
 | RG-002 v3c regime 分层尸检 (确认假设) | todo | — |
 | RG-003 动量-regime 叠加层 | todo | — |
 | RG-004 按-regime walk-forward gate | todo | — |
@@ -35,3 +35,4 @@ walk-forward 验证能改善动量月而不伤反转月才落地; 否则负结�
 ## 迭代日志
 <!-- 每轮 append: 迭代N | task | 做了什么 | 裁决/产出路径 | 下一步 -->
 - (init) 由 ratio-phase 循环(已完结, REJECT)转入。实盘审计发现 v3c 动量 regime 错配 → 本目标。等待启动。
+- 迭代1 | RG-001 因果动量-regime 检测器 | research/rg001_regime_detector.py。核心信号=**因果动量持续性价差**: t 日按过去 [t-40,t-20] 的 20d 动量横截面分 10 档, 量 [t-20,t] 已实现收益的 D9-D0 价差 (两窗连续全过去, 零前视); +平滑(5d)+宽度(breadth_ma20)+等权指数动量(index_mom20)。固定 deadband ±1.0pp 分 {momentum/mixed/reversal}。**因果性自检 abs_diff=0.0** (抹未来价格重算 spread 完全一致)。ST 源头排除(266 只)。产出 research/features/regime_timeline.parquet (825 日 × 7 列, 20230101-20260603)。分布: momentum 29%/mixed 16%/reversal 55%。**关键吻合**: 已知动量月 202605 判 momentum 83% spread +8.87pp; 202606 (审计 0508→0603 血洗窗) momentum 100% +13.39pp — 因果检测器独立印证实盘审计的强动量行情。裁决 status=built。**下一步 RG-002**: 把 V12.31 的 19 月 walk-forward 按本 regime 分层尸检, 确认"动量月 α 显著负 / 反转月 α 正"假设 (若 hypothesis_rejected 则 RG-003/004 置 skip)。可复用 regime_timeline.parquet 按 trade_date merge。

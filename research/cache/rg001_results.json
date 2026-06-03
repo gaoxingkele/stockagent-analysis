@@ -1,0 +1,395 @@
+{
+  "window": [
+    "20230101",
+    "20260603"
+  ],
+  "n_trading_days": 825,
+  "n_classified": 825,
+  "params": {
+    "mom_lookback": 20,
+    "realize_lookback": 20,
+    "n_decile": 10,
+    "smooth": 5,
+    "deadband_pp": 1.0,
+    "min_stocks": 200
+  },
+  "signal_def": "spread = mean(realized[t-20,t] | signal=[t-40,t-20] D9) - D0; 两窗连续全过去, causal",
+  "regime_distribution": {
+    "reversal": 0.5467,
+    "momentum": 0.2909,
+    "mixed": 0.1624
+  },
+  "regime_distribution_n": {
+    "reversal": 451,
+    "momentum": 240,
+    "mixed": 134
+  },
+  "spread_stats": {
+    "mean": -1.41,
+    "std": 6.254,
+    "min": -46.747,
+    "max": 19.277,
+    "p10": -7.939,
+    "p50": -1.258,
+    "p90": 5.295
+  },
+  "causality_self_check": {
+    "checked": true,
+    "date": "20240912",
+    "full": 1.387866,
+    "truncated_future_to_nan": 1.387866,
+    "abs_diff": 0.0,
+    "causal_ok": true
+  },
+  "known_momentum_month_match": {
+    "202605": {
+      "n_days": 18,
+      "momentum_frac": 0.833,
+      "mean_spread": 8.867,
+      "regime_mix": {
+        "momentum": 0.833,
+        "mixed": 0.111,
+        "reversal": 0.056
+      }
+    }
+  },
+  "monthly_dominant_regime": [
+    {
+      "ym": "202301",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 1.0,
+      "mixed": 0.0,
+      "mean_spread": -6.628
+    },
+    {
+      "ym": "202302",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 1.0,
+      "mixed": 0.0,
+      "mean_spread": -5.667
+    },
+    {
+      "ym": "202303",
+      "dominant": "momentum",
+      "momentum": 0.478,
+      "reversal": 0.261,
+      "mixed": 0.261,
+      "mean_spread": 1.728
+    },
+    {
+      "ym": "202304",
+      "dominant": "momentum",
+      "momentum": 1.0,
+      "reversal": 0.0,
+      "mixed": 0.0,
+      "mean_spread": 7.063
+    },
+    {
+      "ym": "202305",
+      "dominant": "reversal",
+      "momentum": 0.25,
+      "reversal": 0.65,
+      "mixed": 0.1,
+      "mean_spread": -2.471
+    },
+    {
+      "ym": "202306",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 0.9,
+      "mixed": 0.1,
+      "mean_spread": -3.437
+    },
+    {
+      "ym": "202307",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 0.714,
+      "mixed": 0.286,
+      "mean_spread": -4.827
+    },
+    {
+      "ym": "202308",
+      "dominant": "reversal",
+      "momentum": 0.304,
+      "reversal": 0.609,
+      "mixed": 0.087,
+      "mean_spread": -1.982
+    },
+    {
+      "ym": "202309",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 1.0,
+      "mixed": 0.0,
+      "mean_spread": -5.435
+    },
+    {
+      "ym": "202310",
+      "dominant": "momentum",
+      "momentum": 0.824,
+      "reversal": 0.059,
+      "mixed": 0.118,
+      "mean_spread": 2.6
+    },
+    {
+      "ym": "202311",
+      "dominant": "reversal",
+      "momentum": 0.364,
+      "reversal": 0.545,
+      "mixed": 0.091,
+      "mean_spread": -1.588
+    },
+    {
+      "ym": "202312",
+      "dominant": "momentum",
+      "momentum": 0.714,
+      "reversal": 0.19,
+      "mixed": 0.095,
+      "mean_spread": 6.102
+    },
+    {
+      "ym": "202401",
+      "dominant": "momentum",
+      "momentum": 0.545,
+      "reversal": 0.273,
+      "mixed": 0.182,
+      "mean_spread": 2.407
+    },
+    {
+      "ym": "202402",
+      "dominant": "reversal",
+      "momentum": 0.067,
+      "reversal": 0.667,
+      "mixed": 0.267,
+      "mean_spread": -2.05
+    },
+    {
+      "ym": "202403",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 1.0,
+      "mixed": 0.0,
+      "mean_spread": -14.499
+    },
+    {
+      "ym": "202404",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 1.0,
+      "mixed": 0.0,
+      "mean_spread": -9.596
+    },
+    {
+      "ym": "202405",
+      "dominant": "reversal",
+      "momentum": 0.05,
+      "reversal": 0.8,
+      "mixed": 0.15,
+      "mean_spread": -2.435
+    },
+    {
+      "ym": "202406",
+      "dominant": "momentum",
+      "momentum": 0.526,
+      "reversal": 0.316,
+      "mixed": 0.158,
+      "mean_spread": 0.952
+    },
+    {
+      "ym": "202407",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 0.957,
+      "mixed": 0.043,
+      "mean_spread": -2.058
+    },
+    {
+      "ym": "202408",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 1.0,
+      "mixed": 0.0,
+      "mean_spread": -3.732
+    },
+    {
+      "ym": "202409",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 0.579,
+      "mixed": 0.421,
+      "mean_spread": -2.444
+    },
+    {
+      "ym": "202410",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 0.944,
+      "mixed": 0.056,
+      "mean_spread": -4.093
+    },
+    {
+      "ym": "202411",
+      "dominant": "momentum",
+      "momentum": 1.0,
+      "reversal": 0.0,
+      "mixed": 0.0,
+      "mean_spread": 6.64
+    },
+    {
+      "ym": "202412",
+      "dominant": "reversal",
+      "momentum": 0.182,
+      "reversal": 0.682,
+      "mixed": 0.136,
+      "mean_spread": -3.911
+    },
+    {
+      "ym": "202501",
+      "dominant": "reversal",
+      "momentum": 0.056,
+      "reversal": 0.778,
+      "mixed": 0.167,
+      "mean_spread": -2.204
+    },
+    {
+      "ym": "202502",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 0.944,
+      "mixed": 0.056,
+      "mean_spread": -7.432
+    },
+    {
+      "ym": "202503",
+      "dominant": "momentum",
+      "momentum": 0.476,
+      "reversal": 0.429,
+      "mixed": 0.095,
+      "mean_spread": -0.489
+    },
+    {
+      "ym": "202504",
+      "dominant": "reversal",
+      "momentum": 0.286,
+      "reversal": 0.619,
+      "mixed": 0.095,
+      "mean_spread": -2.947
+    },
+    {
+      "ym": "202505",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 0.895,
+      "mixed": 0.105,
+      "mean_spread": -9.149
+    },
+    {
+      "ym": "202506",
+      "dominant": "mixed",
+      "momentum": 0.0,
+      "reversal": 0.45,
+      "mixed": 0.55,
+      "mean_spread": -1.079
+    },
+    {
+      "ym": "202507",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 0.652,
+      "mixed": 0.348,
+      "mean_spread": -1.384
+    },
+    {
+      "ym": "202508",
+      "dominant": "momentum",
+      "momentum": 0.524,
+      "reversal": 0.0,
+      "mixed": 0.476,
+      "mean_spread": 1.798
+    },
+    {
+      "ym": "202509",
+      "dominant": "momentum",
+      "momentum": 0.455,
+      "reversal": 0.227,
+      "mixed": 0.318,
+      "mean_spread": 1.626
+    },
+    {
+      "ym": "202510",
+      "dominant": "mixed",
+      "momentum": 0.294,
+      "reversal": 0.118,
+      "mixed": 0.588,
+      "mean_spread": 0.129
+    },
+    {
+      "ym": "202511",
+      "dominant": "reversal",
+      "momentum": 0.3,
+      "reversal": 0.6,
+      "mixed": 0.1,
+      "mean_spread": -0.648
+    },
+    {
+      "ym": "202512",
+      "dominant": "reversal",
+      "momentum": 0.217,
+      "reversal": 0.652,
+      "mixed": 0.13,
+      "mean_spread": -2.148
+    },
+    {
+      "ym": "202601",
+      "dominant": "momentum",
+      "momentum": 0.7,
+      "reversal": 0.0,
+      "mixed": 0.3,
+      "mean_spread": 2.66
+    },
+    {
+      "ym": "202602",
+      "dominant": "momentum",
+      "momentum": 0.429,
+      "reversal": 0.429,
+      "mixed": 0.143,
+      "mean_spread": -0.213
+    },
+    {
+      "ym": "202603",
+      "dominant": "momentum",
+      "momentum": 0.909,
+      "reversal": 0.0,
+      "mixed": 0.091,
+      "mean_spread": 2.524
+    },
+    {
+      "ym": "202604",
+      "dominant": "reversal",
+      "momentum": 0.0,
+      "reversal": 0.524,
+      "mixed": 0.476,
+      "mean_spread": -1.277
+    },
+    {
+      "ym": "202605",
+      "dominant": "momentum",
+      "momentum": 0.833,
+      "reversal": 0.056,
+      "mixed": 0.111,
+      "mean_spread": 8.867
+    },
+    {
+      "ym": "202606",
+      "dominant": "momentum",
+      "momentum": 1.0,
+      "reversal": 0.0,
+      "mixed": 0.0,
+      "mean_spread": 13.388
+    }
+  ],
+  "note": "regime 全 causal; 分布/吻合度仅描述非 gate (SIGN-R03); ship 由 RG-004 walk-forward 定。"
+}
