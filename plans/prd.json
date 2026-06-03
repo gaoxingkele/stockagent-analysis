@@ -1,97 +1,93 @@
 {
   "repo": "gaoxingkele/stockagent-analysis",
-  "branchName": "research/regime-overlay",
-  "northStar": "v3c/V12.31 是均值回归(买回调)策略, 实盘审计证实它在动量延续 regime 被血洗(0508→0603 优秀基金+11.4% 而 picks-10%, 动量D9-D0+12.3pp)。目标: 加一个因果动量-regime 叠加层, 在强动量态抑制回调买入/切动量, 经按-regime-分层的 walk-forward 验证能改善动量月而不伤反转月才落地; 否则文档化负结论。生产线 V12.31 全程冻结。",
+  "branchName": "research/meihua",
+  "northStar": "把梅花易数起卦(research/meihua_encoder.py, vendored from ds-oracle-cli)做成确定性 categorical 特征, 检验它对起涨点(+20 forward)是否有经 walk-forward 验证、且扣除朴素对照(公历月+板块cohort)后仍存在的真 alpha。两阶段: Phase1 廉价 IC+消融筛查(无残差则廉价收手), Phase2 walk-forward gate。先验=大概率噪声(组合卦≈日历+价格末位, 静态卦≈股票ID)。生产线 V12.31 全程冻结。",
   "verifyCommand": "python research/verify.py",
   "acceptanceCriteria": [
     "python research/verify.py 退出码 0 (纪律检查器全绿)",
     "每个非 skip task 产出工件 + research/verdicts/<id>.json (含 status 与一句话结论)",
-    "RG-004 按-regime-分层的 walk-forward gate 已评估 (PASS 落地 / REJECT 文档化)",
+    "MH-004 walk-forward gate 已评估 (PASS 落地 / REJECT 文档化), 或 MH-002 无残差触发 precondition skip",
     "生产线指纹未变: v12_scoring.py 与生产模型 hash 与基线一致"
   ],
   "preRegisteredGate": {
     "frozen": true,
-    "note": "循环启动时写死, 不得修改 (SIGN-R01); 必须按 regime 分层 (SIGN-R11)",
-    "metric": "19 月 walk-forward, 按 RG-001 regime 分层, 对照 V12.31 baseline 同 harness",
+    "note": "循环启动时写死, 不得修改 (SIGN-R01); 必须按 regime 分层 (SIGN-R11); 必须存活朴素消融 (SIGN-R12)",
+    "metric": "19 月 walk-forward, 梅花特征臂 vs 无梅花 baseline 臂 apples-to-apples, 对照 V12.31",
     "pass_conditions": [
-      "全期净 Δα(月化) >= +0.30pp 相对 V12.31",
-      "动量-regime 月 α 显著改善 (Δα_momentum >= +1.0pp)",
-      "反转-regime 月不受伤 (Δα_reversal >= -0.10pp)",
-      "无新增灾难月 (最差月不低于基线)"
+      "Δα(月化) >= +0.30pp 相对无梅花 baseline",
+      "Sharpe 不低于 baseline",
+      "最差月不低于 baseline",
+      "增益在扣除公历月 + 板块 cohort 朴素对照后仍存在 (SIGN-R12 消融存活)"
     ]
   },
   "features": [
     {
-      "id": "RG-001",
-      "title": "因果动量-regime 检测器 (横截面动量价差 + 宽度 + 指数趋势)",
+      "id": "MH-001",
+      "title": "全历史梅花特征 parquet 生成 + 泄漏/确定性校验",
       "acceptanceCriteria": [
-        "用仅历史数据定义 regime: 横截面过去20d动量 D9-D0 价差 + 市场宽度 + 指数动量, 滞后确认零前视",
-        "对每个交易日分类 {momentum / reversal / mixed}, 输出 research/features/regime_timeline.parquet",
-        "验证因果性 (无未来数据); regime 分布 + 与已知动量月(如 202605)的吻合度",
-        "research/verify.py leakage guard 通过",
-        "research/verdicts/RG-001.json: status=built + regime 分布摘要"
+        "用 research/meihua_encoder.encode_frame 对全历史面板 (ts_code,trade_date,close) 生成 mh_*/mhs_* 特征",
+        "输出 research/features/meihua_features.parquet (key: ts_code,trade_date)",
+        "确定性自检 (重算逐位一致) + research/verify.py leakage guard 通过 (只吃决策时刻已知量, 无 forward 字段)",
+        "卦象分布 sanity (体用关系 5 类不退化, 64 卦覆盖)",
+        "research/verdicts/MH-001.json: status=built + 分布摘要"
       ],
       "priority": 1,
-      "passes": true,
-      "completed_at": "2026-06-03",
-      "notes": "regime 必须 causal。这是后续一切的地基。 [DONE] research/rg001_regime_detector.py -> regime_timeline.parquet (825 日); 因果自检 abs_diff=0; momentum 29%/mixed 16%/reversal 55%; 已知动量月 202605 判 momentum 83% spread +8.87pp, 202606 momentum 100% +13.39pp 印证审计。"
+      "passes": false,
+      "notes": "编码器已建 (research/meihua_encoder.py)。本 task = 批量落盘 + 校验。+20 等 forward label 绝不进特征。"
     },
     {
-      "id": "RG-002",
-      "title": "v3c/V12.31 regime 分层尸检 (确认假设)",
+      "id": "MH-002",
+      "title": "Phase-1 廉价筛查: regime 分层 rank-IC + 朴素消融对照",
       "acceptanceCriteria": [
-        "把 V12.31 的 19 月 walk-forward 按 RG-001 regime 分层, 量化每个 regime 的 α/胜率",
-        "确认假设: 动量-regime 月 α 显著为负, 反转-regime 月 α 为正",
-        "research/verdicts/RG-002.json: status in {hypothesis_confirmed, hypothesis_rejected} + 每-regime α 表"
+        "算 mh_*/mhs_* 对前向 r20 的横截面 rank-IC, 按 RG-001 regime 分层 (纯描述, 非 gate, SIGN-R03)",
+        "朴素对照: 同口径只用 '公历月 + 板块 cohort' 预测 r20; 比较梅花是否有独立残差 IC",
+        "research/verdicts/MH-002.json: status in {residual_signal, no_residual_signal} + IC 表 + 消融对照",
+        "若 no_residual_signal 则把 MH-003/004 标记 skip:true, MH-005 skipped"
       ],
       "priority": 2,
-      "passes": true,
-      "completed_at": "2026-06-03",
-      "notes": "precondition: 若 hypothesis_rejected (α 非 regime 依赖), 叠加层无意义 → 由本 task 把 RG-003/004 置 skip 并 RG-005 skipped。 [DONE] verdict=hypothesis_rejected (反向). research/rg002_regime_autopsy.py 两路证据: Part B 纯因果动量分位尸检 (805 日, regime causal/fwd20 仅测量无 lookahead) 显示条件于 RG-001 因果动量 regime, v3c(低动量/回调档)前向 α=+0.378pp 显著为正 (t=4.06 p=0.0001), 反转月 +0.250pp; 因果动量态平均跟随均值回归 (前向 D9-D0=-1.77pp<0) 即回调买入反被奖励。审计血洗未泛化: 全样本仅 202303(D9-D0+8.2)/202602(+3.3) 两个极端月真血洗=尾部 episode。Part A t005 walk-forward 动量月 α=+3.88pp 亦无血洗 (绝对 α 含共模 r20 lookahead 仅旁证)。诚实限制: 实盘血洗窗 0508-0603 在前向尸检窗外(数据止 0506)测不到, 2026 动量日已转弱负(-0.094pp)值得 6 月数据到位后复检。据事前注册 precondition → RG-003/004 skip, RG-005 skipped。"
+      "passes": false,
+      "notes": "防自欺核心 (SIGN-R12): 梅花增益若被 月历+板块 朴素对照吃掉 = 信号来自世俗来源被卦象打包, 廉价 REJECT。precondition: no_residual → 后续 skip。"
     },
     {
-      "id": "RG-003",
-      "title": "动量-regime 叠加层 (强动量态抑制回调买入/切动量)",
+      "id": "MH-003",
+      "title": "Phase-2: 梅花特征加进 V12.31 池排序模型 (apples-to-apples 臂)",
       "acceptanceCriteria": [
-        "强动量态时: 抑制 v3c past_r5<0 回调买入 / 或 tilt 动量 sleeve (≥2 变体: 硬门控 / 混合)",
-        "全因果无泄漏, 产出叠加后信号覆盖全历史 research/features/regime_overlay_signal.parquet",
-        "推理路径样本日跑通, 不触碰生产模型",
-        "research/verdicts/RG-003.json: status=built + 变体说明"
+        "两臂唯一差异 = 排序模型是否含 mh_*/mhs_* 特征, 其余 (池/过滤/仓位/持有) 完全一致",
+        "全因果无泄漏, 复用 t005 walk-forward harness 口径",
+        "research/verdicts/MH-003.json: status=built"
       ],
       "priority": 3,
       "passes": false,
-      "skip": true,
-      "skipReason": "RG-002 verdict=hypothesis_rejected (反向: 因果动量 regime 下 v3c 回调 α 显著为正): 叠加层核心前提被数据否定, 据 RG-002 事前注册 precondition 置 skip。",
-      "notes": "依赖 RG-002=hypothesis_confirmed。RG-002 实判 rejected → skip。"
+      "skip": false,
+      "notes": "依赖 MH-002=residual_signal; no_residual 时由 MH-002 置 skip。"
     },
     {
-      "id": "RG-004",
-      "title": "按-regime-分层 walk-forward 决策 gate (vs V12.31)",
+      "id": "MH-004",
+      "title": "walk-forward 决策 gate (梅花特征臂 vs 无梅花 baseline)",
       "isGate": true,
       "acceptanceCriteria": [
-        "19 月 walk-forward, 协议与 project_walk_forward_validation_0525 一致, 同 harness 重跑 V12.31 baseline",
-        "报告全期 + 分 regime 的 α(月化)/Sharpe/最差月/胜率 vs baseline",
-        "断言 preRegisteredGate.pass_conditions (4 条, 含动量月改善 + 反转月不伤): 全满足 -> PASS, 否则 REJECT",
-        "research/verdicts/RG-004.json: status in {PASS, REJECT} + 全期及分regime指标对照表 (metrics 含 alpha_delta_pp/sharpe/worst_month/pos_alpha_month_ratio)"
+        "19 月 walk-forward, 协议与 project_walk_forward_validation_0525 一致, apples-to-apples",
+        "报告全期 + 分 regime 的 α/Sharpe/最差月/胜率 vs baseline",
+        "断言 preRegisteredGate.pass_conditions (含消融存活 SIGN-R12): 全满足 -> PASS, 否则 REJECT",
+        "research/verdicts/MH-004.json: status in {PASS, REJECT} + metrics(alpha_delta_pp/sharpe/worst_month/pos_alpha_month_ratio) + 消融对照"
       ],
       "priority": 4,
       "passes": false,
-      "skip": true,
-      "skipReason": "RG-002 verdict=hypothesis_rejected: 前置假设(α 随 regime 切换)被干净因果尸检否定, 叠加层无可测试前提 → gate 不评估, 据 RG-002 事前注册 precondition 置 skip。负结论已由 RG-002 文档化 (SIGN-R02)。",
-      "notes": "REJECT 是合法完成 (SIGN-R02)。必须按 regime 分层评估, 禁止只看全期平均 (SIGN-R11)。RG-002 实判 rejected 触发 precondition → skip (无叠加层可评)。"
+      "skip": false,
+      "notes": "REJECT 是合法完成 (SIGN-R02)。按 regime 分层 (SIGN-R11) + 消融存活 (SIGN-R12) 缺一不可。"
     },
     {
-      "id": "RG-005",
-      "title": "落地 (仅 RG-004 PASS): opt-in 接进 v12_scoring",
+      "id": "MH-005",
+      "title": "落地 (仅 MH-004 PASS): opt-in 接进 v12_scoring",
       "acceptanceCriteria": [
         "以 opt-in 开关接入 v12_scoring.py, 默认关闭",
         "默认生产路径 (开关关) 输出与基线逐位一致",
-        "research/verdicts/RG-005.json: status in {landed, skipped}"
+        "research/verdicts/MH-005.json: status in {landed, skipped}"
       ],
       "priority": 5,
       "passes": false,
       "skip": true,
-      "skipReason": "条件任务: 仅当 RG-004 verdict=PASS 时由迭代解除 skip; REJECT 则保持 skip 并写 verdict=skipped。",
+      "skipReason": "条件任务: 仅当 MH-004 verdict=PASS 时由迭代解除 skip; REJECT 或 MH-002 no_residual 则保持 skip 并写 verdict=skipped。",
       "notes": "未 PASS 不落地。"
     }
   ]

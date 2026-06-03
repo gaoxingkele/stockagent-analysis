@@ -76,6 +76,12 @@
 **Reason:** 2026-06-03 实盘审计教训: V12.31 全期 +2.2pp/月 是动量/反转混合平均, 掩盖了动量月被血洗 (优秀基金+11.4% 而 picks-10%)。回测全期平均正是漏掉实盘 regime 错配的原因。见 project_v3c_momentum_regime_mismatch_0603 + [[feedback_stratified_analysis]]。
 **Added after:** regime-overlay 循环启动 / 2026-06-03
 
+### SIGN-R12: 异类/奇异特征必须存活朴素消融
+**Trigger:** 引入梅花易数 / 玄学 / 任何"奇异"编码特征作预测
+**Instruction:** 任何此类特征的增益, 必须**扣除朴素对照**(如 公历月历季节性 + 板块/代码 cohort)后**仍独立存在**才算数。先跑廉价 IC+消融筛查 (Phase1), 无残差则廉价 REJECT, 不进 walk-forward。
+**Reason:** 梅花组合卦的动态部分≈日历+价格末位编码, 静态卦≈股票ID; "信号"极可能是世俗来源被卦象重新打包。不做消融就会把日历/板块效应误归功于卦象 = 自欺。
+**Added after:** meihua 循环启动 / 2026-06-04
+
 ---
 
 ## 项目专属 signs (循环中遇到失败再追加, append-only)
