@@ -1,0 +1,99 @@
+{
+  "window": [
+    "20240601",
+    "20260101"
+  ],
+  "seed": 20260603,
+  "n_rows": 1913175,
+  "n_stocks": 5034,
+  "scales": {
+    "s3": {
+      "H": 3,
+      "gain_thr": 0.06
+    },
+    "s5": {
+      "H": 5,
+      "gain_thr": 0.1
+    },
+    "s10": {
+      "H": 10,
+      "gain_thr": 0.15
+    }
+  },
+  "regime_cut": {
+    "cross_p20": 1.0,
+    "cross_p80": 3.0
+  },
+  "gate_rule": {
+    "regime_base": {
+      "choppy": 3,
+      "mid": 5,
+      "trend": 10
+    },
+    "run_long": 10,
+    "run_fresh": 2,
+    "logic": "regime 基线尺度; run_len>=run_long 升档/<=run_fresh 降档; 夹 {3,5,10}"
+  },
+  "scale_selected_dist": {
+    "3": 0.4197,
+    "5": 0.4159,
+    "10": 0.1644
+  },
+  "scale_selected_by_regime": {
+    "trend": {
+      "5": 0.694,
+      "10": 0.306
+    },
+    "mid": {
+      "3": 0.674,
+      "5": 0.269,
+      "10": 0.057
+    },
+    "choppy": {
+      "3": 0.953,
+      "5": 0.047
+    }
+  },
+  "frac_dynamic_vs_s5": 0.5841,
+  "ratio_dyn_corr_with_fixed": {
+    "ratio_s3": 0.9407,
+    "ratio_s5": 0.9553,
+    "ratio_s10": 0.8176
+  },
+  "models": {
+    "s3": {
+      "scale_H": 3,
+      "gain_threshold": 0.06,
+      "best_iter": 82,
+      "n_train": 500000,
+      "train_class_dist": {
+        "0": 0.651,
+        "2": 0.198,
+        "1": 0.151
+      }
+    },
+    "s5": {
+      "scale_H": 5,
+      "gain_threshold": 0.1,
+      "best_iter": 45,
+      "n_train": 500000,
+      "train_class_dist": {
+        "0": 0.777,
+        "2": 0.139,
+        "1": 0.083
+      }
+    },
+    "s10": {
+      "scale_H": 10,
+      "gain_threshold": 0.15,
+      "best_iter": 35,
+      "n_train": 500000,
+      "train_class_dist": {
+        "0": 0.799,
+        "2": 0.136,
+        "1": 0.066
+      }
+    }
+  },
+  "note": "研究脚手架, 不碰生产; 选尺度分布/相关仅描述非 gate (SIGN-R03); ship 由 T-005 walk-forward 定"
+}

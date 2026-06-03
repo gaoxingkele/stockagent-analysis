@@ -78,9 +78,11 @@
         "research/verdicts/T-004.json: status=built"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "skip": false,
-      "notes": "条件执行, 依赖 T-002 裁决为 window_dynamic_needed; 若 fixed_ok 由 T-002 置 skip:true。"
+      "completed_at": "2026-06-03",
+      "verdict": "built",
+      "notes": "条件执行, 依赖 T-002 裁决为 window_dynamic_needed; 若 fixed_ok 由 T-002 置 skip:true。 [DONE] status=built: 3 个窗口尺度 pump 模型 (s3 H=3/g6%, s5 H=5/g10%, s10 H=10/g15%) 各训 LGBM 3way 落 research/models/pump_scale_{3,5,10}/ (500k train/120k val 时间切分早停, best_iter 82/45/35); regime(MA5/MA60穿越数 p20/p80)+run_len(连续MA5上斜天数) 门控硬选择产出 ratio_dyn (1,913,175 行/5034 股 落 research/features/dynamic_ratio.parquet)。门控按 T-001/T-002 实证规则(非拟合): choppy->s3 95%(响应 ignition-5d 漂移) / trend->s5 69%+s10 31%(同步稳) / mid 混合; 整体切换 58% vs 固定s5。推理样本窗口全跑通, 生产模型/指纹未触碰, leakage guard 0 违规。IC/分布仅描述非 gate, ship 由 T-005 walk-forward 定。"
     },
     {
       "id": "T-005",
