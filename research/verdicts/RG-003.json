@@ -1,0 +1,6 @@
+{
+  "id": "RG-003",
+  "status": "skipped",
+  "conclusion": "skipped: RG-002 干净因果尸检判 hypothesis_rejected (反向: 条件于 RG-001 因果动量 regime, v3c 低动量/回调档前向 α=+0.378pp 显著为正 t=4.06, 因果动量态平均跟随均值回归 D9-D0=-1.77pp)。叠加层核心前提'强动量态抑制回调买入'被数据否定 → 无意义可建。据 RG-002 事前注册 precondition 置 skip。",
+  "note": "未建任何叠加层信号。负结论由 RG-002 文档化 (SIGN-R02 合法完成)。"
+}

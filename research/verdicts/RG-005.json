@@ -1,0 +1,6 @@
+{
+  "id": "RG-005",
+  "status": "skipped",
+  "conclusion": "skipped: RG-004 未 PASS (实为 skip, 因 RG-002 precondition 失败), 无叠加层落地。生产线 V12.31 全程冻结, v12_scoring.py 与生产模型 hash 与基线一致。",
+  "note": "未触碰任何生产文件 (SIGN-R05)。"
+}

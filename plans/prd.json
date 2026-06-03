@@ -45,8 +45,9 @@
         "research/verdicts/RG-002.json: status in {hypothesis_confirmed, hypothesis_rejected} + 每-regime α 表"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "precondition: 若 hypothesis_rejected (α 非 regime 依赖), 叠加层无意义 → 由本 task 把 RG-003/004 置 skip 并 RG-005 skipped。"
+      "passes": true,
+      "completed_at": "2026-06-03",
+      "notes": "precondition: 若 hypothesis_rejected (α 非 regime 依赖), 叠加层无意义 → 由本 task 把 RG-003/004 置 skip 并 RG-005 skipped。 [DONE] verdict=hypothesis_rejected (反向). research/rg002_regime_autopsy.py 两路证据: Part B 纯因果动量分位尸检 (805 日, regime causal/fwd20 仅测量无 lookahead) 显示条件于 RG-001 因果动量 regime, v3c(低动量/回调档)前向 α=+0.378pp 显著为正 (t=4.06 p=0.0001), 反转月 +0.250pp; 因果动量态平均跟随均值回归 (前向 D9-D0=-1.77pp<0) 即回调买入反被奖励。审计血洗未泛化: 全样本仅 202303(D9-D0+8.2)/202602(+3.3) 两个极端月真血洗=尾部 episode。Part A t005 walk-forward 动量月 α=+3.88pp 亦无血洗 (绝对 α 含共模 r20 lookahead 仅旁证)。诚实限制: 实盘血洗窗 0508-0603 在前向尸检窗外(数据止 0506)测不到, 2026 动量日已转弱负(-0.094pp)值得 6 月数据到位后复检。据事前注册 precondition → RG-003/004 skip, RG-005 skipped。"
     },
     {
       "id": "RG-003",
@@ -59,7 +60,9 @@
       ],
       "priority": 3,
       "passes": false,
-      "notes": "依赖 RG-002=hypothesis_confirmed。"
+      "skip": true,
+      "skipReason": "RG-002 verdict=hypothesis_rejected (反向: 因果动量 regime 下 v3c 回调 α 显著为正): 叠加层核心前提被数据否定, 据 RG-002 事前注册 precondition 置 skip。",
+      "notes": "依赖 RG-002=hypothesis_confirmed。RG-002 实判 rejected → skip。"
     },
     {
       "id": "RG-004",
@@ -73,7 +76,9 @@
       ],
       "priority": 4,
       "passes": false,
-      "notes": "REJECT 是合法完成 (SIGN-R02)。必须按 regime 分层评估, 禁止只看全期平均 (SIGN-R11) —— 这正是实盘错配被回测漏掉的原因。"
+      "skip": true,
+      "skipReason": "RG-002 verdict=hypothesis_rejected: 前置假设(α 随 regime 切换)被干净因果尸检否定, 叠加层无可测试前提 → gate 不评估, 据 RG-002 事前注册 precondition 置 skip。负结论已由 RG-002 文档化 (SIGN-R02)。",
+      "notes": "REJECT 是合法完成 (SIGN-R02)。必须按 regime 分层评估, 禁止只看全期平均 (SIGN-R11)。RG-002 实判 rejected 触发 precondition → skip (无叠加层可评)。"
     },
     {
       "id": "RG-005",

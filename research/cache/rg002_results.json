@@ -1,0 +1,227 @@
+{
+  "window_regime": [
+    "20230103",
+    "20260506"
+  ],
+  "params": {
+    "mom_lookback": 20,
+    "fwd_lookback": 20,
+    "low_deciles": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "high_deciles": [
+      6,
+      7,
+      8,
+      9
+    ]
+  },
+  "hypothesis": "动量-regime: v3c(低动量/回调档) α 显著<0; 反转-regime: v3c α >0 (α 随 regime 切换)",
+  "part_a_t005_walkforward_by_regime": {
+    "available": true,
+    "n_months": 19,
+    "caveat": "t005 base 臂绝对 α 含共模 r20 池 lookahead(被抬高), 是保守弱检验; 主证据看 Part B。",
+    "by_regime": {
+      "mixed": {
+        "n_months": 2,
+        "alpha_mean_pp": 1.259,
+        "alpha_median_pp": 1.259,
+        "pos_alpha_ratio": 1.0,
+        "sharpe_mean": 1.683,
+        "worst_month_pp": 1.132
+      },
+      "momentum": {
+        "n_months": 7,
+        "alpha_mean_pp": 3.877,
+        "alpha_median_pp": 3.183,
+        "pos_alpha_ratio": 0.857,
+        "sharpe_mean": 4.257,
+        "worst_month_pp": -0.202
+      },
+      "reversal": {
+        "n_months": 10,
+        "alpha_mean_pp": 4.168,
+        "alpha_median_pp": 3.218,
+        "pos_alpha_ratio": 1.0,
+        "sharpe_mean": 4.283,
+        "worst_month_pp": 1.556
+      }
+    },
+    "monthly": [
+      {
+        "ym": "202410",
+        "regime": "reversal",
+        "base_alpha_pp": 8.907
+      },
+      {
+        "ym": "202411",
+        "regime": "momentum",
+        "base_alpha_pp": 5.991
+      },
+      {
+        "ym": "202412",
+        "regime": "reversal",
+        "base_alpha_pp": 3.079
+      },
+      {
+        "ym": "202501",
+        "regime": "reversal",
+        "base_alpha_pp": 7.713
+      },
+      {
+        "ym": "202502",
+        "regime": "reversal",
+        "base_alpha_pp": 2.383
+      },
+      {
+        "ym": "202503",
+        "regime": "momentum",
+        "base_alpha_pp": 6.724
+      },
+      {
+        "ym": "202504",
+        "regime": "reversal",
+        "base_alpha_pp": 4.15
+      },
+      {
+        "ym": "202505",
+        "regime": "reversal",
+        "base_alpha_pp": 2.34
+      },
+      {
+        "ym": "202506",
+        "regime": "mixed",
+        "base_alpha_pp": 1.386
+      },
+      {
+        "ym": "202507",
+        "regime": "reversal",
+        "base_alpha_pp": 5.112
+      },
+      {
+        "ym": "202508",
+        "regime": "momentum",
+        "base_alpha_pp": 3.183
+      },
+      {
+        "ym": "202509",
+        "regime": "momentum",
+        "base_alpha_pp": 7.614
+      },
+      {
+        "ym": "202510",
+        "regime": "mixed",
+        "base_alpha_pp": 1.132
+      },
+      {
+        "ym": "202511",
+        "regime": "reversal",
+        "base_alpha_pp": 1.556
+      },
+      {
+        "ym": "202512",
+        "regime": "reversal",
+        "base_alpha_pp": 3.349
+      },
+      {
+        "ym": "202601",
+        "regime": "momentum",
+        "base_alpha_pp": 3.04
+      },
+      {
+        "ym": "202602",
+        "regime": "momentum",
+        "base_alpha_pp": 0.789
+      },
+      {
+        "ym": "202603",
+        "regime": "momentum",
+        "base_alpha_pp": -0.202
+      },
+      {
+        "ym": "202604",
+        "regime": "reversal",
+        "base_alpha_pp": 3.087
+      }
+    ]
+  },
+  "part_b_clean_decile_autopsy_by_regime": {
+    "n_days": 805,
+    "by_regime": {
+      "mixed": {
+        "n_days": 132,
+        "v3c_proxy_alpha_mean_pp": 0.3602,
+        "v3c_proxy_alpha_t": 1.826,
+        "v3c_proxy_alpha_p": 0.06792,
+        "v3c_proxy_alpha_pos_day_ratio": 0.5,
+        "mom_proxy_alpha_mean_pp": -0.3091,
+        "fwd_decile_spread_mean_pp": -0.7511
+      },
+      "momentum": {
+        "n_days": 222,
+        "v3c_proxy_alpha_mean_pp": 0.3782,
+        "v3c_proxy_alpha_t": 4.056,
+        "v3c_proxy_alpha_p": 5e-05,
+        "v3c_proxy_alpha_pos_day_ratio": 0.622,
+        "mom_proxy_alpha_mean_pp": -0.5583,
+        "fwd_decile_spread_mean_pp": -1.7739
+      },
+      "reversal": {
+        "n_days": 451,
+        "v3c_proxy_alpha_mean_pp": 0.25,
+        "v3c_proxy_alpha_t": 2.895,
+        "v3c_proxy_alpha_p": 0.00379,
+        "v3c_proxy_alpha_pos_day_ratio": 0.53,
+        "mom_proxy_alpha_mean_pp": -0.312,
+        "fwd_decile_spread_mean_pp": -1.1713
+      }
+    },
+    "limitations": {
+      "forward_eval_window_end": "20260506",
+      "live_blowout_window_excluded": "审计血洗窗 0508-0603 需 6 月+前向数据(未到), 完全在尸检窗外, Part B 测不到该 episode",
+      "momentum_by_year": {
+        "2023": {
+          "n_days": 79,
+          "v3c_proxy_alpha_mean_pp": 0.184
+        },
+        "2024": {
+          "n_days": 49,
+          "v3c_proxy_alpha_mean_pp": 0.627
+        },
+        "2025": {
+          "n_days": 54,
+          "v3c_proxy_alpha_mean_pp": 0.786
+        },
+        "2026": {
+          "n_days": 40,
+          "v3c_proxy_alpha_mean_pp": -0.094
+        }
+      },
+      "blowout_months_in_sample": [
+        {
+          "ym": "202303",
+          "n_days": 11,
+          "fwd_decile_spread_pp": 8.19,
+          "v3c_proxy_alpha_pp": -1.718
+        },
+        {
+          "ym": "202602",
+          "n_days": 6,
+          "fwd_decile_spread_pp": 3.27,
+          "v3c_proxy_alpha_pp": -1.581
+        }
+      ],
+      "note": "全样本因果动量 regime → 前向均值回归(D9-D0<0)主导, 回调买入被奖励; 血洗只集中在少数极端动量月(202303/202602)的尾部, 不构成 frozen-regime 全样本系统效应。2026 动量日已转弱负, 下轮(6月数据到位后)值得复检。"
+    }
+  },
+  "hypothesis_conditions": {
+    "momentum_v3c_alpha_<0_sig(p<.05)": false,
+    "reversal_v3c_alpha_>0": true,
+    "momentum_alpha_<_reversal_alpha": false
+  },
+  "status": "hypothesis_rejected",
+  "note": "决策主看 Part B (无 lookahead); Part A 绝对 α 被共模 r20 池 lookahead 抬高仅作旁证。"
+}
