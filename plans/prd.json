@@ -32,8 +32,9 @@
         "research/verdicts/MH-001.json: status=built + 分布摘要"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "编码器已建 (research/meihua_encoder.py)。本 task = 批量落盘 + 校验。+20 等 forward label 绝不进特征。"
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "notes": "编码器已建 (research/meihua_encoder.py)。本 task = 批量落盘 + 校验。+20 等 forward label 绝不进特征。DONE: research/mh001_build_features.py 生成 research/features/meihua_features.parquet (5,302,085 行 × 20 特征, 20220104~20260603, ST 源头排除 266 只/280K 行); 确定性=True, 零泄漏, 体用5类不退化 (21.9/18.7/18.8/20.3/20.3%), 组合卦 base 64/64, 静态卦 57/64。"
     },
     {
       "id": "MH-002",

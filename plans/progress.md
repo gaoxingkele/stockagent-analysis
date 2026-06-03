@@ -15,7 +15,7 @@
 ## 任务台账
 | id | 状态 | 裁决 |
 |----|------|------|
-| MH-001 全历史梅花特征 parquet + 校验 | todo | — |
+| MH-001 全历史梅花特征 parquet + 校验 | done | built — 5.3M 行特征落盘, 确定性/零泄漏/分布 sanity 全通过 |
 | MH-002 Phase1 regime分层IC + 朴素消融 | todo | — |
 | MH-003 Phase2 梅花特征加进排序模型臂 | todo | — |
 | MH-004 walk-forward gate | todo | — |
@@ -35,3 +35,4 @@
 ## 迭代日志
 <!-- 每轮 append: 迭代N | task | 做了什么 | 裁决/产出路径 | 下一步 -->
 - (init) 由 regime-overlay 循环 (已完结) 转入。用户提供 ds-oracle-cli 梅花算法, 编码器已建。等待启动。
+- 迭代1 | MH-001 | research/mh001_build_features.py: 全历史 daily(ts_code,trade_date,close) → encode_frame → research/features/meihua_features.parquet (5,302,085 行 × 20 特征, 20220104~20260603)。ST 源头排除 266 只(280K 行, SIGN-R06)。落盘前泄漏自查 (输出列仅 key+mh_*/mhs_*, 无 forward 字段, SIGN-R04)。确定性自检=True (5w 抽样重算逐位一致)。分布 sanity: 体用关系 5 类不退化 (21.9/18.7/18.8/20.3/20.3%), 组合卦 base 64/64, 静态卦 57/64, 动爻六位均匀。裁决 research/verdicts/MH-001.json status=built。下一步: MH-002 Phase1 廉价筛查 (regime 分层 rank-IC + 公历月+板块cohort 朴素消融, SIGN-R12)。注意: 朴素对照若吃掉梅花增益 → no_residual_signal → MH-003/004 置 skip 廉价收手。
