@@ -47,8 +47,10 @@
         "若 fixed_ok 则在 prd 中把 T-004 标记 skip:true"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "漂移 = 固定窗口不够的直接证据。依赖 T-001 完成。"
+      "passes": true,
+      "completed_at": "2026-06-03",
+      "verdict": "window_dynamic_needed",
+      "notes": "漂移 = 固定窗口不够的直接证据。依赖 T-001 完成。 [DONE] status=window_dynamic_needed: SHAP 窗口贡献份额近似平稳(短9.6/中56.1/长20.5/上下文13.8%, regime极差仅2.42pp<5pp), 但相位时序非平稳 — ignition lead/lag regime间漂移5d(choppy-5d vs trend/mid0d)≥3d触发。非平稳源于相位而非窗口配比 → T-004 应做相位/regime门控, 保持 skip:false 执行。135k分层样本/5034股。"
     },
     {
       "id": "T-003",

@@ -1,0 +1,46 @@
+{
+  "id": "T-002",
+  "title": "窗口非平稳检验 (ratio 短窗/长窗分解 + lead/lag 漂移)",
+  "status": "window_dynamic_needed",
+  "conclusion": "ratio 方向信号的窗口贡献'权重'近似平稳 (短9.6/中56.1/长20.5/上下文13.8%, regime 间份额极差仅 2.42pp < 5pp 阈值), 即模型在快/慢市用的窗口混合几乎不变; 但信号相对拐点的'时序'非平稳 — T-001 ignition lead/lag 在 regime 间漂移 5d (choppy -5d vs trend/mid 0d) ≥ 3d 阈值, 触发 window_dynamic_needed。结论: 非平稳来自相位/时序而非窗口配比, 故 T-004 多尺度门控应聚焦相位/regime 门控而非重配窗口特征。",
+  "method": {
+    "window": "20240601-20260101 (~19 月, 与 T-001 同窗口)",
+    "n_sample": 135000,
+    "n_stocks": 5034,
+    "sampling": "分层采样 each regime 45000 行 (seed 20260603), ST 源头排除 (load_window exclude_st=True 排 266 只/30106 行)",
+    "decomposition": "v3c 3way 模型 TreeSHAP (booster.predict pred_contrib); 方向信号 signal_shap = shap_up(class2) - shap_down(class1); 按 |signal_shap| 平均绝对贡献占比分桶",
+    "bucket_rule": "特征名内最大整数为回看窗口: <=10 short / 11-30 mid / >=31 long / cdl*=short(1-3bar) / 无窗静态(基本面+市场环境)=context",
+    "regime": "T-001 同口径 60日 MA5/MA60 穿越数 ma5_60_cross_60d, p20=1/p80=3 切 trend/mid/choppy, 全 causal",
+    "leakage_guard": "SHAP 采样落 research/cache/ (非 features/); load_window 已删 forward labels r5/r20/.../dd*; verify.py guard 通过"
+  },
+  "share_pct": {
+    "overall": {"short": 9.59, "mid": 56.10, "long": 20.52, "context": 13.79},
+    "trend":   {"short": 9.71, "mid": 54.81, "long": 21.58, "context": 13.89, "n": 45000},
+    "mid":     {"short": 9.64, "mid": 57.23, "long": 19.68, "context": 13.46, "n": 45000},
+    "choppy":  {"short": 9.40, "mid": 56.27, "long": 20.30, "context": 14.03, "n": 45000}
+  },
+  "drift": {
+    "share_drift_pp": {"short": 0.31, "mid": 2.42, "long": 1.90, "context": 0.57},
+    "max_share_drift_pp": 2.42,
+    "long_minus_short_pp_by_regime": {"trend": 11.87, "mid": 10.04, "choppy": 10.90},
+    "ignition_drift_days": 5,
+    "t001_regime_ignitions": {"trend": 0, "mid": 0, "choppy": -5}
+  },
+  "criteria": {
+    "note": "描述性判据, 非 gate (真 gate 在 T-005 walk-forward, SIGN-R03)",
+    "drift_share_pp_thr": 5.0, "trigger_share": false,
+    "drift_ign_days_thr": 3, "trigger_ignition": true,
+    "decision": "trigger_share OR trigger_ignition → window_dynamic_needed"
+  },
+  "implications_for_T004": "非平稳是相位/时序型而非窗口配比型 → T-004 多尺度门控的增量应来自 regime/run-length 门控的相位对齐, 而非给短窗/长窗特征重配权重 (后者份额本就近似平稳); T-004 保持 skip:false 执行。",
+  "artifacts": [
+    "research/t002_window_nonstationarity.py",
+    "research/cache/t002_sample.parquet",
+    "research/cache/t002_results.json"
+  ],
+  "caveats": [
+    "SHAP 份额衡量'模型对各窗口特征的平均依赖', 不等于'最优窗口'; 份额平稳≠窗口无关, 只说明 v3c 在各 regime 用同一窗口混合 (它本身是固定窗口模型, 无法自适应 → 正是 T-004 要补的)",
+    "中间指标 (SHAP份额/ignition漂移) 仅描述, ship 与否只由 T-005 walk-forward α 决定 (SIGN-R03)",
+    "window_dynamic_needed 不等于 T-004 一定带来 α; 它只解除 T-004 的条件门, 让其执行"
+  ]
+}

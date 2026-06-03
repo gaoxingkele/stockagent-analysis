@@ -1,0 +1,1055 @@
+{
+  "window": [
+    "20240601",
+    "20260101"
+  ],
+  "seed": 20260603,
+  "n_sample": 135000,
+  "n_stocks": 5025,
+  "shap_signal_def": "shap_up - shap_down (class2-class1), 驱动 ratio=P_up/(P_down+eps) 方向",
+  "bucket_rule": "max int in name; <=10 short / 11-30 mid / >=31 long / cdl*=short / 无窗静态=context",
+  "overall_share_pct": {
+    "short": 9.59,
+    "mid": 56.1,
+    "long": 20.52,
+    "context": 13.79
+  },
+  "per_regime_share_pct": {
+    "trend": {
+      "short": 9.71,
+      "mid": 54.81,
+      "long": 21.58,
+      "context": 13.89,
+      "n": 45000
+    },
+    "mid": {
+      "short": 9.64,
+      "mid": 57.23,
+      "long": 19.68,
+      "context": 13.46,
+      "n": 45000
+    },
+    "choppy": {
+      "short": 9.4,
+      "mid": 56.27,
+      "long": 20.3,
+      "context": 14.03,
+      "n": 45000
+    }
+  },
+  "share_drift_pp": {
+    "short": 0.31,
+    "mid": 2.42,
+    "long": 1.9,
+    "context": 0.57
+  },
+  "max_share_drift_pp": 2.42,
+  "long_minus_short_pp_by_regime": {
+    "trend": 11.87,
+    "mid": 10.04,
+    "choppy": 10.9
+  },
+  "t001_regime_ignitions": {
+    "trend": 0,
+    "mid": 0,
+    "choppy": -5
+  },
+  "ignition_drift_days": 5,
+  "criteria": {
+    "drift_share_pp_thr": 5.0,
+    "drift_ign_days_thr": 3,
+    "trigger_share": false,
+    "trigger_ignition": true
+  },
+  "suggested_status": "window_dynamic_needed",
+  "feature_buckets": {
+    "adx": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "winner_rate": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "holder_pct": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "total_mv": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "pe": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "pe_ttm": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "pb": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "market_score_adj": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "mf_divergence": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "mf_strength": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "mf_consecutive": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "ma_ratio_5": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "ma_ratio_10": {
+      "bucket": "short",
+      "horizon": 10
+    },
+    "ma_ratio_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "ma_ratio_60": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "ma_ratio_120": {
+      "bucket": "long",
+      "horizon": 120
+    },
+    "ma5_ma20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "ma20_ma60": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "macd": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "macd_signal": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "macd_hist": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "rsi_6": {
+      "bucket": "short",
+      "horizon": 6
+    },
+    "rsi_14": {
+      "bucket": "mid",
+      "horizon": 14
+    },
+    "rsi_24": {
+      "bucket": "mid",
+      "horizon": 24
+    },
+    "kdj_k": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "kdj_d": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "kdj_j": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "boll_pct": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "boll_width": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "atr_pct": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "bias_5": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "bias_10": {
+      "bucket": "short",
+      "horizon": 10
+    },
+    "bias_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "roc_10": {
+      "bucket": "short",
+      "horizon": 10
+    },
+    "roc_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "cci_14": {
+      "bucket": "mid",
+      "horizon": 14
+    },
+    "wr_14": {
+      "bucket": "mid",
+      "horizon": 14
+    },
+    "mfi_14": {
+      "bucket": "mid",
+      "horizon": 14
+    },
+    "trix": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "vol_ratio_5": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "vol_ratio_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "amplitude": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "amount_ratio_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "vol_price_match": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "obv": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "obv_diff_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "cdl2crows": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdl3blackcrows": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdl3inside": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdl3linestrike": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdl3outside": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdl3starsinsouth": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdl3whitesoldiers": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlabandonedbaby": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdladvanceblock": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlbelthold": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlbreakaway": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlclosingmarubozu": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlconcealbabyswall": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlcounterattack": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdldarkcloudcover": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdldoji": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdldojistar": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdldragonflydoji": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlengulfing": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdleveningdojistar": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdleveningstar": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlgapsidesidewhite": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlgravestonedoji": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlhammer": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlhangingman": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlharami": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlharamicross": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlhighwave": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlhikkake": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlhikkakemod": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlhomingpigeon": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlidentical3crows": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlinneck": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlinvertedhammer": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlkicking": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlkickingbylength": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlladderbottom": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdllongleggeddoji": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdllongline": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlmarubozu": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlmatchinglow": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlmathold": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlmorningdojistar": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlmorningstar": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlonneck": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlpiercing": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlrickshawman": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlrisefall3methods": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlseparatinglines": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlshootingstar": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlshortline": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlspinningtop": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlstalledpattern": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlsticksandwich": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdltakuri": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdltasukigap": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlthrusting": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdltristar": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlunique3river": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlupsidegap2crows": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "cdlxsidegap3methods": {
+      "bucket": "short",
+      "horizon": 3
+    },
+    "lr_slope_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "lr_slope_60": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "lr_angle_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "channel_pos_60": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "lr_r2_60": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "break_high_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "break_high_60": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "break_low_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "gap_up": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "gap_down": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "limit_up": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "limit_consec": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "volume_spike_up": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "volume_spike_dn": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "k_kmid": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "k_klen": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "k_kmid2": {
+      "bucket": "short",
+      "horizon": 2
+    },
+    "k_kup": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "k_kup2": {
+      "bucket": "short",
+      "horizon": 2
+    },
+    "k_klow": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "k_klow2": {
+      "bucket": "short",
+      "horizon": 2
+    },
+    "k_ksft": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "k_ksft2": {
+      "bucket": "short",
+      "horizon": 2
+    },
+    "qtlu_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "qtld_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "rank_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "rsv_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "imax_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "imin_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "imxd_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "corr_close_vol_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "cord_ret_vol_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "cntp_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "cntn_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "cntd_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "sump_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "sumn_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "sumd_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "vma_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "vstd_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "wvma_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "aroon_up": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "aroon_dn": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "aroon_osc": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "kama_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "kama_dist": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "sar_signal": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "cmo_14": {
+      "bucket": "mid",
+      "horizon": 14
+    },
+    "bop": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "ppo": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "apo": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "ad": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "adosc": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "natr_14": {
+      "bucket": "mid",
+      "horizon": 14
+    },
+    "stochrsi_k": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "stochrsi_d": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "ht_trendmode": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "amount_1d": {
+      "bucket": "short",
+      "horizon": 1
+    },
+    "amount_5d_avg": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "amount_20d_avg": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "amount_log": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "amount_zscore_60d": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "amount_breakout": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "sm_net_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "mid_net_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "lg_net_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "elg_net_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "main_net_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "lg_net_20d": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "elg_net_20d": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "main_net_20d": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "main_consec_in": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "main_consec_out": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "dispersion_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "elg_ratio_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "buy_sell_imb_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "upward_impact_per_amount": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "range_per_amount_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "amihud_illiq_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "kyle_lambda_20d": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "tail_risk_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "range_compression": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "drawdown_recovery": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "price_impact_asym": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "pyr_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "pyr_10d": {
+      "bucket": "short",
+      "horizon": 10
+    },
+    "pyr_20d": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "pyr_60d": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "pyr_acc_5_20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "pyr_velocity_10_60": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "pyr_velocity_5_60": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "pyr_velocity_10_30": {
+      "bucket": "mid",
+      "horizon": 30
+    },
+    "pyr_velocity_20_60": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "pyr_velocity_5_30": {
+      "bucket": "mid",
+      "horizon": 30
+    },
+    "f1_neg1": {
+      "bucket": "short",
+      "horizon": 1
+    },
+    "f2_pos1": {
+      "bucket": "short",
+      "horizon": 2
+    },
+    "f1_neg5": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "f2_pos5": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "f1_neg8": {
+      "bucket": "short",
+      "horizon": 8
+    },
+    "f2_pos8": {
+      "bucket": "short",
+      "horizon": 8
+    },
+    "mfk_main_ma5": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "mfk_main_ma20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "mfk_main_ma_diff": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "mfk_main_cross_state": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "mfk_main_days_in_cross": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "mfk_main_cross_strength": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "mfk_main_macd": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "mfk_main_macd_hist": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "mfk_main_macd_zero_dist": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "mfk_smart_dumb_spread": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "mfk_pyramid_top_heavy": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "mfk_inst_acc_velocity": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "mfk_main_price_sync_20d": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "mfk_main_lead_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "mfk_main_velocity_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "mfk_main_consec_above_ma20": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "mfk_main_acc_ratio_60d": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "regime_id": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "mkt_ret_5d": {
+      "bucket": "short",
+      "horizon": 5
+    },
+    "mkt_ret_20d": {
+      "bucket": "mid",
+      "horizon": 20
+    },
+    "mkt_ret_60d": {
+      "bucket": "long",
+      "horizon": 60
+    },
+    "mkt_rsi14": {
+      "bucket": "mid",
+      "horizon": 14
+    },
+    "mkt_vol_ratio": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "regime_days_in": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "regime_intensity": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "hs300_ret60_z60": {
+      "bucket": "long",
+      "horizon": 300
+    },
+    "cyb_rel_strength": {
+      "bucket": "mid",
+      "horizon": -1
+    },
+    "zz500_rel_strength": {
+      "bucket": "long",
+      "horizon": 500
+    },
+    "long_return_252d": {
+      "bucket": "long",
+      "horizon": 252
+    },
+    "long_return_504d": {
+      "bucket": "long",
+      "horizon": 504
+    },
+    "long_return_252d_decile": {
+      "bucket": "long",
+      "horizon": 252
+    },
+    "long_return_504d_decile": {
+      "bucket": "long",
+      "horizon": 504
+    },
+    "industry_return_252d": {
+      "bucket": "long",
+      "horizon": 252
+    },
+    "industry_return_504d": {
+      "bucket": "long",
+      "horizon": 504
+    },
+    "industry_return_504d_decile": {
+      "bucket": "long",
+      "horizon": 504
+    },
+    "relative_strength_252d": {
+      "bucket": "long",
+      "horizon": 252
+    },
+    "relative_strength_504d": {
+      "bucket": "long",
+      "horizon": 504
+    },
+    "rs_in_decile": {
+      "bucket": "context",
+      "horizon": 0
+    },
+    "concept_return_504d_mean": {
+      "bucket": "long",
+      "horizon": 504
+    },
+    "industry_id": {
+      "bucket": "context",
+      "horizon": 0
+    }
+  }
+}
