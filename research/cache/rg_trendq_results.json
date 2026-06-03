@@ -1,0 +1,45 @@
+{
+  "window": [
+    "202410",
+    "202604"
+  ],
+  "n_months": 19,
+  "ma_primary": 60,
+  "base": {
+    "mean": 6.958231772346133,
+    "worst": -3.1472559707160057,
+    "worst_id": "202412",
+    "disaster": 2,
+    "pos_ratio": 0.8421052631578947
+  },
+  "filt60": {
+    "mean": 6.883811998410496,
+    "worst": -3.5127954304266455,
+    "worst_id": "202412",
+    "disaster": 2,
+    "pos_ratio": 0.8421052631578947
+  },
+  "delta_mean_all": -0.07441977393563719,
+  "delta_mean_momentum": 0.00642277169486717,
+  "delta_mean_reversal": -0.14192111107878153,
+  "n_momentum_months": 7,
+  "n_reversal_months": 10,
+  "other_ma": {
+    "ma20": {
+      "mean": 6.670249772068138,
+      "delta_mean": -0.287982000277996
+    },
+    "ma60": {
+      "mean": 6.883811998410496,
+      "delta_mean": -0.07441977393563719
+    }
+  },
+  "gate_conditions": {
+    "不伤平均Δ>=-0.1pp": true,
+    "动量月Δ>=+0.3pp": false,
+    "最差月改善>=+0.3pp": false,
+    "不新增灾难月": true
+  },
+  "gate_status": "REJECT",
+  "note": "apples 两臂仅候选池趋势过滤不同; 窗不含实盘血洗 (7月复检), 202602 代理。"
+}
