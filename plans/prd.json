@@ -1,119 +1,92 @@
 {
   "repo": "gaoxingkele/stockagent-analysis",
-  "branchName": "research/ratio-phase",
-  "northStar": "判定『相位感知 / 动态窗口』对 pump ratio 是否带来经 walk-forward 验证、相对生产线 V12.31 的真 alpha;有就以 opt-in 方式落地,没有就把负结论文档化并停手。生产线 V12.31 全程冻结。",
+  "branchName": "research/regime-overlay",
+  "northStar": "v3c/V12.31 是均值回归(买回调)策略, 实盘审计证实它在动量延续 regime 被血洗(0508→0603 优秀基金+11.4% 而 picks-10%, 动量D9-D0+12.3pp)。目标: 加一个因果动量-regime 叠加层, 在强动量态抑制回调买入/切动量, 经按-regime-分层的 walk-forward 验证能改善动量月而不伤反转月才落地; 否则文档化负结论。生产线 V12.31 全程冻结。",
   "verifyCommand": "python research/verify.py",
   "acceptanceCriteria": [
     "python research/verify.py 退出码 0 (纪律检查器全绿)",
-    "每个非 skip task 都产出工件 + research/verdicts/<id>.json (含 status 与一句话结论)",
-    "T-005 walk-forward gate 已评估 (PASS 落地 / REJECT 文档化, 两者都算完成)",
-    "生产线指纹未变: src/stockagent_analysis/v12_scoring.py 与生产模型文件 hash 与基线一致"
+    "每个非 skip task 产出工件 + research/verdicts/<id>.json (含 status 与一句话结论)",
+    "RG-004 按-regime-分层的 walk-forward gate 已评估 (PASS 落地 / REJECT 文档化)",
+    "生产线指纹未变: v12_scoring.py 与生产模型 hash 与基线一致"
   ],
   "preRegisteredGate": {
     "frozen": true,
-    "note": "循环启动时写死, 任何迭代不得修改 (SIGN-R01)",
-    "metric": "walk-forward 19 月, 与 V12.31 同协议同 harness apples-to-apples",
+    "note": "循环启动时写死, 不得修改 (SIGN-R01); 必须按 regime 分层 (SIGN-R11)",
+    "metric": "19 月 walk-forward, 按 RG-001 regime 分层, 对照 V12.31 baseline 同 harness",
     "pass_conditions": [
-      "Δα(月化) >= +0.30pp  相对 V12.31 walk-forward 基线",
-      "Sharpe 不低于基线",
-      "无新增灾难月 (最差月不低于基线最差月)",
-      "正 α 月占比不低于基线"
+      "全期净 Δα(月化) >= +0.30pp 相对 V12.31",
+      "动量-regime 月 α 显著改善 (Δα_momentum >= +1.0pp)",
+      "反转-regime 月不受伤 (Δα_reversal >= -0.10pp)",
+      "无新增灾难月 (最差月不低于基线)"
     ]
   },
   "features": [
     {
-      "id": "T-001",
-      "title": "相位对齐事件研究 (ratio vs MA5 拐点, regime 分层, 零前视)",
+      "id": "RG-001",
+      "title": "因果动量-regime 检测器 (横截面动量价差 + 宽度 + 指数趋势)",
       "acceptanceCriteria": [
-        "拐点用滞后确认 (lagged-confirmed MA5 slope 变号), 绝不使用未来数据",
-        "对每只股把上拐点对齐 τ=0, 输出 regime 分层的 ratio 相位平均曲线 (±10 日)",
-        "量化 ratio 相对拐点的 lead/lag 天数 (按 regime 分层)",
-        "research/verify.py 的 leakage guard 通过 (无 forward-field)",
-        "research/verdicts/T-001.json: status in {lead, sync, lag} + 一句话结论"
+        "用仅历史数据定义 regime: 横截面过去20d动量 D9-D0 价差 + 市场宽度 + 指数动量, 滞后确认零前视",
+        "对每个交易日分类 {momentum / reversal / mixed}, 输出 research/features/regime_timeline.parquet",
+        "验证因果性 (无未来数据); regime 分布 + 与已知动量月(如 202605)的吻合度",
+        "research/verify.py leakage guard 通过",
+        "research/verdicts/RG-001.json: status=built + regime 分布摘要"
       ],
       "priority": 1,
-      "passes": true,
-      "completed_at": "2026-06-02",
-      "verdict": "sync",
-      "notes": "lag (premise 被证伪) 也算完成, 结论本身是交付物。不得为了得到 lead 而调参。 [DONE] status=sync: ratio 不领先 MA5 上拐点, ignition 同步 τ0 / peak 滞后 +2d / trough 领先 -7d; peak 跨 regime 不变(+2d) 但 ignition 在 choppy 漂移到 -5d (非平稳, 接 T-002)。190483 事件/5026 股。"
+      "passes": false,
+      "notes": "regime 必须 causal。这是后续一切的地基。"
     },
     {
-      "id": "T-002",
-      "title": "窗口非平稳检验 (ratio 短窗/长窗分解 + lead/lag 漂移)",
+      "id": "RG-002",
+      "title": "v3c/V12.31 regime 分层尸检 (确认假设)",
       "acceptanceCriteria": [
-        "把 ratio 拆成短窗 vs 长窗特征贡献 (例: shap 或消融)",
-        "检验 lead/lag 是否随 regime (快市/慢市) 漂移, 给出量化漂移幅度",
-        "research/verdicts/T-002.json: status in {window_dynamic_needed, fixed_ok} + 结论",
-        "若 fixed_ok 则在 prd 中把 T-004 标记 skip:true"
+        "把 V12.31 的 19 月 walk-forward 按 RG-001 regime 分层, 量化每个 regime 的 α/胜率",
+        "确认假设: 动量-regime 月 α 显著为负, 反转-regime 月 α 为正",
+        "research/verdicts/RG-002.json: status in {hypothesis_confirmed, hypothesis_rejected} + 每-regime α 表"
       ],
       "priority": 2,
-      "passes": true,
-      "completed_at": "2026-06-03",
-      "verdict": "window_dynamic_needed",
-      "notes": "漂移 = 固定窗口不够的直接证据。依赖 T-001 完成。 [DONE] status=window_dynamic_needed: SHAP 窗口贡献份额近似平稳(短9.6/中56.1/长20.5/上下文13.8%, regime极差仅2.42pp<5pp), 但相位时序非平稳 — ignition lead/lag regime间漂移5d(choppy-5d vs trend/mid0d)≥3d触发。非平稳源于相位而非窗口配比 → T-004 应做相位/regime门控, 保持 skip:false 执行。135k分层样本/5034股。"
+      "passes": false,
+      "notes": "precondition: 若 hypothesis_rejected (α 非 regime 依赖), 叠加层无意义 → 由本 task 把 RG-003/004 置 skip 并 RG-005 skipped。"
     },
     {
-      "id": "T-003",
-      "title": "ratio 轨迹特征 (Δratio/Δ²ratio/背离象限/自分位/距峰天数), 全因果",
+      "id": "RG-003",
+      "title": "动量-regime 叠加层 (强动量态抑制回调买入/切动量)",
       "acceptanceCriteria": [
-        "构建 5 类轨迹特征, 全部 causal (仅用 t 及之前数据)",
-        "产出全历史 parquet 到 research/features/ratio_traj.parquet",
-        "research/verify.py forward-field 黑名单 guard 通过",
-        "单因子 IC / 分层 IC 仅作描述记录, 不作 gate",
-        "research/verdicts/T-003.json: status=built + IC 摘要"
+        "强动量态时: 抑制 v3c past_r5<0 回调买入 / 或 tilt 动量 sleeve (≥2 变体: 硬门控 / 混合)",
+        "全因果无泄漏, 产出叠加后信号覆盖全历史 research/features/regime_overlay_signal.parquet",
+        "推理路径样本日跑通, 不触碰生产模型",
+        "research/verdicts/RG-003.json: status=built + 变体说明"
       ],
       "priority": 3,
-      "passes": true,
-      "completed_at": "2026-06-03",
-      "verdict": "built",
-      "notes": "ratio 时序模型现在看不到 (逐日独立跑), 这是真正正交的增量。IC 好看不等于落地。 [DONE] status=built: 5 类 11 个全 causal 轨迹特征落 research/features/ratio_traj.parquet (191.8 万行/5055 股); 描述性 RankIC(fwd5) 最强 ratio_div_strength=+0.065 (多头背离, regime 间 +0.055~+0.075 稳健), ratio_vel_3=+0.050; 量级温和无泄漏(最强0.065<<0.5); 前向收益仅内存评估未入库, verify leakage guard 通过。IC 仅描述非 gate。"
+      "passes": false,
+      "notes": "依赖 RG-002=hypothesis_confirmed。"
     },
     {
-      "id": "T-004",
-      "title": "多尺度门控启动子 (最廉价动态窗口实现)",
+      "id": "RG-004",
+      "title": "按-regime-分层 walk-forward 决策 gate (vs V12.31)",
+      "isGate": true,
       "acceptanceCriteria": [
-        "K 个窗口尺度各训一个 pump 模型 (artifact 落 research/models/)",
-        "regime / run-length 门控集成, 输出动态窗口版 ratio",
-        "推理路径在样本日跑通, 不触碰生产模型",
-        "research/verdicts/T-004.json: status=built"
+        "19 月 walk-forward, 协议与 project_walk_forward_validation_0525 一致, 同 harness 重跑 V12.31 baseline",
+        "报告全期 + 分 regime 的 α(月化)/Sharpe/最差月/胜率 vs baseline",
+        "断言 preRegisteredGate.pass_conditions (4 条, 含动量月改善 + 反转月不伤): 全满足 -> PASS, 否则 REJECT",
+        "research/verdicts/RG-004.json: status in {PASS, REJECT} + 全期及分regime指标对照表 (metrics 含 alpha_delta_pp/sharpe/worst_month/pos_alpha_month_ratio)"
       ],
       "priority": 4,
-      "passes": true,
-      "skip": false,
-      "completed_at": "2026-06-03",
-      "verdict": "built",
-      "notes": "条件执行, 依赖 T-002 裁决为 window_dynamic_needed; 若 fixed_ok 由 T-002 置 skip:true。 [DONE] status=built: 3 个窗口尺度 pump 模型 (s3 H=3/g6%, s5 H=5/g10%, s10 H=10/g15%) 各训 LGBM 3way 落 research/models/pump_scale_{3,5,10}/ (500k train/120k val 时间切分早停, best_iter 82/45/35); regime(MA5/MA60穿越数 p20/p80)+run_len(连续MA5上斜天数) 门控硬选择产出 ratio_dyn (1,913,175 行/5034 股 落 research/features/dynamic_ratio.parquet)。门控按 T-001/T-002 实证规则(非拟合): choppy->s3 95%(响应 ignition-5d 漂移) / trend->s5 69%+s10 31%(同步稳) / mid 混合; 整体切换 58% vs 固定s5。推理样本窗口全跑通, 生产模型/指纹未触碰, leakage guard 0 违规。IC/分布仅描述非 gate, ship 由 T-005 walk-forward 定。"
+      "passes": false,
+      "notes": "REJECT 是合法完成 (SIGN-R02)。必须按 regime 分层评估, 禁止只看全期平均 (SIGN-R11) —— 这正是实盘错配被回测漏掉的原因。"
     },
     {
-      "id": "T-005",
-      "title": "walk-forward 决策 gate (vs V12.31 同协议 apples-to-apples)",
+      "id": "RG-005",
+      "title": "落地 (仅 RG-004 PASS): opt-in 接进 v12_scoring",
       "acceptanceCriteria": [
-        "19 月 walk-forward, 独立训练/测试, 协议与 project_walk_forward_validation_0525 一致",
-        "同 harness 重跑 V12.31 baseline 做对照",
-        "报告 α(月化)/Sharpe/最差月/正α月占比 vs baseline",
-        "断言 preRegisteredGate.pass_conditions: 全满足 -> verdict=PASS, 否则 verdict=REJECT",
-        "research/verdicts/T-005.json: status in {PASS, REJECT} + 四项指标对照表"
+        "以 opt-in 开关接入 v12_scoring.py, 默认关闭",
+        "默认生产路径 (开关关) 输出与基线逐位一致",
+        "research/verdicts/RG-005.json: status in {landed, skipped}"
       ],
       "priority": 5,
-      "passes": true,
-      "completed_at": "2026-06-03",
-      "verdict": "REJECT",
-      "notes": "REJECT 不是错误, 是合法完成。禁止在同一段 OOS 上反复重调再试 (SIGN-R02)。 [DONE] status=REJECT: 19 月 walk-forward (202410-202604, 24m lookback 月度重训, apples-to-apples 两臂唯一差异=池内排序列 ratio_s5 vs ratio_dyn) Δα=-0.357pp/月 (gate 需 +0.30pp), 4 条件仅 1 过 (正α月占比 94.7%=94.7% 持平; Δα/Sharpe 3.79<4.00/最差月 -1.031<-0.202 均不过)。动态窗口非但无增量反而轻微伤害 + 新增灾难月 202602 (dyn -1.031 vs base +0.789), 与 T-004 预判 (ratio_dyn 与 s5 相关 0.955 增量空间有限) 一致。相对 V12.31 固定窗口无可落地真 alpha → 不落地, T-006 保持 skip。生产指纹未变, leakage guard 0 违规。"
-    },
-    {
-      "id": "T-006",
-      "title": "落地 (仅 T-005 PASS): opt-in 接进 v12_scoring",
-      "acceptanceCriteria": [
-        "以 opt-in 开关接入 src/stockagent_analysis/v12_scoring.py, 默认关闭",
-        "默认生产路径 (开关关) 输出与基线逐位一致",
-        "research/verdicts/T-006.json: status in {landed, skipped}"
-      ],
-      "priority": 6,
       "passes": false,
       "skip": true,
-      "verdict": "skipped",
-      "skipReason": "条件任务: 仅当 T-005 verdict=PASS 时由迭代解除 skip; T-005 REJECT 则保持 skip 并写 verdict=skipped。",
-      "notes": "未 PASS 不落地, 直接合法完成。 [SKIPPED] T-005 verdict=REJECT (Δα=-0.357pp 不过 gate) → 不落地, 保持 skip, 生产线 V12.31 全程冻结未触碰。"
+      "skipReason": "条件任务: 仅当 RG-004 verdict=PASS 时由迭代解除 skip; REJECT 则保持 skip 并写 verdict=skipped。",
+      "notes": "未 PASS 不落地。"
     }
   ]
 }

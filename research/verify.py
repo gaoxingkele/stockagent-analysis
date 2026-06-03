@@ -116,13 +116,13 @@ def check_verdicts(tasks: list[dict]) -> None:
             errors.append(f"{tid}: verdict 缺 status")
         if not str(v.get("conclusion", "")).strip():
             errors.append(f"{tid}: verdict 缺 conclusion (一句话结论)")
-        if tid == "T-005" and str(v.get("status", "")).upper() == "PASS":
+        if t.get("isGate") and str(v.get("status", "")).upper() == "PASS":
             m = v.get("metrics", {})
             need = {"alpha_delta_pp", "sharpe", "worst_month", "pos_alpha_month_ratio"}
             miss = need - set(m)
             if miss:
                 violations.append(
-                    f"[VIOLATION] T-005 PASS 但缺指标 {sorted(miss)} — gate 不可凭空 PASS (SIGN-R01/R03)")
+                    f"[VIOLATION] {tid} (gate) PASS 但缺指标 {sorted(miss)} — gate 不可凭空 PASS (SIGN-R01/R03)")
 
 
 def main() -> int:

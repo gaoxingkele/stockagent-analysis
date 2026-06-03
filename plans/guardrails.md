@@ -70,6 +70,14 @@
 
 ---
 
+### SIGN-R11: 评估必须按 regime 分层, 禁止只看全期平均
+**Trigger:** 任何 walk-forward / gate / α 评估
+**Instruction:** 全期平均 α 只作参考, **决策必须看分 regime(动量/反转)的表现**。gate 条件必须含"动量月改善 + 反转月不伤"。
+**Reason:** 2026-06-03 实盘审计教训: V12.31 全期 +2.2pp/月 是动量/反转混合平均, 掩盖了动量月被血洗 (优秀基金+11.4% 而 picks-10%)。回测全期平均正是漏掉实盘 regime 错配的原因。见 project_v3c_momentum_regime_mismatch_0603 + [[feedback_stratified_analysis]]。
+**Added after:** regime-overlay 循环启动 / 2026-06-03
+
+---
+
 ## 项目专属 signs (循环中遇到失败再追加, append-only)
 
 <!--
