@@ -72,8 +72,9 @@
         "若 no_residual → RT-005 标记 skip:true, RT-006 skipped (廉价 REJECT, 省 walk-forward)"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": "设计 §10 第2步: 廉价 go/no-go, 防一把梭烧算力。precondition 关卡。"
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "notes": "设计 §10 第2步: 廉价 go/no-go, 防一把梭烧算力。precondition 关卡。[DONE] research/rt004_phase1_screen.py: 3 折 expanding-window OOF (train 202206→test 202403, 全在 gate 窗 202410-202604 之外保 RT-005 OOS 纯净 SIGN-R02), 每折训 FusionModel(NN)→冻结 SeqEncoder 抽序列 embedding→GBDT(emb→r20z) 得 emb_pred(≈A1), GBDT(A0→r20z) 得 a0_pred; 904,353 OOF 样本。**裁决 no_residual**: 张量自身 raw rank-IC=-0.0009(t=-0.18 ≈0!), A2融合=0.10103 ≈ A0=0.10114 (零增量); emb_pred 与 r20 同对 [a0_pred+月×板块 dummies] OLS 残差化后逐日 Spearman = -0.0026 (t=-0.6, 182 日), 未达事前注册阈值 |IC|>=0.01 且 |t|>=3。分regime (SIGN-R11) 动量 +0.011(t=2.22)/反转 -0.012(t=-2.43) 符号相反且都 <3σ 互相抵消 = 无稳健残差。结论: CNN+TCN 关系张量 = 标准TA标量版换皮 (梅花教训重演, SIGN-R12), 无可交易独立残差。**触发 precondition: RT-005 skip + RT-006 skipped, 廉价 REJECT 省 walk-forward (~90%算力)**。中间IC非落地(SIGN-R03)。产出: cache/rt004_fold_{f1,f2,f3}.parquet + rt004_r20_label.parquet (零泄漏不进features) + verdict RT-004.json status=no_residual。"
     },
     {
       "id": "RT-005",
@@ -87,8 +88,9 @@
       ],
       "priority": 5,
       "passes": false,
-      "skip": false,
-      "notes": "REJECT 合法完成 (R02)。gate 决策在 r20×GBDT-on-emb×A2-vs-A0; pump/NN 是对比报告。设计 §5/§10。"
+      "skip": true,
+      "skipReason": "RT-004 Phase-1 廉价筛查裁决 no_residual (残差 rank-IC=-0.0026 t=-0.6, 张量 A1 IC≈0 / A2≈A0 零增量), precondition 触发: 关系张量无独立于 A0 标准TA 的残差, 廉价 REJECT, 跳过昂贵 walk-forward (设计 §10 第2步, 省~90%算力)。verdict RT-005.json status=REJECT 已记录。",
+      "notes": "REJECT 合法完成 (R02)。gate 决策在 r20×GBDT-on-emb×A2-vs-A0; pump/NN 是对比报告。设计 §5/§10。[SKIPPED via precondition] RT-004 no_residual → 不进 walk-forward。"
     },
     {
       "id": "RT-006",

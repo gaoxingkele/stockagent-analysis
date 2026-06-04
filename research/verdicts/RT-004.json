@@ -1,0 +1,94 @@
+{
+  "id": "RT-004",
+  "status": "no_residual",
+  "conclusion": "Phase-1 廉价筛查: 关系张量 embedding 对 r20 在扣 A0 标量TA + 月×板块朴素对照后, 残差 rank-IC=-0.00262 (t=-0.605, 182 交易日), 未达事前注册阈值 |IC|>=0.01 且 |t|>=3.0 → no_residual。无独立残差 = 张量≈标准TA换皮 (梅花教训重演), 廉价 REJECT, 跳过 RT-005/RT-006 (省~90%算力)。 中间 IC 非落地信号 (SIGN-R03), ship 仅由 RT-005 α 决定。",
+  "artifact": "research/rt004_phase1_screen.py",
+  "decision_metric": {
+    "residual_rank_ic": -0.00262,
+    "residual_t": -0.605,
+    "n_dates": 182,
+    "gate_threshold": {
+      "abs_ic_min": 0.01,
+      "abs_t_min": 3.0
+    },
+    "method": "emb_pred(GBDT 吃冻结张量 embedding) 与 r20 同对 [a0_pred + 月×板块 dummies] OLS 残差化后逐日 Spearman 跨日均值; a0_pred=GBDT 吃 A0 标量TA"
+  },
+  "raw_rank_ic": {
+    "A0_scalar_TA": {
+      "ic": 0.10114,
+      "t": 12.081
+    },
+    "A1_tensor_only": {
+      "ic": -0.00087,
+      "t": -0.185
+    },
+    "A2_fused": {
+      "ic": 0.10103,
+      "t": 11.478
+    }
+  },
+  "regime_stratified": {
+    "mixed": {
+      "resid_ic": 0.0071,
+      "t": 0.31,
+      "n_dates": 22
+    },
+    "momentum": {
+      "resid_ic": 0.01127,
+      "t": 2.222,
+      "n_dates": 57
+    },
+    "reversal": {
+      "resid_ic": -0.01239,
+      "t": -2.434,
+      "n_dates": 103
+    }
+  },
+  "oof_folds": [
+    {
+      "name": "f1",
+      "train": [
+        "202206",
+        "202306"
+      ],
+      "test": [
+        "202307",
+        "202309"
+      ]
+    },
+    {
+      "name": "f2",
+      "train": [
+        "202209",
+        "202309"
+      ],
+      "test": [
+        "202310",
+        "202312"
+      ]
+    },
+    {
+      "name": "f3",
+      "train": [
+        "202301",
+        "202312"
+      ],
+      "test": [
+        "202401",
+        "202403"
+      ]
+    }
+  ],
+  "n_oof_samples": 904353,
+  "ablation_note": "决策对照 = A1张量 在扣 A0(标准TA标量版)+月×板块后是否仍有残差; 防梅花式'标准TA换皮' (SIGN-R12); OOF 折全在 gate 窗 202410-202604 之外 (SIGN-R02)",
+  "guardrails": [
+    "SIGN-R03 IC非落地",
+    "SIGN-R04 r20留cache零泄漏",
+    "SIGN-R06 ST继承源头排除",
+    "SIGN-R08 折级checkpoint",
+    "SIGN-R11 分regime",
+    "SIGN-R12 扣朴素对照",
+    "SIGN-R01 阈值事前注册不可改"
+  ],
+  "next": "RT-005 skip=true 写 REJECT; RT-006 保持 skipped (廉价 REJECT)"
+}
