@@ -125,6 +125,30 @@ def build_tiyong_B_lookup() -> dict:
     return tbl
 
 
+# ───────── 方案 A (轨迹数字起卦): 近N日量化整数 → 上卦/下卦, 动爻=振幅最大日 ─────────
+# 北极星: 经典"数字起卦"用在走势上。近N日日涨跌幅量化成整数 (×100 取整), 分窗求和:
+#   上卦 = 较早半窗 Σ量化涨跌幅, 下卦 = 较近半窗 Σ量化涨跌幅 (各 %8 余0进位),
+#   动爻 = 近N日振幅最大日在窗内的序号 (%6 余0进位)。
+# ⇒ 纯数论分桶, 不靠 MA 堆叠 (与方案B 区别: B=多尺度MA趋势状态, A=路径数字起卦)。全因果。
+def cast_traj_A(up: int, lo: int, mv: int) -> dict:
+    """方案A 起卦: 上卦/下卦/动爻 已是 1..8 / 1..8 / 1..6 的整数 (调用方先取模)。
+
+    直接喂 _cast (其内再 %8/%6 对 1..8/1..6 为恒等映射), 返回与 _cast 同构卦象 dict。
+    """
+    return _cast(up_num=int(up), lo_num=int(lo), mv_num=int(mv))
+
+
+def build_traj_A_lookup() -> dict:
+    """返回 {(up, lo, mv): {mhA_*: int}} 全枚举查表 (8×8×6=384, 确定性)."""
+    tbl = {}
+    for up in range(1, 9):
+        for lo in range(1, 9):
+            for mv in range(1, 7):
+                feat = cast_traj_A(up, lo, mv)
+                tbl[(up, lo, mv)] = {f"mhA_{k}": v for k, v in feat.items()}
+    return tbl
+
+
 def encode_frame(df: pd.DataFrame, code_col="ts_code", date_col="trade_date",
                  close_col="close") -> pd.DataFrame:
     """批量: df 需含 ts_code/trade_date/close, 返回原 df + 梅花特征列。"""

@@ -1,0 +1,96 @@
+{
+  "id": "MT-002",
+  "status": "no_residual",
+  "conclusion": "方案A 轨迹数字起卦(近20日涨跌幅量化整数分窗→上/下卦, 振幅最大日→动爻) Phase-1 升级消融筛查: 最强动态 mhA_* = mhA_moving (扣 公历月×板块 + 标准动量['mom_5', 'mom_20', 'ma_pos', 'rsi_14'] 后 resid2 IC=-0.0037, t=-2.53); 朴素对照 OOF-IC=+0.0067; 动量因子最强 IC(r20)=-0.0786。判定 no_residual (阈值 |IC|>=0.01 且 |t|>=3.0)。 轨迹数字起卦扣掉标准动量/趋势因子后无独立残差 ⇒ 数字起卦只是动量换皮 (SIGN-R12 消融未存活)。A 方案廉价收手, 进 MT-003(C)。",
+  "metrics": {
+    "window_days": 20,
+    "horizon_days": 20,
+    "best_dynamic_feature": "mhA_moving",
+    "best_dynamic_resid2_ic": -0.003749,
+    "best_dynamic_resid2_t": -2.534629,
+    "best_dynamic_resid2_by_regime": {
+      "momentum": {
+        "ic_mean": -0.00197,
+        "ic_t": -0.732187,
+        "n_dates": 222,
+        "ic_std": 0.04009,
+        "ic_ir": -0.049141
+      },
+      "mixed": {
+        "ic_mean": -0.006649,
+        "ic_t": -1.783441,
+        "n_dates": 132,
+        "ic_std": 0.042836,
+        "ic_ir": -0.155229
+      },
+      "reversal": {
+        "ic_mean": -0.003777,
+        "ic_t": -1.878866,
+        "n_dates": 435,
+        "ic_std": 0.041929,
+        "ic_ir": -0.090085
+      }
+    },
+    "naive_control_oof_ic": 0.006678,
+    "momentum_factor_ic_r20": {
+      "mom_5": {
+        "ic_mean": -0.042667,
+        "ic_t": -9.98313,
+        "n_dates": 1022,
+        "ic_std": 0.136633,
+        "ic_ir": -0.312278
+      },
+      "mom_20": {
+        "ic_mean": -0.078555,
+        "ic_t": -17.328563,
+        "n_dates": 1007,
+        "ic_std": 0.143855,
+        "ic_ir": -0.546069
+      },
+      "ma_pos": {
+        "ic_mean": -0.069101,
+        "ic_t": -15.715338,
+        "n_dates": 1008,
+        "ic_std": 0.139602,
+        "ic_ir": -0.494987
+      },
+      "rsi_14": {
+        "ic_mean": -0.066548,
+        "ic_t": -15.922801,
+        "n_dates": 1013,
+        "ic_std": 0.133021,
+        "ic_ir": -0.500282
+      }
+    },
+    "screen_ic_floor": 0.01,
+    "screen_t_floor": 3.0,
+    "n_dates": 1027,
+    "regime_dist": {
+      "reversal": 0.4468,
+      "momentum": 0.221,
+      "unknown": 0.2001,
+      "mixed": 0.1321
+    }
+  },
+  "ablation": {
+    "controls": [
+      "OOF (cal_month × industry)",
+      "逐日横截面回归扣 mom_5,mom_20,ma_pos,rsi_14"
+    ],
+    "best_dynamic_raw_oof_ic": -0.004868,
+    "note": "升级 vs MH-002: resid2 在 月×板块 基础上额外逐日横截面扣线性动量/趋势成分。若 mhA_* 对 resid2 仍无 IC ⇒ 数字起卦=动量换皮, 无独立于标准技术指标的信号。",
+    "interpretation_caveat": "诚实预警 (SIGN-R12): 方案A 的上/下卦本质是'分窗累积涨跌幅 %8'的余数分桶, 与累积动量(mom_10/mom_20) 高度同源; 动爻是'振幅最大日序号', 是日历/路径位置而非价值占卜。若 resid2 上仍有 IC, 极可能是 %8 余数分桶对非线性累积动量的粗编码超出线性动量残差化, 而非占卜。是否真有独立于'同一走势标准技术编码'的增益, 必须由 MT-004 apples-to-apples walk-forward 裁决, Phase-1 IC 不作数 (SIGN-R03)。"
+  },
+  "artifacts": [
+    "research\\features\\meihua_traj_A.parquet",
+    "research/cache/mt002_panel.parquet",
+    "research/cache/mt002_results.json"
+  ],
+  "guardrails": [
+    "SIGN-R03 纯描述非gate",
+    "SIGN-R04 r20/动量留cache不进features",
+    "SIGN-R06 ST源头排除",
+    "SIGN-R11 regime分层",
+    "SIGN-R12+ 升级消融(月×板块+动量因子)"
+  ]
+}

@@ -18,7 +18,7 @@
 | id | 方案 | 状态 | 裁决 |
 |----|------|------|------|
 | MT-001 | B 体用=趋势vs当日 | done | residual_signal (体卦=MA堆叠换皮, 延MT-004) |
-| MT-002 | A 轨迹数字起卦 | todo | — |
+| MT-002 | A 轨迹数字起卦 | done | no_residual (数字起卦=动量换皮, 扣后无残差) |
 | MT-003 | C 累积卦+序列特征 | todo | — |
 | MT-004 | 三组对比 + 决策 gate | todo | — |
 | MT-005 | opt-in 落地 (依赖 MT-004=PASS) | skip | — |
@@ -43,3 +43,8 @@
   - **给 MT-004 的硬约束**: apples-to-apples baseline **必须含 MA堆叠/非线性趋势对照** (如直接用 ti_tri 三元状态或GBDT喂动量因子), 否则会把"非线性趋势"误归功于卦象 = 自欺。
   - 产出: research/features/meihua_traj_B.parquet, research/cache/mt001_panel.parquet(含r20+动量,不进features), research/cache/mt001_results.json, research/verdicts/MT-001.json。verify.py 无违规(无泄漏+生产指纹一致), 剩 MT-002/003/004 未裁决=正常。
   - 下一步: MT-002 (方案A 轨迹数字起卦)。
+- 迭代2 | MT-002 (方案A) | 扩展 meihua_encoder.py 加 cast_traj_A/build_traj_A_lookup (经典数字起卦用在走势: 近20日日涨跌幅×100取整=量化整数, 分窗求和→上卦=较早半窗Σ%8 / 下卦=较近半窗Σ%8, 动爻=近20日振幅最大日窗内序号%6, sliding_window argmax 向量化因果)。写 research/mt002_traj_A.py: 全历史5.19M行因果落 features/meihua_traj_A.parquet (仅key+10个mhA_, 零泄漏); 同 MT-001 升级 Phase-1 消融 (resid1 扣月×板块OOF → resid2 逐日横截面扣 mom_5/20/ma_pos/rsi)。**裁决=no_residual**: 最强动态 mhA_moving resid2-IC=-0.0037 t=-2.53, 未过 |IC|>=0.01 且 |t|>=3.0 双闸。原始/OOF IC 几乎全 |t|<3 (唯 mhA_moving OOF t=-2.99 边缘, resid2 后衰减到 t=-2.53)。
+  - 解读: 方案A 上/下卦本质是"分窗累积涨跌幅 %8"的余数分桶, 与累积动量 (mom_10/20) 同源; 动爻=振幅最大日序号是路径位置非占卜。扣掉线性动量后无残差 ⇒ **数字起卦只是动量换皮** (SIGN-R12 消融未存活)。与方案B 对比鲜明: B 体卦=多尺度MA堆叠的非线性趋势状态, 仍存活线性动量残差化 (resid2-IC +0.0214 t10.32); A 纯余数分桶则被线性动量吃干净。
+  - 产出: research/features/meihua_traj_A.parquet, research/cache/mt002_panel.parquet(含r20+动量,不进features), research/cache/mt002_results.json, research/verdicts/MT-002.json。verify.py 无违规(无泄漏+生产指纹一致), 剩 MT-003/004 未裁决=正常。
+  - 给 MT-004 的输入: B=residual_signal(但=MA换皮预警) / A=no_residual。三组对比中 A 是廉价 REJECT 项。
+  - 下一步: MT-003 (方案C 累积卦+序列特征)。

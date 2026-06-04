@@ -46,8 +46,10 @@
         "research/verdicts/MT-002.json: status + 残差IC表"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "顺序第二 (A)。"
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "verdict": "no_residual (数字起卦扣月×板块+动量后无独立残差)",
+      "notes": "顺序第二 (A)。窗20日: 上卦=较早半窗Σ量化涨跌幅%8, 下卦=较近半窗Σ%8, 动爻=振幅最大日序号%6。Phase-1: 最强动态 mhA_moving resid2-IC=-0.0037 t=-2.53, 未过 |IC|>=0.01 且 |t|>=3.0 双闸 → no_residual。原始/OOF IC 全部 |t|<3 (唯一 mhA_moving OOF t=-2.99 接近但 resid2 后衰减)。对照: 朴素 cal_month×industry OOF-IC=+0.0067(t=1.25), 动量因子 mom_20 IC(r20)=-0.0786 t=-17.33。结论: 纯数论分桶起卦的余数特征与累积动量同源, 扣线性动量后无残差 = 动量换皮 (与方案B 不同, B 体卦=MA堆叠仍存活线性动量残差化)。廉价 REJECT, 进 MT-003(C)。"
     },
     {
       "id": "MT-003",
