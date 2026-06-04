@@ -32,7 +32,7 @@ walk-forward 验证、且扣 [动量+size+value+其他基本面] 后仍存在的
 | id | 任务 | 状态 | 裁决 |
 |----|------|------|------|
 | FU-001 | Point-in-time 基本面面板(拉长~2019) | ✅ built | 268525行×5435股×54月度网格, or_yoy覆盖98.9% |
-| FU-002 | 成长因子构建 + 控制集 | todo | — |
+| FU-002 | 成长因子构建 + 控制集 | ✅ built | growth_composite 覆盖98.9%, vs roe +0.35/value -0.14/size +0.12/动量近正交 |
 | FU-003 | 功率充足正交 IC 验证(≥40月) | todo | — |
 | FU-004 | walk-forward 决策 gate | todo | — |
 | FU-005 | opt-in 落地 (依赖 FU-004=A_PASS) | skip | — |
@@ -51,4 +51,5 @@ walk-forward 验证、且扣 [动量+size+value+其他基本面] 后仍存在的
 ## 迭代日志
 <!-- 每轮 append: 迭代N | task | 做了什么 | 裁决(命中playbook分支)/产出路径 | 下一步 -->
 - (init) 由 relation-tensor 循环(已完结REJECT, 第8个价量否决)转入。快测发现 or_yoy 正交 IC 不塌(+0.033) = 首个非价量换皮信号。等待启动。
+- 迭代2 | FU-002 | 建 research/fu002_build_factors.py: 从 FU-001 PIT 面板建成长因子 growth_or/growth_np/growth_composite (逐日 winsorize(1/99)→横截面 z→行业中性减行业均值, stock_basic.industry, NaN行业归 __NA__ 组), 组合=0.5*(or+np)。控制集 R12++: 动量 mom_5/20/60 (从 daily close 全市场 backward, 月末采样, checkpoint research/cache/fu002_momentum.parquet) + size ln_total_mv + value inv_pe/inv_pb (仅正值) + 其他基本面 roe/margin。merge regime_timeline(覆盖79.5%)供 FU-003 分层。产出 research/features/fundamental_factors.parquet (268525行×17列, 键 ts_code,trade_date, 无 forward 字段——label 在 FU-003 另接以免触泄漏闸)。**裁决=built** (构建任务无分叉)。**相关性结构 (逐日横截面 Spearman 均值, 供 R12++ 消融)**: growth_composite vs roe **+0.352** (最强, 与盈利质量同向) / vs inv_pb **-0.137** (与价值反向, 高成长=高估值) / vs ln_total_mv **+0.121** (轻微大盘倾斜) / vs 动量 **近 0** (与动量正交)。growth_or/np 各覆盖98.9%。泄漏自查通过(无 forward 列名)。verify.py 无硬违规(0 violations, leakage+指纹全绿; FAIL 仅因 FU-003/004 未做)。 | 下一步 FU-003: ≥40月(本面板54月 OK)横截面 rank-IC(成长因子, fwd r20)全期+分regime; 残差化扣[动量+size+value+其他基本面(roe/margin)]后 IC+t; 逐步消融(单扣动量/size/value 看塌不塌, **重点查 roe 是否吃掉成长——corr +0.35 最高**); 按 playbook 判 A_显著正交/B_边缘/C_塌缩/D_已知因子reskin。注意 r20 label 不落 features parquet(触泄漏闸), 只在 cache 工作面板内用。
 - 迭代1 | FU-001 | 建 research/fu001_build_pit.py: bulk 拉 fina_indicator_vip 22报告期(2019Q4~2025Q3, 首次披露min ann_date去重防回填), 54个月末日 bulk daily_basic 取 size/value 控制, merge_asof(ann_date<=trade_date, by ts_code, backward) 建 PIT 面板。缓存 research/cache/fu001_fina_raw.parquet + fu001_daily_basic.parquet (checkpoint)。产出 research/features/fundamental_pit.parquet (268525行×16列: close+total_mv/circ_mv/pe/pe_ttm/pb/ps_ttm+fina_ann_date/end_date+roe/margin/netprofit_yoy/or_yoy/debt_to_assets), 键(ts_code,trade_date)。**裁决=built** (命中 playbook FU-001_data: 重述用首次ann_date原值不回填)。泄漏自查通过(无行 ann_date>trade_date, 报告滞后中位62d 均≥0), ST源头排除14118行, or_yoy覆盖98.9%(small/mid/large 各>98%, 无<10%低覆盖档)。verify.py 无硬违规。 | 下一步 FU-002: 用此面板建成长因子(or_yoy/netprofit_yoy winsor+rank/z+行业中性+组合)+控制集(mom_5/20/60 从daily cache, ln total_mv, 1/pe 1/pb, roe/margin)+相关性矩阵。

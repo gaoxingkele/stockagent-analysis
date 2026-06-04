@@ -66,8 +66,9 @@
         "research/verdicts/FU-002.json status=built + 因子/控制清单 + 相关性矩阵(成长 vs 控制)"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "控制集是 R12++ 消融核心: 决定成长因子是否只是 size/value/动量 reskin。"
+      "passes": true,
+      "completed_at": "2026-06-05",
+      "notes": "控制集是 R12++ 消融核心: 决定成长因子是否只是 size/value/动量 reskin。DONE: research/fu002_build_factors.py 产出 research/features/fundamental_factors.parquet (268525行×17列, growth_or/growth_np/growth_composite winsor+横截面z+行业中性, 控制集 mom_5/20/60+ln_total_mv+inv_pe/pb+roe/margin), growth_composite 覆盖98.9%。逐日横截面 Spearman: growth_composite vs roe +0.352(最强,其他基本面), vs inv_pb -0.137(value), vs ln_total_mv +0.121(size), vs mom_20 弱 — 成长主要与 ROE/盈利质量同向, 与价值反向, 与动量近正交。已 merge regime(覆盖79.5%)供 FU-003 分层。无 forward 字段(label 在 FU-003 另接)。"
     },
     {
       "id": "FU-003",
