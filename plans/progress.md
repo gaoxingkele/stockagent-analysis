@@ -19,7 +19,7 @@
 |----|------|------|------|
 | MT-001 | B 体用=趋势vs当日 | done | residual_signal (体卦=MA堆叠换皮, 延MT-004) |
 | MT-002 | A 轨迹数字起卦 | done | no_residual (数字起卦=动量换皮, 扣后无残差) |
-| MT-003 | C 累积卦+序列特征 | todo | — |
+| MT-003 | C 累积卦+序列特征 | done | residual_signal (残差=move_std≈波动率换皮, 延MT-004) |
 | MT-004 | 三组对比 + 决策 gate | todo | — |
 | MT-005 | opt-in 落地 (依赖 MT-004=PASS) | skip | — |
 
@@ -48,3 +48,8 @@
   - 产出: research/features/meihua_traj_A.parquet, research/cache/mt002_panel.parquet(含r20+动量,不进features), research/cache/mt002_results.json, research/verdicts/MT-002.json。verify.py 无违规(无泄漏+生产指纹一致), 剩 MT-003/004 未裁决=正常。
   - 给 MT-004 的输入: B=residual_signal(但=MA换皮预警) / A=no_residual。三组对比中 A 是廉价 REJECT 项。
   - 下一步: MT-003 (方案C 累积卦+序列特征)。
+- 迭代3 | MT-003 (方案C) | 扩展 meihua_encoder.py 加 cum_gua_from_parity/build_traj_C_lookup (累积卦: 每爻 bit=窗内被翻次数奇偶 parity, 种子=坤; 当日动爻驱动累积本卦→变卦) + build_wuxing_sign_lookup (逐日单日卦体用生克带符号 朝体: 用生体+2/体克用+1/比和0/体生用-1/用克体-2)。写 research/mt003_traj_C.py: 每日动爻 m_t=abs(round(ret*100))%6 逐日翻 base 第m_t爻, 6爻 rolling 奇偶向量化; 序列特征=动爻漂移(近半−早半rolling均值)/动爻std/五行净生克(逐日signed Σ rolling)。全历史5.19M行因果落 features/meihua_traj_C.parquet (仅key+10个mhC_, 零泄漏)。**筛查口径修正**: 名义卦象(5个cat)用OOF target encoding, 连续序列标量(5个cont)用原始rank-IC (OOF对连续值退化)。**裁决=residual_signal**: 最强 mhC_move_std resid2-IC=+0.0463 t=10.87, 三regime均存活(mom t8.52/mix t3.15/rev t6.93); 次强 mhC_wuxing_net +0.0244 t7.87, mhC_wuxing_net_recent +0.0230 t9.03。
+  - **关键诚实预警 (SIGN-R12)**: 残差最强落在 mhC_move_std。因动爻 m_t=abs(round(ret*100))%6 是当日涨跌幅幅度的桶, mhC_move_std='动爻位置离散度'≈**近N日已实现波动率的换皮代理** (与累积动量正交 = 正是它存活线性动量残差化的原因)。残差化只扣 mom_5/20/ma_pos/rsi 四个**线性动量/趋势**因子, **未含波动率因子也未含MA堆叠/非线性趋势**。故 resid2-IC 极可能是'波动率+非线性趋势'这些标准TA量超出线性动量残差化的世俗结果, **非占卜**。不作落地依据 (SIGN-R03)。
+  - **给 MT-004 的硬约束 (与 MT-001 同类)**: apples-to-apples baseline **必须额外含 已实现波动率 (std(ret_20)/ATR) + MA堆叠/非线性趋势对照**, 否则把波动率/非线性趋势误归功卦象=自欺。
+  - 产出: research/features/meihua_traj_C.parquet, research/cache/mt003_panel.parquet(含r20+动量,不进features), research/cache/mt003_results.json, research/verdicts/MT-003.json。verify.py 无违规(无泄漏+生产指纹一致), 剩 MT-004 未裁决=正常。
+  - **三组 B/A/C 齐备**: B=residual_signal(MA堆叠换皮) / A=no_residual / C=residual_signal(move_std≈波动率换皮)。两个 residual 都是世俗TA(趋势/波动率)换皮预警, 非占卜独立信号。下一步 MT-004: 三组对比 + 决策 gate (含 MA堆叠+波动率 apples-to-apples baseline)。

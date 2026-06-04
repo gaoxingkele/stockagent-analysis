@@ -149,6 +149,56 @@ def build_traj_A_lookup() -> dict:
     return tbl
 
 
+# ───────── 方案 C (累积卦 + 序列特征): 逐日翻爻路径积分 + 卦变链/动爻漂移/五行净生克 ─────────
+# 北极星: 把"走势"做进梅花的最忠实形式 — 每日收盘当一次"动", 逐日翻对应爻, 路径积分成累积卦。
+#   塌缩成单卦有损 (只剩每爻翻动次数的奇偶 = parity), 故另抽保留路径/序列信息的标量:
+#     卦变链 (累积卦→变卦, 当日动爻驱动) / 动爻漂移 (动爻位置随时间内→外漂移) /
+#     近N日五行净生克 (逐日单日卦 体用生克 的带符号求和, 朝体为正)。全因果。
+# 累积卦 (parity 塌缩, 种子=坤 全阴 6 爻=0): 每爻 bit = 窗内"该爻被翻次数"的奇偶。
+# 带符号五行生克 (朝体): 用生体=+2(得生) 体克用=+1(克他得利) 比和=0 体生用=-1(耗) 用克体=-2(受克)。
+WUXING_SIGN = {0: 0, 1: +2, 2: -1, 3: -2, 4: +1}   # 键=_REL_ID(比和/用生体/体生用/用克体/体克用)
+
+
+def cum_gua_from_parity(bits: tuple, move_last: int) -> dict:
+    """累积卦特征: bits=(b1..b6) 下->上 6 爻 (1=阳/翻奇数次, 0=阴/翻偶数次),
+    move_last=当日动爻 1..6 (驱动'累积本卦→变卦'). 返回 mhC_cum_* 卦象 dict。"""
+    b = [int(x) for x in bits]
+    lo = _BY_LINES[tuple(b[:3])]
+    up = _BY_LINES[tuple(b[3:])]
+    base_gua = (up - 1) * 8 + lo
+    chg = b.copy()
+    m = (int(move_last) % 6) or 6
+    chg[m - 1] = 1 - chg[m - 1]
+    chg_lo = _BY_LINES[tuple(chg[:3])]
+    chg_up = _BY_LINES[tuple(chg[3:])]
+    changed_gua = (chg_up - 1) * 8 + chg_lo
+    return {
+        "mhC_cum_base_gua": base_gua, "mhC_cum_upper": up, "mhC_cum_lower": lo,
+        "mhC_cum_changed_gua": changed_gua, "mhC_cum_yang": sum(b),
+    }
+
+
+def build_traj_C_lookup() -> dict:
+    """返回 {(b1..b6, move_last): {mhC_cum_*: int}} 全枚举查表 (64×6=384, 确定性)."""
+    tbl = {}
+    for code in range(64):
+        bits = tuple((code >> i) & 1 for i in range(6))   # b1..b6 = 低位->高位
+        for mv in range(1, 7):
+            tbl[bits + (mv,)] = cum_gua_from_parity(bits, mv)
+    return tbl
+
+
+def build_wuxing_sign_lookup() -> dict:
+    """返回 {(up_g, lo_g, mv): signed_score} — 逐日单日卦 体用生克 带符号 (朝体). 8×8×6=384."""
+    tbl = {}
+    for up in range(1, 9):
+        for lo in range(1, 9):
+            for mv in range(1, 7):
+                rel = _cast(up_num=up, lo_num=lo, mv_num=mv)["relation"]
+                tbl[(up, lo, mv)] = WUXING_SIGN[rel]
+    return tbl
+
+
 def encode_frame(df: pd.DataFrame, code_col="ts_code", date_col="trade_date",
                  close_col="close") -> pd.DataFrame:
     """批量: df 需含 ts_code/trade_date/close, 返回原 df + 梅花特征列。"""

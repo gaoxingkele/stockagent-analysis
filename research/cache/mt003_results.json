@@ -1,0 +1,868 @@
+{
+  "task": "MT-003",
+  "scheme": "C (累积卦+序列特征: 逐日翻爻路径积分)",
+  "window_days": 20,
+  "horizon_days": 20,
+  "oof_gap_months": 2,
+  "screen_thresholds": {
+    "ic_floor": 0.01,
+    "t_floor": 3.0,
+    "applies_to": "dynamic mhC_* IC vs resid2 (扣月×板块+动量)"
+  },
+  "casting": "每日动爻 m_t=abs(round(ret*100))%%6 逐日翻 base 第m_t爻 → 累积卦 parity 塌缩 (种子=坤); 序列特征=动爻漂移(近半−早半)/动爻std/五行净生克(逐日单日卦体用带符号Σ)",
+  "feature_types": {
+    "categorical_OOF": [
+      "mhC_cum_base_gua",
+      "mhC_cum_upper",
+      "mhC_cum_lower",
+      "mhC_cum_changed_gua",
+      "mhC_move_last"
+    ],
+    "continuous_raw_rankIC": [
+      "mhC_cum_yang",
+      "mhC_move_drift",
+      "mhC_move_std",
+      "mhC_wuxing_net",
+      "mhC_wuxing_net_recent"
+    ]
+  },
+  "ablation_controls": [
+    "cal_month×industry OOF",
+    "动量因子 mom_5,mom_20,ma_pos,rsi_14"
+  ],
+  "n_rows": 5085219,
+  "n_stocks": 5403,
+  "n_dates": 1027,
+  "regime_dist": {
+    "reversal": 0.4468,
+    "momentum": 0.221,
+    "unknown": 0.2001,
+    "mixed": 0.1321
+  },
+  "momentum_factor_ic_r20": {
+    "mom_5": {
+      "ic_mean": -0.042667,
+      "ic_t": -9.98313,
+      "n_dates": 1022,
+      "ic_std": 0.136633,
+      "ic_ir": -0.312278
+    },
+    "mom_20": {
+      "ic_mean": -0.078555,
+      "ic_t": -17.328563,
+      "n_dates": 1007,
+      "ic_std": 0.143855,
+      "ic_ir": -0.546069
+    },
+    "ma_pos": {
+      "ic_mean": -0.069101,
+      "ic_t": -15.715338,
+      "n_dates": 1008,
+      "ic_std": 0.139602,
+      "ic_ir": -0.494987
+    },
+    "rsi_14": {
+      "ic_mean": -0.066548,
+      "ic_t": -15.922801,
+      "n_dates": 1013,
+      "ic_std": 0.133021,
+      "ic_ir": -0.500282
+    }
+  },
+  "raw_ordinal_ic_r20": {
+    "mhC_cum_base_gua": {
+      "all": {
+        "ic_mean": 0.023852,
+        "ic_t": 12.286718,
+        "n_dates": 1027,
+        "ic_std": 0.062212,
+        "ic_ir": 0.383399
+      },
+      "momentum": {
+        "ic_mean": 0.046349,
+        "ic_t": 9.204287,
+        "n_dates": 222,
+        "ic_std": 0.075029,
+        "ic_ir": 0.617751
+      },
+      "mixed": {
+        "ic_mean": 0.017089,
+        "ic_t": 2.922983,
+        "n_dates": 132,
+        "ic_std": 0.067171,
+        "ic_ir": 0.254413
+      },
+      "reversal": {
+        "ic_mean": 0.018874,
+        "ic_t": 6.490965,
+        "n_dates": 451,
+        "ic_std": 0.06175,
+        "ic_ir": 0.305648
+      }
+    },
+    "mhC_cum_upper": {
+      "all": {
+        "ic_mean": 0.024121,
+        "ic_t": 12.294012,
+        "n_dates": 1027,
+        "ic_std": 0.062876,
+        "ic_ir": 0.383626
+      },
+      "momentum": {
+        "ic_mean": 0.04712,
+        "ic_t": 9.230782,
+        "n_dates": 222,
+        "ic_std": 0.076058,
+        "ic_ir": 0.61953
+      },
+      "mixed": {
+        "ic_mean": 0.017009,
+        "ic_t": 2.866525,
+        "n_dates": 132,
+        "ic_std": 0.068171,
+        "ic_ir": 0.249499
+      },
+      "reversal": {
+        "ic_mean": 0.018996,
+        "ic_t": 6.483806,
+        "n_dates": 451,
+        "ic_std": 0.062217,
+        "ic_ir": 0.305311
+      }
+    },
+    "mhC_cum_lower": {
+      "all": {
+        "ic_mean": 0.001924,
+        "ic_t": 4.097977,
+        "n_dates": 1027,
+        "ic_std": 0.015044,
+        "ic_ir": 0.127875
+      },
+      "momentum": {
+        "ic_mean": 0.003465,
+        "ic_t": 3.39273,
+        "n_dates": 222,
+        "ic_std": 0.015217,
+        "ic_ir": 0.227705
+      },
+      "mixed": {
+        "ic_mean": 0.002584,
+        "ic_t": 2.110712,
+        "n_dates": 132,
+        "ic_std": 0.014063,
+        "ic_ir": 0.183714
+      },
+      "reversal": {
+        "ic_mean": 0.002013,
+        "ic_t": 2.910276,
+        "n_dates": 451,
+        "ic_std": 0.014686,
+        "ic_ir": 0.13704
+      }
+    },
+    "mhC_cum_changed_gua": {
+      "all": {
+        "ic_mean": 0.023293,
+        "ic_t": 11.798987,
+        "n_dates": 1027,
+        "ic_std": 0.063265,
+        "ic_ir": 0.368179
+      },
+      "momentum": {
+        "ic_mean": 0.045711,
+        "ic_t": 8.984249,
+        "n_dates": 222,
+        "ic_std": 0.075809,
+        "ic_ir": 0.602983
+      },
+      "mixed": {
+        "ic_mean": 0.016815,
+        "ic_t": 2.797089,
+        "n_dates": 132,
+        "ic_std": 0.069068,
+        "ic_ir": 0.243455
+      },
+      "reversal": {
+        "ic_mean": 0.017947,
+        "ic_t": 6.052654,
+        "n_dates": 451,
+        "ic_std": 0.06297,
+        "ic_ir": 0.285008
+      }
+    },
+    "mhC_move_last": {
+      "all": {
+        "ic_mean": -0.012699,
+        "ic_t": -9.575657,
+        "n_dates": 1027,
+        "ic_std": 0.0425,
+        "ic_ir": -0.298802
+      },
+      "momentum": {
+        "ic_mean": -0.011424,
+        "ic_t": -4.142765,
+        "n_dates": 222,
+        "ic_std": 0.041086,
+        "ic_ir": -0.278044
+      },
+      "mixed": {
+        "ic_mean": -0.013254,
+        "ic_t": -3.683939,
+        "n_dates": 132,
+        "ic_std": 0.041336,
+        "ic_ir": -0.320646
+      },
+      "reversal": {
+        "ic_mean": -0.011554,
+        "ic_t": -5.362987,
+        "n_dates": 451,
+        "ic_std": 0.045752,
+        "ic_ir": -0.252533
+      }
+    },
+    "mhC_cum_yang": {
+      "all": {
+        "ic_mean": -0.018462,
+        "ic_t": -12.150986,
+        "n_dates": 1027,
+        "ic_std": 0.048691,
+        "ic_ir": -0.379163
+      },
+      "momentum": {
+        "ic_mean": -0.034846,
+        "ic_t": -8.951102,
+        "n_dates": 222,
+        "ic_std": 0.058003,
+        "ic_ir": -0.600759
+      },
+      "mixed": {
+        "ic_mean": -0.013045,
+        "ic_t": -2.927472,
+        "n_dates": 132,
+        "ic_std": 0.051197,
+        "ic_ir": -0.254804
+      },
+      "reversal": {
+        "ic_mean": -0.015177,
+        "ic_t": -6.65362,
+        "n_dates": 451,
+        "ic_std": 0.048443,
+        "ic_ir": -0.313307
+      }
+    },
+    "mhC_move_drift": {
+      "all": {
+        "ic_mean": -0.000861,
+        "ic_t": -0.690458,
+        "n_dates": 1027,
+        "ic_std": 0.039951,
+        "ic_ir": -0.021545
+      },
+      "momentum": {
+        "ic_mean": 0.004228,
+        "ic_t": 1.783214,
+        "n_dates": 222,
+        "ic_std": 0.035327,
+        "ic_ir": 0.119681
+      },
+      "mixed": {
+        "ic_mean": -0.00625,
+        "ic_t": -1.423514,
+        "n_dates": 132,
+        "ic_std": 0.050441,
+        "ic_ir": -0.123901
+      },
+      "reversal": {
+        "ic_mean": 0.001301,
+        "ic_t": 0.638578,
+        "n_dates": 451,
+        "ic_std": 0.043267,
+        "ic_ir": 0.030069
+      }
+    },
+    "mhC_move_std": {
+      "all": {
+        "ic_mean": 0.046006,
+        "ic_t": 10.752465,
+        "n_dates": 1027,
+        "ic_std": 0.137116,
+        "ic_ir": 0.335523
+      },
+      "momentum": {
+        "ic_mean": 0.078392,
+        "ic_t": 8.377539,
+        "n_dates": 222,
+        "ic_std": 0.139423,
+        "ic_ir": 0.562264
+      },
+      "mixed": {
+        "ic_mean": 0.026191,
+        "ic_t": 2.078539,
+        "n_dates": 132,
+        "ic_std": 0.14477,
+        "ic_ir": 0.180914
+      },
+      "reversal": {
+        "ic_mean": 0.035324,
+        "ic_t": 5.257261,
+        "n_dates": 451,
+        "ic_std": 0.142694,
+        "ic_ir": 0.247555
+      }
+    },
+    "mhC_wuxing_net": {
+      "all": {
+        "ic_mean": 0.019642,
+        "ic_t": 6.889285,
+        "n_dates": 1027,
+        "ic_std": 0.091369,
+        "ic_ir": 0.214975
+      },
+      "momentum": {
+        "ic_mean": 0.046478,
+        "ic_t": 6.712177,
+        "n_dates": 222,
+        "ic_std": 0.103172,
+        "ic_ir": 0.450492
+      },
+      "mixed": {
+        "ic_mean": 0.010465,
+        "ic_t": 1.342023,
+        "n_dates": 132,
+        "ic_std": 0.089594,
+        "ic_ir": 0.116808
+      },
+      "reversal": {
+        "ic_mean": 0.013719,
+        "ic_t": 3.115841,
+        "n_dates": 451,
+        "ic_std": 0.093507,
+        "ic_ir": 0.146719
+      }
+    },
+    "mhC_wuxing_net_recent": {
+      "all": {
+        "ic_mean": 0.018872,
+        "ic_t": 7.91547,
+        "n_dates": 1027,
+        "ic_std": 0.076407,
+        "ic_ir": 0.246997
+      },
+      "momentum": {
+        "ic_mean": 0.04302,
+        "ic_t": 8.260448,
+        "n_dates": 222,
+        "ic_std": 0.077596,
+        "ic_ir": 0.554405
+      },
+      "mixed": {
+        "ic_mean": 0.010265,
+        "ic_t": 1.618988,
+        "n_dates": 132,
+        "ic_std": 0.072849,
+        "ic_ir": 0.140915
+      },
+      "reversal": {
+        "ic_mean": 0.015478,
+        "ic_t": 4.00617,
+        "n_dates": 451,
+        "ic_std": 0.082051,
+        "ic_ir": 0.188643
+      }
+    }
+  },
+  "oof_target_ic_r20": {
+    "mhC_cum_base_gua": {
+      "all": {
+        "ic_mean": 0.001313,
+        "ic_t": 0.7487,
+        "n_dates": 989,
+        "ic_std": 0.055146,
+        "ic_ir": 0.023807
+      },
+      "momentum": {
+        "ic_mean": 0.002086,
+        "ic_t": 0.384633,
+        "n_dates": 222,
+        "ic_std": 0.080788,
+        "ic_ir": 0.025815
+      },
+      "mixed": {
+        "ic_mean": -0.00387,
+        "ic_t": -0.797568,
+        "n_dates": 132,
+        "ic_std": 0.055753,
+        "ic_ir": -0.069419
+      },
+      "reversal": {
+        "ic_mean": 0.005899,
+        "ic_t": 2.587023,
+        "n_dates": 451,
+        "ic_std": 0.048428,
+        "ic_ir": 0.121818
+      }
+    },
+    "mhC_cum_upper": {
+      "all": {
+        "ic_mean": 0.004662,
+        "ic_t": 2.269199,
+        "n_dates": 989,
+        "ic_std": 0.064609,
+        "ic_ir": 0.072156
+      },
+      "momentum": {
+        "ic_mean": 0.006968,
+        "ic_t": 1.221273,
+        "n_dates": 222,
+        "ic_std": 0.085006,
+        "ic_ir": 0.081967
+      },
+      "mixed": {
+        "ic_mean": 3.5e-05,
+        "ic_t": 0.006035,
+        "n_dates": 132,
+        "ic_std": 0.06735,
+        "ic_ir": 0.000525
+      },
+      "reversal": {
+        "ic_mean": 0.013136,
+        "ic_t": 4.598664,
+        "n_dates": 451,
+        "ic_std": 0.060664,
+        "ic_ir": 0.216543
+      }
+    },
+    "mhC_cum_lower": {
+      "all": {
+        "ic_mean": -0.003457,
+        "ic_t": -5.369025,
+        "n_dates": 989,
+        "ic_std": 0.020248,
+        "ic_ir": -0.170725
+      },
+      "momentum": {
+        "ic_mean": -0.007871,
+        "ic_t": -5.611545,
+        "n_dates": 222,
+        "ic_std": 0.0209,
+        "ic_ir": -0.376622
+      },
+      "mixed": {
+        "ic_mean": -0.003416,
+        "ic_t": -1.840942,
+        "n_dates": 132,
+        "ic_std": 0.021317,
+        "ic_ir": -0.160233
+      },
+      "reversal": {
+        "ic_mean": -0.002512,
+        "ic_t": -2.601483,
+        "n_dates": 451,
+        "ic_std": 0.020508,
+        "ic_ir": -0.122499
+      }
+    },
+    "mhC_cum_changed_gua": {
+      "all": {
+        "ic_mean": 0.002531,
+        "ic_t": 1.468381,
+        "n_dates": 989,
+        "ic_std": 0.054202,
+        "ic_ir": 0.046692
+      },
+      "momentum": {
+        "ic_mean": 0.003132,
+        "ic_t": 0.598514,
+        "n_dates": 222,
+        "ic_std": 0.077968,
+        "ic_ir": 0.04017
+      },
+      "mixed": {
+        "ic_mean": -0.000165,
+        "ic_t": -0.035405,
+        "n_dates": 132,
+        "ic_std": 0.053693,
+        "ic_ir": -0.003082
+      },
+      "reversal": {
+        "ic_mean": 0.007668,
+        "ic_t": 3.34867,
+        "n_dates": 451,
+        "ic_std": 0.048628,
+        "ic_ir": 0.157683
+      }
+    },
+    "mhC_move_last": {
+      "all": {
+        "ic_mean": -0.020063,
+        "ic_t": -8.971607,
+        "n_dates": 989,
+        "ic_std": 0.070327,
+        "ic_ir": -0.285281
+      },
+      "momentum": {
+        "ic_mean": -0.023556,
+        "ic_t": -4.267252,
+        "n_dates": 222,
+        "ic_std": 0.08225,
+        "ic_ir": -0.286399
+      },
+      "mixed": {
+        "ic_mean": -0.027759,
+        "ic_t": -5.174498,
+        "n_dates": 132,
+        "ic_std": 0.061635,
+        "ic_ir": -0.450382
+      },
+      "reversal": {
+        "ic_mean": -0.015996,
+        "ic_t": -4.708192,
+        "n_dates": 451,
+        "ic_std": 0.072151,
+        "ic_ir": -0.2217
+      }
+    }
+  },
+  "naive_control_ic_r20": {
+    "all": {
+      "ic_mean": 0.006678,
+      "ic_t": 1.246199,
+      "n_dates": 789,
+      "ic_std": 0.150522,
+      "ic_ir": 0.044366
+    },
+    "momentum": {
+      "ic_mean": 0.013018,
+      "ic_t": 1.09995,
+      "n_dates": 222,
+      "ic_std": 0.176345,
+      "ic_ir": 0.073824
+    },
+    "mixed": {
+      "ic_mean": -0.022442,
+      "ic_t": -1.921926,
+      "n_dates": 132,
+      "ic_std": 0.134159,
+      "ic_ir": -0.167282
+    },
+    "reversal": {
+      "ic_mean": 0.012279,
+      "ic_t": 1.831141,
+      "n_dates": 435,
+      "ic_std": 0.139855,
+      "ic_ir": 0.087796
+    }
+  },
+  "residual2_ic_after_naive_and_momentum": {
+    "mhC_cum_base_gua": {
+      "all": {
+        "ic_mean": 0.000797,
+        "ic_t": 0.434235,
+        "n_dates": 789,
+        "ic_std": 0.051587,
+        "ic_ir": 0.015459
+      },
+      "momentum": {
+        "ic_mean": 0.000343,
+        "ic_t": 0.076797,
+        "n_dates": 222,
+        "ic_std": 0.06662,
+        "ic_ir": 0.005154
+      },
+      "mixed": {
+        "ic_mean": -0.005693,
+        "ic_t": -1.26969,
+        "n_dates": 132,
+        "ic_std": 0.051511,
+        "ic_ir": -0.110512
+      },
+      "reversal": {
+        "ic_mean": 0.002999,
+        "ic_t": 1.493655,
+        "n_dates": 435,
+        "ic_std": 0.041872,
+        "ic_ir": 0.071615
+      }
+    },
+    "mhC_cum_upper": {
+      "all": {
+        "ic_mean": 0.00464,
+        "ic_t": 2.171713,
+        "n_dates": 789,
+        "ic_std": 0.06002,
+        "ic_ir": 0.077315
+      },
+      "momentum": {
+        "ic_mean": 0.004803,
+        "ic_t": 0.992149,
+        "n_dates": 222,
+        "ic_std": 0.072131,
+        "ic_ir": 0.066589
+      },
+      "mixed": {
+        "ic_mean": -0.002828,
+        "ic_t": -0.518021,
+        "n_dates": 132,
+        "ic_std": 0.06273,
+        "ic_ir": -0.045088
+      },
+      "reversal": {
+        "ic_mean": 0.006824,
+        "ic_t": 2.748267,
+        "n_dates": 435,
+        "ic_std": 0.051786,
+        "ic_ir": 0.131769
+      }
+    },
+    "mhC_cum_lower": {
+      "all": {
+        "ic_mean": -0.003887,
+        "ic_t": -5.665333,
+        "n_dates": 789,
+        "ic_std": 0.019274,
+        "ic_ir": -0.201691
+      },
+      "momentum": {
+        "ic_mean": -0.008212,
+        "ic_t": -6.369394,
+        "n_dates": 222,
+        "ic_std": 0.019211,
+        "ic_ir": -0.427486
+      },
+      "mixed": {
+        "ic_mean": -0.004503,
+        "ic_t": -2.464929,
+        "n_dates": 132,
+        "ic_std": 0.020991,
+        "ic_ir": -0.214545
+      },
+      "reversal": {
+        "ic_mean": -0.001493,
+        "ic_t": -1.693549,
+        "n_dates": 435,
+        "ic_std": 0.018388,
+        "ic_ir": -0.081199
+      }
+    },
+    "mhC_cum_changed_gua": {
+      "all": {
+        "ic_mean": 0.002598,
+        "ic_t": 1.463902,
+        "n_dates": 789,
+        "ic_std": 0.049847,
+        "ic_ir": 0.052116
+      },
+      "momentum": {
+        "ic_mean": 0.001784,
+        "ic_t": 0.413325,
+        "n_dates": 222,
+        "ic_std": 0.064322,
+        "ic_ir": 0.027741
+      },
+      "mixed": {
+        "ic_mean": -0.001608,
+        "ic_t": -0.376611,
+        "n_dates": 132,
+        "ic_std": 0.049042,
+        "ic_ir": -0.03278
+      },
+      "reversal": {
+        "ic_mean": 0.004289,
+        "ic_t": 2.189002,
+        "n_dates": 435,
+        "ic_std": 0.040867,
+        "ic_ir": 0.104955
+      }
+    },
+    "mhC_move_last": {
+      "all": {
+        "ic_mean": -0.018684,
+        "ic_t": -8.472372,
+        "n_dates": 789,
+        "ic_std": 0.061943,
+        "ic_ir": -0.301624
+      },
+      "momentum": {
+        "ic_mean": -0.016567,
+        "ic_t": -3.471088,
+        "n_dates": 222,
+        "ic_std": 0.071112,
+        "ic_ir": -0.232964
+      },
+      "mixed": {
+        "ic_mean": -0.030273,
+        "ic_t": -6.348396,
+        "n_dates": 132,
+        "ic_std": 0.054787,
+        "ic_ir": -0.552557
+      },
+      "reversal": {
+        "ic_mean": -0.016247,
+        "ic_t": -5.780543,
+        "n_dates": 435,
+        "ic_std": 0.058622,
+        "ic_ir": -0.277156
+      }
+    },
+    "mhC_cum_yang": {
+      "all": {
+        "ic_mean": -0.019403,
+        "ic_t": -12.113628,
+        "n_dates": 789,
+        "ic_std": 0.044991,
+        "ic_ir": -0.431257
+      },
+      "momentum": {
+        "ic_mean": -0.031295,
+        "ic_t": -9.288324,
+        "n_dates": 222,
+        "ic_std": 0.050202,
+        "ic_ir": -0.623391
+      },
+      "mixed": {
+        "ic_mean": -0.014427,
+        "ic_t": -3.379418,
+        "n_dates": 132,
+        "ic_std": 0.049049,
+        "ic_ir": -0.294141
+      },
+      "reversal": {
+        "ic_mean": -0.014843,
+        "ic_t": -7.825396,
+        "n_dates": 435,
+        "ic_std": 0.039561,
+        "ic_ir": -0.375199
+      }
+    },
+    "mhC_move_drift": {
+      "all": {
+        "ic_mean": -0.001938,
+        "ic_t": -1.53849,
+        "n_dates": 789,
+        "ic_std": 0.03538,
+        "ic_ir": -0.054772
+      },
+      "momentum": {
+        "ic_mean": 0.001312,
+        "ic_t": 0.645903,
+        "n_dates": 222,
+        "ic_std": 0.030265,
+        "ic_ir": 0.04335
+      },
+      "mixed": {
+        "ic_mean": -0.012479,
+        "ic_t": -4.202038,
+        "n_dates": 132,
+        "ic_std": 0.034119,
+        "ic_ir": -0.36574
+      },
+      "reversal": {
+        "ic_mean": -0.000398,
+        "ic_t": -0.220673,
+        "n_dates": 435,
+        "ic_std": 0.037595,
+        "ic_ir": -0.01058
+      }
+    },
+    "mhC_move_std": {
+      "all": {
+        "ic_mean": 0.046334,
+        "ic_t": 10.871348,
+        "n_dates": 789,
+        "ic_std": 0.119715,
+        "ic_ir": 0.38703
+      },
+      "momentum": {
+        "ic_mean": 0.069296,
+        "ic_t": 8.521992,
+        "n_dates": 222,
+        "ic_std": 0.121156,
+        "ic_ir": 0.571959
+      },
+      "mixed": {
+        "ic_mean": 0.036903,
+        "ic_t": 3.154816,
+        "n_dates": 132,
+        "ic_std": 0.134393,
+        "ic_ir": 0.274592
+      },
+      "reversal": {
+        "ic_mean": 0.037476,
+        "ic_t": 6.930379,
+        "n_dates": 435,
+        "ic_std": 0.112783,
+        "ic_ir": 0.332286
+      }
+    },
+    "mhC_wuxing_net": {
+      "all": {
+        "ic_mean": 0.024421,
+        "ic_t": 7.866575,
+        "n_dates": 789,
+        "ic_std": 0.087202,
+        "ic_ir": 0.280057
+      },
+      "momentum": {
+        "ic_mean": 0.045575,
+        "ic_t": 7.167521,
+        "n_dates": 222,
+        "ic_std": 0.09474,
+        "ic_ir": 0.481052
+      },
+      "mixed": {
+        "ic_mean": 0.018569,
+        "ic_t": 2.39529,
+        "n_dates": 132,
+        "ic_std": 0.089069,
+        "ic_ir": 0.208483
+      },
+      "reversal": {
+        "ic_mean": 0.015402,
+        "ic_t": 3.978079,
+        "n_dates": 435,
+        "ic_std": 0.08075,
+        "ic_ir": 0.190734
+      }
+    },
+    "mhC_wuxing_net_recent": {
+      "all": {
+        "ic_mean": 0.023004,
+        "ic_t": 9.028304,
+        "n_dates": 789,
+        "ic_std": 0.07157,
+        "ic_ir": 0.321416
+      },
+      "momentum": {
+        "ic_mean": 0.040853,
+        "ic_t": 8.843232,
+        "n_dates": 222,
+        "ic_std": 0.068831,
+        "ic_ir": 0.593519
+      },
+      "mixed": {
+        "ic_mean": 0.014961,
+        "ic_t": 2.416604,
+        "n_dates": 132,
+        "ic_std": 0.071127,
+        "ic_ir": 0.210338
+      },
+      "reversal": {
+        "ic_mean": 0.016335,
+        "ic_t": 4.75513,
+        "n_dates": 435,
+        "ic_std": 0.071649,
+        "ic_ir": 0.227991
+      }
+    }
+  },
+  "best_dynamic_feature_by_resid2": "mhC_move_std",
+  "best_dynamic_resid2_all": {
+    "ic_mean": 0.046334,
+    "ic_t": 10.871348,
+    "n_dates": 789,
+    "ic_std": 0.119715,
+    "ic_ir": 0.38703
+  },
+  "decision": "residual_signal",
+  "interpretation_caveat": "诚实预警 (SIGN-R12): 方案C 累积卦=每爻翻动次数的奇偶(parity), 本质是'近N日量化涨跌幅分桶'的周期折叠; 序列标量里 mhC_move_std/mhC_move_drift/mhC_wuxing_net 全由逐日涨跌幅/振幅派生。关键: 动爻 m_t=abs(round(ret*100))%%6 是当日涨跌幅幅度的桶, 故 mhC_move_std='动爻位置的离散度'≈近N日已实现波动率的换皮代理 (与累积动量正交=正是它存活线性动量残差化的原因)。本轮 resid2 最强残差集中在 mhC_move_std (波动率族); 但残差化只扣了 mom_5/mom_20/ma_pos/rsi 四个线性动量/趋势因子, **未含波动率因子**, 也未含 MA堆叠/非线性趋势。故 resid2-IC 极可能是'波动率 + 非线性趋势'这些标准TA量超出线性动量残差化的世俗结果, 而非占卜。给 MT-004 的硬约束: apples-to-apples baseline **必须额外含 已实现波动率 (如 std(ret_20) / ATR) + MA堆叠/非线性趋势对照** (沿用 MT-001 的 MA堆叠约束), 否则会把'波动率/非线性趋势'误归功于卦象 = 自欺。是否真有独立于'同一走势标准技术编码'的增益, 只能由 MT-004 walk-forward 裁决, Phase-1 IC 不作数 (SIGN-R03)。"
+}

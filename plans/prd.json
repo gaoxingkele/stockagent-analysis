@@ -61,8 +61,10 @@
         "research/verdicts/MT-003.json: status + 残差IC表"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "顺序第三 (C)。注意: 塌缩成单卦有损; 信息在序列动态, 故保留累积卦(路径积分)+序列特征。"
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "verdict": "residual_signal (但残差=mhC_move_std≈波动率换皮, 延 MT-004 裁决)",
+      "notes": "顺序第三 (C)。窗20日: 每日动爻 m_t=abs(round(ret*100))%6 逐日翻 base 第m_t爻 → 累积卦 parity 塌缩(种子=坤); 序列特征=动爻漂移(近半−早半)/动爻std/五行净生克(逐日单日卦体用带符号Σ)。筛查口径修正: 名义卦象(cum_base/upper/lower/changed/move_last)用OOF, 连续序列标量(cum_yang/move_drift/move_std/wuxing_net/_recent)用原始rank-IC。Phase-1: 最强 mhC_move_std resid2-IC=+0.0463 t=10.87(扣月×板块+线性动量后), 三regime均存活(mom t8.52/mix t3.15/rev t6.93); 次强 mhC_wuxing_net +0.0244 t7.87。诚实预警(SIGN-R12): 动爻=当日涨跌幅幅度桶, 故 move_std='动爻位置离散度'≈已实现波动率换皮代理; 残差化只扣线性动量未含波动率因子, 故 resid2-IC 极可能是'波动率+非线性趋势'超出线性动量的世俗TA结果非占卜 → MT-004 须用含 已实现波动率(std(ret_20)/ATR)+MA堆叠/非线性趋势 的 apples-to-apples baseline 裁决(与 MT-001 同类约束)。"
     },
     {
       "id": "MT-004",
