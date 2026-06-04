@@ -58,8 +58,9 @@
         "单 fold 训通 + 推理路径跑通, 不触碰生产模型; research/verdicts/RT-003.json status=built + 两head说明"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "设计 §2。执行先 GBDT-on-embedding (稳/便宜)。"
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "notes": "设计 §2。执行先 GBDT-on-embedding (稳/便宜)。[DONE] research/rt_models.py (AnchorEncoder per-anchor CNN 价10ch×4×4 ⊕ 量5+形态5→锚点emb32; SeqEncoder 沿N=40因果dilated-TCN→序列emb64; FusionModel 序列emb⊕A0(32)→head) + research/rt003_train.py (单fold train=202309-11/test=202312, per-stock数组拼N=40序列, r20主标签留cache零泄漏)。两条head均跑通: (b)GBDT-on-冻结embedding + (a)NN end-to-end。单fold smoke test rank-IC NN=0.067(t=3.65)/GBDT-emb=-0.015 —— **仅管线sanity非落地信号(SIGN-R03), gate决策留RT-005 walk-forward**。lgb用原生API(4.5+sklearn1.8包装层不兼容); torch CPU; 种子固定确定性; ST源头排除继承; 生产线未触碰。产出: cache/rt003_test_scores.parquet + rt003_test_embedding.npy + rt003_r20_label.parquet + models/rt003_fusion_smoke.pt。"
     },
     {
       "id": "RT-004",

@@ -1,0 +1,58 @@
+{
+  "id": "RT-003",
+  "status": "built",
+  "conclusion": "CNN+TCN 编码器 + 双 head 单 fold 训通 + 推理跑通 (train=['202309', '202310', '202311'], test=202312)。per-anchor CNN(价 10ch×4×4 ⊕ 量5+形态5)→锚点 emb 32; 沿 N=40 因果 TCN→序列 emb 64; 融合 序列 emb ⊕ A0(32 标量)→head。两条 head 均跑通: (b) GBDT-on-冻结embedding test rank-IC=-0.0153; (a) NN end-to-end test rank-IC=0.06749。IC 仅管线 sanity 非落地信号 (SIGN-R03); 决策留 RT-005 walk-forward。r20 label 留 cache 零泄漏, ST 源头排除继承, 生产线未触碰。",
+  "artifact": "research/rt_models.py + research/rt003_train.py",
+  "metrics": {
+    "fold": {
+      "train_months": [
+        "202309",
+        "202310",
+        "202311"
+      ],
+      "test_month": "202312",
+      "lookback_months": [
+        "202307",
+        "202308"
+      ]
+    },
+    "n_train_samples": 40000,
+    "n_test_samples": 105163,
+    "N_seq": 40,
+    "anchor_feat": 170,
+    "a0_feat": 32,
+    "anchor_emb": 32,
+    "seq_emb": 64,
+    "epochs": 3,
+    "head_b_gbdt_on_embedding": {
+      "test_rank_ic": -0.0153,
+      "test_ic_t": -1.104,
+      "n_dates": 21
+    },
+    "head_a_nn_end_to_end": {
+      "test_rank_ic": 0.06749,
+      "test_ic_t": 3.654,
+      "n_dates": 21
+    },
+    "note": "single-fold engineering smoke; IC 非 gate (SIGN-R03), gate=RT-005 walk-forward α",
+    "device": "cpu"
+  },
+  "two_heads": {
+    "(b) GBDT-on-embedding": "SeqEncoder 训后冻结 → 序列 embedding(64) ⊕ A0(32) → LightGBM (先/稳/便宜)",
+    "(a) NN end-to-end": "AnchorEncoder→SeqEncoder→FusionHead 整体反传 (对比, 历史上月度 walk-forward 常输 GBDT)"
+  },
+  "artifacts_out": [
+    "research/cache/rt003_test_scores.parquet",
+    "research/cache/rt003_test_embedding.npy",
+    "research/cache/rt003_r20_label.parquet",
+    "research/models/rt003_fusion_smoke.pt"
+  ],
+  "guardrails": [
+    "SIGN-R03 IC非gate只描述",
+    "SIGN-R04 r20留cache零泄漏",
+    "SIGN-R05 生产线未触碰",
+    "SIGN-R06 ST源头排除继承",
+    "SIGN-R07 种子固定确定性",
+    "SIGN-R08 label缓存checkpoint"
+  ]
+}
