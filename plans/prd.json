@@ -81,8 +81,9 @@
         "若 C 或 D → FU-004 标记 skip:true, FU-005 skipped"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "playbook FU-003_outcomes 决定走向。中间 IC 非落地(R03), 但作 walk-forward 的 go/no-go 闸 (省算力)。"
+      "passes": true,
+      "completed_at": "2026-06-05",
+      "notes": "VERDICT=C_塌缩 (REJECT, 命中 playbook FU-003_outcomes::C). research/fu003_orthogonal_ic.py 跑 47 月度 rebalance(≥40 功率达标) × 成长因子(growth_or/np/composite) × 6 残差变体(raw/单扣mom/size/value/ofund/orth_full), 复用 rt004_r20_label.parquet(因果 close.shift(-20))。头号因子 or_yoy(growth_or): 原始 IC 在 47 月窗口转负 -0.0080(18月快测 +0.033 是短窗 artifact), 扣[动量+size+value+其他基本面]全控制残差 orth IC=+0.0055 |t|=1.08 — 远未达显著线(需 |IC|>=0.02 & |t|>=3)。growth_composite orth IC=+0.0081 t=1.52; 最强 growth_np orth IC=+0.0130 t=2.44 仍不过线。逐步消融: raw 本就≈0/负(无可被吃掉的信号), 非被单一 size/value 吃掉 → 归 C 非 D。分 regime(SIGN-R11) 无任一 cell 过线(最强 growth_np@reversal IC=0.0188 t=2.08)。第 9 个被否假设, 但首个非价量换皮信号最终也塌于长窗口。IC 表 research/cache/fu003_ic_table.parquet。FU-004/005 skip(廉价省 walk-forward 算力)。"
     },
     {
       "id": "FU-004",
@@ -95,8 +96,9 @@
       ],
       "priority": 4,
       "passes": false,
-      "skip": false,
-      "notes": "playbook FU-004_outcomes 决定落地/blend/REJECT。REJECT 合法完成(R02)。"
+      "skip": true,
+      "skipReason": "FU-003 verdict=C_塌缩 触发 precondition skip (responsePlaybook FU-003_outcomes::C → 廉价 REJECT 跳 walk-forward, 省算力)。成长正交信号已在功率充足(47月)正交 IC 上塌缩, 无 go 信号进 walk-forward。",
+      "notes": "playbook FU-004_outcomes 决定落地/blend/REJECT。REJECT 合法完成(R02)。本轮因 FU-003 塌缩跳过, 见 research/verdicts/FU-004.json status=skipped。"
     },
     {
       "id": "FU-005",
