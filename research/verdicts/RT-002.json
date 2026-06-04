@@ -1,0 +1,231 @@
+{
+  "task": "RT-002",
+  "status": "built",
+  "conclusion": "A0 标准 TA 标量对照集落盘 5,193,492 行 × 32 特征 (多尺度动量5+波动/range5+量5+缺口2+均线6+振荡器6+形态3), 与关系张量同口径同期 (20220104~20260603), 全 causal 零泄漏 + 确定性=True + ST源头排除; 生产因子(rsi/macd/atr_pct/ma_ratio/boll/vol_ratio)因果重算于全历史 OHLCV (非 join factor_lab —— 后者仅覆盖 2025-04~2026-02 且含 forward 字段)。 锚点对齐: 覆盖张量 100.0%。",
+  "artifact": "research\\features\\a0_scalar_ta",
+  "metrics": {
+    "rows": 5193492,
+    "n_stocks": 5435,
+    "date_range": [
+      "20220104",
+      "20260603"
+    ],
+    "n_feature_cols": 32,
+    "feature_cols": [
+      "mom_1",
+      "mom_3",
+      "mom_5",
+      "mom_10",
+      "mom_20",
+      "rvol_5",
+      "rvol_20",
+      "atr_pct_14",
+      "amplitude",
+      "amp_mean_5",
+      "vol_ratio_5",
+      "vol_ratio_10",
+      "vol_ratio_20",
+      "amount_ratio_20",
+      "vol_chg_1",
+      "gap",
+      "gap_norm",
+      "ma_ratio_5",
+      "ma_ratio_10",
+      "ma_ratio_20",
+      "ma_ratio_60",
+      "ma5_ma20",
+      "ma20_ma60",
+      "rsi_6",
+      "rsi_14",
+      "macd_hist",
+      "wr_14",
+      "boll_pct",
+      "boll_width",
+      "shape_body",
+      "shape_upsh",
+      "shape_dnsh"
+    ],
+    "months_written": 1,
+    "months_total": 53,
+    "deterministic": true,
+    "leakage_free": true,
+    "st_excluded": true,
+    "sigma_win": 20,
+    "warmup_gate": "rvol_20 notna (与张量 σ20 同闸)",
+    "tensor_anchor_overlap_frac": 1.0,
+    "tensor_alignment": "A0 5,193,492 锚点, 张量 5,193,492 锚点, 交集 5,193,492 (覆盖张量 100.0%)",
+    "production_factor_reuse": "recomputed causally from full-history OHLCV (rsi_6/14, macd_hist, atr_pct_14, ma_ratio_*, boll_*, vol_ratio_*); NOT joined from factor_lab (partial coverage 2025-04~2026-02 + forward-field leakage)",
+    "nan_frac": {
+      "mom_1": 0.0,
+      "mom_3": 0.0,
+      "mom_5": 0.0,
+      "mom_10": 0.0,
+      "mom_20": 0.0,
+      "rvol_5": 0.0,
+      "rvol_20": 0.0,
+      "atr_pct_14": 0.0,
+      "amplitude": 0.0,
+      "amp_mean_5": 0.0,
+      "vol_ratio_5": 0.0,
+      "vol_ratio_10": 0.0,
+      "vol_ratio_20": 0.0,
+      "amount_ratio_20": 0.0,
+      "vol_chg_1": 0.0,
+      "gap": 0.0,
+      "gap_norm": 0.0,
+      "ma_ratio_5": 0.0,
+      "ma_ratio_10": 0.0,
+      "ma_ratio_20": 0.0,
+      "ma_ratio_60": 0.04059,
+      "ma5_ma20": 0.0,
+      "ma20_ma60": 0.04059,
+      "rsi_6": 0.0,
+      "rsi_14": 0.0,
+      "macd_hist": 0.0,
+      "wr_14": 0.0,
+      "boll_pct": 0.0,
+      "boll_width": 0.0,
+      "shape_body": 0.0,
+      "shape_upsh": 0.0,
+      "shape_dnsh": 0.0
+    },
+    "feature_desc": {
+      "mom_1": {
+        "mean": -6e-05,
+        "std": 0.03219
+      },
+      "mom_3": {
+        "mean": -0.00013,
+        "std": 0.05702
+      },
+      "mom_5": {
+        "mean": -0.00021,
+        "std": 0.07328
+      },
+      "mom_10": {
+        "mean": -0.00051,
+        "std": 0.10126
+      },
+      "mom_20": {
+        "mean": -0.00083,
+        "std": 0.14096
+      },
+      "rvol_5": {
+        "mean": 0.02527,
+        "std": 0.0197
+      },
+      "rvol_20": {
+        "mean": 0.02782,
+        "std": 0.01607
+      },
+      "atr_pct_14": {
+        "mean": 0.04091,
+        "std": 0.02133
+      },
+      "amplitude": {
+        "mean": 0.03919,
+        "std": 0.02738
+      },
+      "amp_mean_5": {
+        "mean": 0.03918,
+        "std": 0.02099
+      },
+      "vol_ratio_5": {
+        "mean": 1.00976,
+        "std": 0.36939
+      },
+      "vol_ratio_10": {
+        "mean": 1.02253,
+        "std": 0.50778
+      },
+      "vol_ratio_20": {
+        "mean": 1.03802,
+        "std": 0.65987
+      },
+      "amount_ratio_20": {
+        "mean": 1.0442,
+        "std": 0.7203
+      },
+      "vol_chg_1": {
+        "mean": 0.00088,
+        "std": 0.42036
+      },
+      "gap": {
+        "mean": -0.00054,
+        "std": 0.01567
+      },
+      "gap_norm": {
+        "mean": -0.01102,
+        "std": 0.46969
+      },
+      "ma_ratio_5": {
+        "mean": 0.00012,
+        "std": 0.03585
+      },
+      "ma_ratio_10": {
+        "mean": 0.00041,
+        "std": 0.0549
+      },
+      "ma_ratio_20": {
+        "mean": 0.00096,
+        "std": 0.07986
+      },
+      "ma_ratio_60": {
+        "mean": 0.00499,
+        "std": 0.13691
+      },
+      "ma5_ma20": {
+        "mean": 0.00026,
+        "std": 0.06148
+      },
+      "ma20_ma60": {
+        "mean": 0.00145,
+        "std": 0.08746
+      },
+      "rsi_6": {
+        "mean": 48.62675,
+        "std": 24.96337
+      },
+      "rsi_14": {
+        "mean": 48.86174,
+        "std": 16.64409
+      },
+      "macd_hist": {
+        "mean": 0.00426,
+        "std": 0.54292
+      },
+      "wr_14": {
+        "mean": -54.60118,
+        "std": 29.01855
+      },
+      "boll_pct": {
+        "mean": 0.48815,
+        "std": 0.32535
+      },
+      "boll_width": {
+        "mean": 0.19015,
+        "std": 0.14562
+      },
+      "shape_body": {
+        "mean": -0.01833,
+        "std": 0.53124
+      },
+      "shape_upsh": {
+        "mean": 0.28256,
+        "std": 0.21716
+      },
+      "shape_dnsh": {
+        "mean": 0.25466,
+        "std": 0.20463
+      }
+    },
+    "smoke": null
+  },
+  "guardrails": [
+    "SIGN-R04 泄漏自查通过",
+    "SIGN-R06 ST源头排除",
+    "SIGN-R07 确定性自检",
+    "SIGN-R08 按月checkpoint",
+    "SIGN-R12 标准TA消融基线 (A2-vs-A0 决定性对照)"
+  ]
+}

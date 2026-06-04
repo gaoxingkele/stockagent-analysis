@@ -45,8 +45,9 @@
         "research/verdicts/RT-002.json status=built + 因子清单"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "设计 §4 A0。这是'扣标准TA消融'的核心对照, 决定 A2 是否只是换皮。"
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "notes": "设计 §4 A0。这是'扣标准TA消融'的核心对照, 决定 A2 是否只是换皮。[DONE] research/a0_encoder.py + rt002_build_a0.py → research/features/a0_scalar_ta/ 53月分块; 5,193,492 行 × 32 标量特征 (多尺度动量5+波动/range5+量5+缺口2+均线6+振荡器6+形态3); 与张量锚点 100% 对齐 (同 daily 面板+同 σ20 warmup 闸), 确定性=True, 零泄漏 (全 causal shift/rolling/ewm), ST源头排除。生产因子 (rsi/macd/atr_pct/ma_ratio/boll/vol_ratio) 因果重算于全历史 OHLCV —— 不 join factor_lab (后者仅覆盖 2025-04~2026-02 非同期 + 含 forward 字段有泄漏)。verdict RT-002.json status=built。"
     },
     {
       "id": "RT-003",
