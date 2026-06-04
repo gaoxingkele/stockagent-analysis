@@ -1,0 +1,109 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/relation-tensor",
+  "northStar": "用 K 线相对位置的多尺度软符号关系张量(v2: N=40锚点×深度5×4×4×双通道 + 量+自身形态, tanh(σ/√d归一对数比)保幅度) 经 CNN+TCN 编码后与标量因子融合, 输出截面打分(主=r20潜力股, 辅=pump启动子)。核心待答: CNN 学到的非线性形态交互能否在扣除标准TA标量版后仍带可交易增量(Δα)。设计见 research/DESIGN_relation_tensor_v2.md。先验=非结构性必死但大头≈标准TA, 真增量小需验证; NN在月度walk-forward易输GBDT(双head对冲)。生产线 V12.31 全程冻结。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0 (纪律检查器全绿)",
+    "每个非 skip task 产出工件 + research/verdicts/RT-00x.json (含 status 与一句话结论)",
+    "RT-005 walk-forward gate 已评估 (PASS/REJECT), 或 RT-004 Phase-1 无残差触发 precondition skip",
+    "生产线指纹未变: v12_scoring.py 与生产模型 hash 与基线一致"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "启动时写死 (R01); 分regime (R11); 升级消融 (R12+: 扣多尺度动量+ATR/range+量+缺口标量版); 单月outlier检验",
+    "phase1_screen": "RT-004 仅 r20 主标签 + GBDT-on-embedding: A2 embedding 对 r20 残差(扣 A0标量TA + 月×板块) |rank-IC|>=0.01 且 |t|>=3 → residual_signal, 否则廉价 REJECT 跳过 walk-forward",
+    "phase2_gate": [
+      "Δα(A2融合 − A0标量TA baseline) >= +0.30pp/月 (r20 主标签, walk-forward apples-to-apples)",
+      "Sharpe / 最差月 不低于 A0",
+      "单月 outlier 检验: 剔除任一单月后 Δα 仍 > 0",
+      "按 regime 分层无伤 (动量/反转月均不显著恶化)",
+      "增量扣 A0 已含的标准 TA 标量版后仍存在 (SIGN-R12)"
+    ]
+  },
+  "features": [
+    {
+      "id": "RT-001",
+      "title": "关系张量 v2 编码器 (OCHLV 软符号 σ/√d 归一 + 双通道 + 量 + 自身形态)",
+      "acceptanceCriteria": [
+        "实现 v=tanh(ln(K_p.i/K_{p-d}.j)/(σ_p√d)/κ) 软符号(κ=1) + 硬符号 sign(z) 双通道, 价格 OCHL 4×4×2",
+        "深度5, N=40 锚点滑动; 加 量关系通道(5×1) + 自身形态(5标量: 实体/上下影/归一振幅/跳空)",
+        "全历史因果落盘 research/features/rel_tensor_v2/ (分块, key ts_code,trade_date), ST 源头排除, 零泄漏(未来K不进)",
+        "确定性自检(重算逐位一致) + 分布 sanity; research/verdicts/RT-001.json status=built"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "notes": "设计 §1。+20/未来K 等 forward 量绝不进特征 (SIGN-R04)。算力: 6.4K值/样本, 必须分块 checkpoint (SIGN-R08)。[DONE] per-anchor 存储 (170值/锚点, 序列N=40由RT-003按尾部40锚点拼装, 省38x盘=2.7G); 5.19M锚点×170特征 落 research/features/rel_tensor_v2/ 53月分块; 确定性=True NaN=0% 零泄漏 ST源头排除; 软符号 mean=-0.021 std=0.635 饱和3.2% 死区8.7%。"
+    },
+    {
+      "id": "RT-002",
+      "title": "A0 标准 TA 标量对照特征集 (消融基线)",
+      "acceptanceCriteria": [
+        "构建张量编码内容的标量版: 多尺度动量(mom_1/3/5/10/20)+ATR/range(已实现波动)+量比(多尺度)+缺口(O vs 前C)",
+        "+ 复用生产因子(quant_score/factor_lab 选定), 与张量同口径同期, 全因果无泄漏",
+        "research/verdicts/RT-002.json status=built + 因子清单"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "notes": "设计 §4 A0。这是'扣标准TA消融'的核心对照, 决定 A2 是否只是换皮。[DONE] research/a0_encoder.py + rt002_build_a0.py → research/features/a0_scalar_ta/ 53月分块; 5,193,492 行 × 32 标量特征 (多尺度动量5+波动/range5+量5+缺口2+均线6+振荡器6+形态3); 与张量锚点 100% 对齐 (同 daily 面板+同 σ20 warmup 闸), 确定性=True, 零泄漏 (全 causal shift/rolling/ewm), ST源头排除。生产因子 (rsi/macd/atr_pct/ma_ratio/boll/vol_ratio) 因果重算于全历史 OHLCV —— 不 join factor_lab (后者仅覆盖 2025-04~2026-02 非同期 + 含 forward 字段有泄漏)。verdict RT-002.json status=built。"
+    },
+    {
+      "id": "RT-003",
+      "title": "CNN+TCN 编码器 + 双 head (GBDT-on-embedding / NN end-to-end)",
+      "acceptanceCriteria": [
+        "per-anchor CNN(4×4×2价+量+形态)→锚点embedding; TCN/轻Transformer 沿N轴→序列embedding",
+        "融合: 序列embedding ⊕ A0标量因子 → head; 实现两条 head (b)GBDT吃冻结embedding (先) / (a)NN端到端",
+        "单 fold 训通 + 推理路径跑通, 不触碰生产模型; research/verdicts/RT-003.json status=built + 两head说明"
+      ],
+      "priority": 3,
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "notes": "设计 §2。执行先 GBDT-on-embedding (稳/便宜)。[DONE] research/rt_models.py (AnchorEncoder per-anchor CNN 价10ch×4×4 ⊕ 量5+形态5→锚点emb32; SeqEncoder 沿N=40因果dilated-TCN→序列emb64; FusionModel 序列emb⊕A0(32)→head) + research/rt003_train.py (单fold train=202309-11/test=202312, per-stock数组拼N=40序列, r20主标签留cache零泄漏)。两条head均跑通: (b)GBDT-on-冻结embedding + (a)NN end-to-end。单fold smoke test rank-IC NN=0.067(t=3.65)/GBDT-emb=-0.015 —— **仅管线sanity非落地信号(SIGN-R03), gate决策留RT-005 walk-forward**。lgb用原生API(4.5+sklearn1.8包装层不兼容); torch CPU; 种子固定确定性; ST源头排除继承; 生产线未触碰。产出: cache/rt003_test_scores.parquet + rt003_test_embedding.npy + rt003_r20_label.parquet + models/rt003_fusion_smoke.pt。"
+    },
+    {
+      "id": "RT-004",
+      "title": "Phase-1 廉价筛查 (r20 + GBDT-on-emb: A2 embedding 残差是否独立于 A0)",
+      "acceptanceCriteria": [
+        "仅 r20 主标签 + GBDT-on-embedding: A2(张量+A0) embedding 对 r20 的 OOF 残差(扣 A0标量TA + 月×板块)",
+        "残差 rank-IC 按 regime 分层; |IC|>=0.01 且 |t|>=3 → residual_signal",
+        "research/verdicts/RT-004.json: status in {residual_signal, no_residual} + 残差IC表 + 消融对照",
+        "若 no_residual → RT-005 标记 skip:true, RT-006 skipped (廉价 REJECT, 省 walk-forward)"
+      ],
+      "priority": 4,
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "notes": "设计 §10 第2步: 廉价 go/no-go, 防一把梭烧算力。precondition 关卡。[DONE] research/rt004_phase1_screen.py: 3 折 expanding-window OOF (train 202206→test 202403, 全在 gate 窗 202410-202604 之外保 RT-005 OOS 纯净 SIGN-R02), 每折训 FusionModel(NN)→冻结 SeqEncoder 抽序列 embedding→GBDT(emb→r20z) 得 emb_pred(≈A1), GBDT(A0→r20z) 得 a0_pred; 904,353 OOF 样本。**裁决 no_residual**: 张量自身 raw rank-IC=-0.0009(t=-0.18 ≈0!), A2融合=0.10103 ≈ A0=0.10114 (零增量); emb_pred 与 r20 同对 [a0_pred+月×板块 dummies] OLS 残差化后逐日 Spearman = -0.0026 (t=-0.6, 182 日), 未达事前注册阈值 |IC|>=0.01 且 |t|>=3。分regime (SIGN-R11) 动量 +0.011(t=2.22)/反转 -0.012(t=-2.43) 符号相反且都 <3σ 互相抵消 = 无稳健残差。结论: CNN+TCN 关系张量 = 标准TA标量版换皮 (梅花教训重演, SIGN-R12), 无可交易独立残差。**触发 precondition: RT-005 skip + RT-006 skipped, 廉价 REJECT 省 walk-forward (~90%算力)**。中间IC非落地(SIGN-R03)。产出: cache/rt004_fold_{f1,f2,f3}.parquet + rt004_r20_label.parquet (零泄漏不进features) + verdict RT-004.json status=no_residual。"
+    },
+    {
+      "id": "RT-005",
+      "title": "walk-forward 决策 gate (A0/A1/A2/A3 四臂, r20 主 + pump 辅)",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "19月(202410-202604) walk-forward apples-to-apples, 先 r20×GBDT-on-emb 四臂(A0标量/A1张量/A2融合/A3替代)",
+        "断言 phase2_gate (Δα≥+0.30pp + Sharpe/最差月不降 + 单月outlier检验 + 分regime不伤 + 标准TA消融存活)",
+        "过了再补 NN head 对比 + pump 辅标签平行报告 (分级跑, 任一级REJECT即止)",
+        "research/verdicts/RT-005.json: status in {PASS, REJECT} + 四臂×双head×双标签对比表 + metrics(alpha_delta_pp/sharpe/worst_month/pos_alpha_month_ratio)"
+      ],
+      "priority": 5,
+      "passes": false,
+      "skip": true,
+      "skipReason": "RT-004 Phase-1 廉价筛查裁决 no_residual (残差 rank-IC=-0.0026 t=-0.6, 张量 A1 IC≈0 / A2≈A0 零增量), precondition 触发: 关系张量无独立于 A0 标准TA 的残差, 廉价 REJECT, 跳过昂贵 walk-forward (设计 §10 第2步, 省~90%算力)。verdict RT-005.json status=REJECT 已记录。",
+      "notes": "REJECT 合法完成 (R02)。gate 决策在 r20×GBDT-on-emb×A2-vs-A0; pump/NN 是对比报告。设计 §5/§10。[SKIPPED via precondition] RT-004 no_residual → 不进 walk-forward。"
+    },
+    {
+      "id": "RT-006",
+      "title": "落地 (仅 RT-005 PASS): opt-in 接进 v12_scoring",
+      "acceptanceCriteria": [
+        "以 opt-in 开关接入 v12_scoring.py, 默认关闭; 默认生产路径输出与基线逐位一致",
+        "research/verdicts/RT-006.json: status in {landed, skipped}"
+      ],
+      "priority": 6,
+      "passes": false,
+      "skip": true,
+      "skipReason": "条件任务: 仅当 RT-005 verdict=PASS 时由迭代解除 skip; REJECT 或 RT-004 no_residual 则保持 skip 并写 skipped。",
+      "notes": "未 PASS 不落地。"
+    }
+  ]
+}
