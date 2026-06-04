@@ -1,0 +1,35 @@
+{
+  "task": "FU-001",
+  "status": "built",
+  "conclusion": "Point-in-time 基本面面板落盘 268,525 行 × 5435 股 × 54 月度网格 (20220128~20260603); ann_date 对齐(首次披露不回填), 无未来公告(泄漏自查通过), or_yoy 覆盖率 98.9%; size/value 控制列齐全。命中 playbook FU-001_data (重述用首次ann_date)。",
+  "artifact": "research\\features\\fundamental_pit.parquet",
+  "responsePlaybook_branch": "FU-001_data: 财报重述用首次披露 ann_date 原值不回填",
+  "metrics": {
+    "rows": 268525,
+    "n_stocks": 5435,
+    "n_rebalance_dates": 54,
+    "date_range": [
+      "20220128",
+      "20260603"
+    ],
+    "n_report_periods_pulled": 24,
+    "n_report_periods_used": 22,
+    "fina_coverage_or_yoy": 0.9887,
+    "coverage_by_mv_bucket": {
+      "small": 0.9874,
+      "mid": 0.9875,
+      "large": 0.9911
+    },
+    "low_coverage_buckets(<10%)": {},
+    "report_lag_days_median": 62,
+    "report_lag_days_min": 0,
+    "report_lag_days_max": 372,
+    "leakage_free": true,
+    "restatement_handling": "first-disclosure (min ann_date) per (ts_code,end_date)"
+  },
+  "guardrails": [
+    "SIGN-R04 ann_date 对齐+无未来公告",
+    "SIGN-R06 ST 源头排除",
+    "SIGN-R08 fina/daily_basic checkpoint"
+  ]
+}

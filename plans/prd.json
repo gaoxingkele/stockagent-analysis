@@ -53,8 +53,9 @@
         "落盘 research/features/fundamental_pit.parquet; 确定性/泄漏自检(无未来 ann_date); research/verdicts/FU-001.json status=built + 覆盖率(分市值档)"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "playbook FU-001_data 处理重述/缺失/覆盖。快测已证 fina_indicator_vip 一调全市场可行。"
+      "passes": true,
+      "completed_at": "2026-06-05",
+      "notes": "playbook FU-001_data 处理重述/缺失/覆盖。快测已证 fina_indicator_vip 一调全市场可行。DONE: research/features/fundamental_pit.parquet 268525行×5435股×54月度网格(2022-01~2026-06), ann_date对齐(首次披露不回填), 22报告期used(2019Q4起), or_yoy覆盖98.9%(各市值档>98%), 报告滞后中位62d, 无未来公告泄漏。"
     },
     {
       "id": "FU-002",

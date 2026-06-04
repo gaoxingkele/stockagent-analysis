@@ -31,7 +31,7 @@ walk-forward 验证、且扣 [动量+size+value+其他基本面] 后仍存在的
 ## 任务台账
 | id | 任务 | 状态 | 裁决 |
 |----|------|------|------|
-| FU-001 | Point-in-time 基本面面板(拉长~2019) | todo | — |
+| FU-001 | Point-in-time 基本面面板(拉长~2019) | ✅ built | 268525行×5435股×54月度网格, or_yoy覆盖98.9% |
 | FU-002 | 成长因子构建 + 控制集 | todo | — |
 | FU-003 | 功率充足正交 IC 验证(≥40月) | todo | — |
 | FU-004 | walk-forward 决策 gate | todo | — |
@@ -51,3 +51,4 @@ walk-forward 验证、且扣 [动量+size+value+其他基本面] 后仍存在的
 ## 迭代日志
 <!-- 每轮 append: 迭代N | task | 做了什么 | 裁决(命中playbook分支)/产出路径 | 下一步 -->
 - (init) 由 relation-tensor 循环(已完结REJECT, 第8个价量否决)转入。快测发现 or_yoy 正交 IC 不塌(+0.033) = 首个非价量换皮信号。等待启动。
+- 迭代1 | FU-001 | 建 research/fu001_build_pit.py: bulk 拉 fina_indicator_vip 22报告期(2019Q4~2025Q3, 首次披露min ann_date去重防回填), 54个月末日 bulk daily_basic 取 size/value 控制, merge_asof(ann_date<=trade_date, by ts_code, backward) 建 PIT 面板。缓存 research/cache/fu001_fina_raw.parquet + fu001_daily_basic.parquet (checkpoint)。产出 research/features/fundamental_pit.parquet (268525行×16列: close+total_mv/circ_mv/pe/pe_ttm/pb/ps_ttm+fina_ann_date/end_date+roe/margin/netprofit_yoy/or_yoy/debt_to_assets), 键(ts_code,trade_date)。**裁决=built** (命中 playbook FU-001_data: 重述用首次ann_date原值不回填)。泄漏自查通过(无行 ann_date>trade_date, 报告滞后中位62d 均≥0), ST源头排除14118行, or_yoy覆盖98.9%(small/mid/large 各>98%, 无<10%低覆盖档)。verify.py 无硬违规。 | 下一步 FU-002: 用此面板建成长因子(or_yoy/netprofit_yoy winsor+rank/z+行业中性+组合)+控制集(mom_5/20/60 从daily cache, ln total_mv, 1/pe 1/pb, roe/margin)+相关性矩阵。
