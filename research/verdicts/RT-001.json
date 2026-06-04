@@ -1,0 +1,42 @@
+{
+  "task": "RT-001",
+  "status": "built",
+  "conclusion": "全历史关系张量 v2 per-anchor 落盘 5,193,492 锚点 × 170 特征 (160价4×4×2双通道+5量+5形态, N=40窗口由RT-003按尾部40锚点拼装); 确定性=True, 零泄漏(锚点t仅用≤t), ST源头排除; 软符号 mean=-0.021 std=0.635 饱和3.2% 死区8.7%, NaN=0.00%.",
+  "artifact": "research\\features\\rel_tensor_v2",
+  "metrics": {
+    "anchor_rows": 5193492,
+    "n_stocks": 5435,
+    "date_range": [
+      "20220104",
+      "20260603"
+    ],
+    "n_feature_cols": 170,
+    "n_price_soft": 80,
+    "n_price_hard": 80,
+    "n_vol": 5,
+    "n_shape": 5,
+    "months_written": 1,
+    "months_total": 53,
+    "deterministic": true,
+    "leakage_free": true,
+    "st_excluded": true,
+    "storage": "per-anchor (ts_code,trade_date); seq N=40 assembled at load (RT-003)",
+    "soft_mean": -0.0214,
+    "soft_std": 0.6347,
+    "soft_saturation_frac": 0.0318,
+    "soft_deadzone_frac": 0.0867,
+    "hard_zero_frac": 0.0158,
+    "nan_frac": 0.0,
+    "kappa": 1.0,
+    "depth": 5,
+    "N_window": 40,
+    "sigma_win": 20,
+    "smoke": null
+  },
+  "guardrails": [
+    "SIGN-R04 泄漏自查通过",
+    "SIGN-R06 ST源头排除",
+    "SIGN-R07 确定性自检",
+    "SIGN-R08 按月checkpoint"
+  ]
+}

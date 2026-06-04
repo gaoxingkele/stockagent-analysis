@@ -41,4 +41,5 @@ research/cache/*.parquet
 research/cache/*.log
 research/cache/t005_wf_models/
 research/features/*.parquet
+research/features/rel_tensor_v2/
 scripts/ralph/runs/

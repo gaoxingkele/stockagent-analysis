@@ -32,8 +32,9 @@
         "确定性自检(重算逐位一致) + 分布 sanity; research/verdicts/RT-001.json status=built"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "设计 §1。+20/未来K 等 forward 量绝不进特征 (SIGN-R04)。算力: 6.4K值/样本, 必须分块 checkpoint (SIGN-R08)。"
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "notes": "设计 §1。+20/未来K 等 forward 量绝不进特征 (SIGN-R04)。算力: 6.4K值/样本, 必须分块 checkpoint (SIGN-R08)。[DONE] per-anchor 存储 (170值/锚点, 序列N=40由RT-003按尾部40锚点拼装, 省38x盘=2.7G); 5.19M锚点×170特征 落 research/features/rel_tensor_v2/ 53月分块; 确定性=True NaN=0% 零泄漏 ST源头排除; 软符号 mean=-0.021 std=0.635 饱和3.2% 死区8.7%。"
     },
     {
       "id": "RT-002",
