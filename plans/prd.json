@@ -31,8 +31,10 @@
         "research/verdicts/MT-001.json: status in {residual_signal, no_residual} + 残差IC表 + 消融对照"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "顺序第一 (B)。不因 no_residual skip 后续 — 用户要 B/A/C 三组对比, 三个都要建+筛。"
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "verdict": "residual_signal (但体卦族=MA堆叠换皮, 延 MT-004 裁决)",
+      "notes": "顺序第一 (B)。不因 no_residual skip 后续 — 用户要 B/A/C 三组对比, 三个都要建+筛。Phase-1: 最强 mhB_upper resid2-IC=+0.0214 t=10.32 (扣月×板块+线性动量后), 三regime均存活; 诚实预警: 体卦=多尺度MA堆叠三元状态换皮, 仅存活线性动量残差化, 极可能是非线性趋势超出线性动量的世俗TA结果非占卜 → MT-004 须用含MA堆叠/非线性趋势的apples-to-apples baseline 裁决。"
     },
     {
       "id": "MT-002",

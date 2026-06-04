@@ -94,6 +94,37 @@ def meihua_features(ts_code: str, date_str: str, close: float) -> dict:
     return out
 
 
+# ───────── 方案 B (轨迹版): 体卦=近N日趋势, 用卦=当日冲击 ─────────
+# 北极星: 体(趋势,既有状态) vs 用(今日单日变动) 的五行生克 = "今日冲击 vs 既有趋势"。
+# 体=上卦(由多尺度 MA 量化 3 bit), 用=下卦(由当日 K 线结构 3 bit), 动爻锁在下卦(用) 1..3
+# ⇒ _cast 中 mv<=3 → ti=上卦=趋势, yong=下卦=今日, relation=_WUXING[趋势][今日]。全因果。
+def _trigram_from_bits(b1: int, b2: int, b3: int) -> int:
+    """3 爻 bit (下->上, 1=阳 0=阴) → 卦 idx 1..8."""
+    return _BY_LINES[(int(b1), int(b2), int(b3))]
+
+
+def cast_tiyong_B(ti_tri: int, yong_tri: int, mv_in_yong: int) -> dict:
+    """方案B 起卦: 体卦=ti_tri(上卦,趋势) / 用卦=yong_tri(下卦,今日) / 动爻∈下卦(1..3).
+
+    返回与 _cast 同构的卦象 dict (base/mutual/changed gua, upper/lower, moving,
+    ti_elem/yong_elem, relation=体用关系, yang_count). 体=趋势, 用=今日冲击。
+    """
+    mv = (int(mv_in_yong) % 3) or 3        # 锁在下卦(用) 1..3 ⇒ 体=上卦=趋势
+    return _cast(up_num=int(ti_tri), lo_num=int(yong_tri), mv_num=mv)
+
+
+# 体/用/动 → 卦象特征 的全枚举查表 (8×8×3=192 组合), 供向量化 map 用。
+def build_tiyong_B_lookup() -> dict:
+    """返回 {(ti_tri, yong_tri, mv): {mhB_*: int}} 全枚举查表 (确定性)."""
+    tbl = {}
+    for ti in range(1, 9):
+        for yong in range(1, 9):
+            for mv in (1, 2, 3):
+                feat = cast_tiyong_B(ti, yong, mv)
+                tbl[(ti, yong, mv)] = {f"mhB_{k}": v for k, v in feat.items()}
+    return tbl
+
+
 def encode_frame(df: pd.DataFrame, code_col="ts_code", date_col="trade_date",
                  close_col="close") -> pd.DataFrame:
     """批量: df 需含 ts_code/trade_date/close, 返回原 df + 梅花特征列。"""
