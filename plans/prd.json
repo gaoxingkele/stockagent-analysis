@@ -1,99 +1,103 @@
 {
   "repo": "gaoxingkele/stockagent-analysis",
-  "branchName": "research/meihua-traj",
-  "northStar": "用户批评单日起卦贫乏(代码=静态ID/日期=当日常数/价格末位=噪声), 提出把'近N日走势'做进梅花。把问题升级为: 梅花对走势的数论分桶能否超过/补充标准技术指标对同一走势的编码。按顺序检验三方案 B(体用=趋势vs当日) → A(轨迹数字起卦) → C(累积卦+序列特征), 三组对比, 升级 gate: 残差必须扣除'公历月×板块 + 标准动量/趋势因子'后仍存在。先验=仍偏怀疑但这次是真问题非结构性必死。生产线 V12.31 冻结。",
+  "branchName": "research/relation-tensor",
+  "northStar": "用 K 线相对位置的多尺度软符号关系张量(v2: N=40锚点×深度5×4×4×双通道 + 量+自身形态, tanh(σ/√d归一对数比)保幅度) 经 CNN+TCN 编码后与标量因子融合, 输出截面打分(主=r20潜力股, 辅=pump启动子)。核心待答: CNN 学到的非线性形态交互能否在扣除标准TA标量版后仍带可交易增量(Δα)。设计见 research/DESIGN_relation_tensor_v2.md。先验=非结构性必死但大头≈标准TA, 真增量小需验证; NN在月度walk-forward易输GBDT(双head对冲)。生产线 V12.31 全程冻结。",
   "verifyCommand": "python research/verify.py",
   "acceptanceCriteria": [
     "python research/verify.py 退出码 0 (纪律检查器全绿)",
-    "B/A/C 三方案各产出工件 + research/verdicts/MT-00x.json (residual_signal/no_residual + 残差IC)",
-    "MT-004 三组对比 + 决策 gate 已评估 (有残差→walk-forward PASS/REJECT; 全无残差→REJECT)",
+    "每个非 skip task 产出工件 + research/verdicts/RT-00x.json (含 status 与一句话结论)",
+    "RT-005 walk-forward gate 已评估 (PASS/REJECT), 或 RT-004 Phase-1 无残差触发 precondition skip",
     "生产线指纹未变: v12_scoring.py 与生产模型 hash 与基线一致"
   ],
   "preRegisteredGate": {
     "frozen": true,
-    "note": "循环启动时写死 (SIGN-R01); 按 regime 分层 (SIGN-R11); 升级消融 (SIGN-R12+): 必须扣除 公历月×板块 + 标准动量/趋势因子 后仍存在",
-    "ablation_controls": ["公历月 × 板块 cohort", "标准动量/趋势因子 (mom_5/mom_20/ma位置/rsi 等已有因子)"],
-    "phase1_screen_threshold": "任一方案动态特征对 r20 的残差(扣两类对照) |rank-IC| >= 0.01 且 |t| >= 3 → 算 residual_signal",
+    "note": "启动时写死 (R01); 分regime (R11); 升级消融 (R12+: 扣多尺度动量+ATR/range+量+缺口标量版); 单月outlier检验",
+    "phase1_screen": "RT-004 仅 r20 主标签 + GBDT-on-embedding: A2 embedding 对 r20 残差(扣 A0标量TA + 月×板块) |rank-IC|>=0.01 且 |t|>=3 → residual_signal, 否则廉价 REJECT 跳过 walk-forward",
     "phase2_gate": [
-      "Δα(月化) >= +0.30pp 相对无梅花 baseline (apples-to-apples)",
-      "Sharpe/最差月不低于 baseline",
-      "增益扣除 月×板块 + 动量因子 后仍存在"
+      "Δα(A2融合 − A0标量TA baseline) >= +0.30pp/月 (r20 主标签, walk-forward apples-to-apples)",
+      "Sharpe / 最差月 不低于 A0",
+      "单月 outlier 检验: 剔除任一单月后 Δα 仍 > 0",
+      "按 regime 分层无伤 (动量/反转月均不显著恶化)",
+      "增量扣 A0 已含的标准 TA 标量版后仍存在 (SIGN-R12)"
     ]
   },
   "features": [
     {
-      "id": "MT-001",
-      "title": "方案 B (体用=趋势vs当日): 轨迹起卦扩展 + 特征 + 升级消融筛查",
+      "id": "RT-001",
+      "title": "关系张量 v2 编码器 (OCHLV 软符号 σ/√d 归一 + 双通道 + 量 + 自身形态)",
       "acceptanceCriteria": [
-        "扩展 research/meihua_encoder.py: 体卦=近N日平滑状态(MA量化)起, 用卦=当日单日变动起 → 体用生克编码'今日冲击vs既有趋势'",
-        "全历史特征落盘 research/features/meihua_traj_B.parquet, 全因果(只用t及之前路径)无泄漏",
-        "升级 Phase1 筛查: 残差化 r20 扣 (公历月×板块 + 标准动量/趋势因子) 后, 看 B 特征独立残差 rank-IC, 按 regime 分层",
-        "research/verdicts/MT-001.json: status in {residual_signal, no_residual} + 残差IC表 + 消融对照"
+        "实现 v=tanh(ln(K_p.i/K_{p-d}.j)/(σ_p√d)/κ) 软符号(κ=1) + 硬符号 sign(z) 双通道, 价格 OCHL 4×4×2",
+        "深度5, N=40 锚点滑动; 加 量关系通道(5×1) + 自身形态(5标量: 实体/上下影/归一振幅/跳空)",
+        "全历史因果落盘 research/features/rel_tensor_v2/ (分块, key ts_code,trade_date), ST 源头排除, 零泄漏(未来K不进)",
+        "确定性自检(重算逐位一致) + 分布 sanity; research/verdicts/RT-001.json status=built"
       ],
       "priority": 1,
-      "passes": true,
-      "completed_at": "2026-06-04",
-      "verdict": "residual_signal (但体卦族=MA堆叠换皮, 延 MT-004 裁决)",
-      "notes": "顺序第一 (B)。不因 no_residual skip 后续 — 用户要 B/A/C 三组对比, 三个都要建+筛。Phase-1: 最强 mhB_upper resid2-IC=+0.0214 t=10.32 (扣月×板块+线性动量后), 三regime均存活; 诚实预警: 体卦=多尺度MA堆叠三元状态换皮, 仅存活线性动量残差化, 极可能是非线性趋势超出线性动量的世俗TA结果非占卜 → MT-004 须用含MA堆叠/非线性趋势的apples-to-apples baseline 裁决。"
+      "passes": false,
+      "notes": "设计 §1。+20/未来K 等 forward 量绝不进特征 (SIGN-R04)。算力: 6.4K值/样本, 必须分块 checkpoint (SIGN-R08)。"
     },
     {
-      "id": "MT-002",
-      "title": "方案 A (轨迹数字起卦): 近N日量化整数起卦 + 特征 + 升级消融筛查",
+      "id": "RT-002",
+      "title": "A0 标准 TA 标量对照特征集 (消融基线)",
       "acceptanceCriteria": [
-        "扩展编码器: 近N日涨跌幅/收盘量化整数分窗 → 上卦/下卦; 动爻=近N日振幅最大日",
-        "全历史特征落盘 research/features/meihua_traj_A.parquet, 全因果无泄漏",
-        "同 MT-001 升级 Phase1 筛查 (扣 月×板块 + 动量因子)",
-        "research/verdicts/MT-002.json: status + 残差IC表"
+        "构建张量编码内容的标量版: 多尺度动量(mom_1/3/5/10/20)+ATR/range(已实现波动)+量比(多尺度)+缺口(O vs 前C)",
+        "+ 复用生产因子(quant_score/factor_lab 选定), 与张量同口径同期, 全因果无泄漏",
+        "research/verdicts/RT-002.json status=built + 因子清单"
       ],
       "priority": 2,
-      "passes": true,
-      "completed_at": "2026-06-04",
-      "verdict": "no_residual (数字起卦扣月×板块+动量后无独立残差)",
-      "notes": "顺序第二 (A)。窗20日: 上卦=较早半窗Σ量化涨跌幅%8, 下卦=较近半窗Σ%8, 动爻=振幅最大日序号%6。Phase-1: 最强动态 mhA_moving resid2-IC=-0.0037 t=-2.53, 未过 |IC|>=0.01 且 |t|>=3.0 双闸 → no_residual。原始/OOF IC 全部 |t|<3 (唯一 mhA_moving OOF t=-2.99 接近但 resid2 后衰减)。对照: 朴素 cal_month×industry OOF-IC=+0.0067(t=1.25), 动量因子 mom_20 IC(r20)=-0.0786 t=-17.33。结论: 纯数论分桶起卦的余数特征与累积动量同源, 扣线性动量后无残差 = 动量换皮 (与方案B 不同, B 体卦=MA堆叠仍存活线性动量残差化)。廉价 REJECT, 进 MT-003(C)。"
+      "passes": false,
+      "notes": "设计 §4 A0。这是'扣标准TA消融'的核心对照, 决定 A2 是否只是换皮。"
     },
     {
-      "id": "MT-003",
-      "title": "方案 C (累积卦+序列特征): 逐日翻爻累积卦 + 卦变链/动爻漂移/五行净生克",
+      "id": "RT-003",
+      "title": "CNN+TCN 编码器 + 双 head (GBDT-on-embedding / NN end-to-end)",
       "acceptanceCriteria": [
-        "扩展编码器: 每日收盘当一次'动'逐日翻对应爻 → 路径积分累积卦 (塌缩正确版, 保留路径信息); 另抽序列特征 (本卦→变卦卦变链 / 动爻漂移 / 近N日五行净生克标量)",
-        "全历史特征落盘 research/features/meihua_traj_C.parquet, 全因果无泄漏",
-        "同升级 Phase1 筛查",
-        "research/verdicts/MT-003.json: status + 残差IC表"
+        "per-anchor CNN(4×4×2价+量+形态)→锚点embedding; TCN/轻Transformer 沿N轴→序列embedding",
+        "融合: 序列embedding ⊕ A0标量因子 → head; 实现两条 head (b)GBDT吃冻结embedding (先) / (a)NN端到端",
+        "单 fold 训通 + 推理路径跑通, 不触碰生产模型; research/verdicts/RT-003.json status=built + 两head说明"
       ],
       "priority": 3,
-      "passes": true,
-      "completed_at": "2026-06-04",
-      "verdict": "residual_signal (但残差=mhC_move_std≈波动率换皮, 延 MT-004 裁决)",
-      "notes": "顺序第三 (C)。窗20日: 每日动爻 m_t=abs(round(ret*100))%6 逐日翻 base 第m_t爻 → 累积卦 parity 塌缩(种子=坤); 序列特征=动爻漂移(近半−早半)/动爻std/五行净生克(逐日单日卦体用带符号Σ)。筛查口径修正: 名义卦象(cum_base/upper/lower/changed/move_last)用OOF, 连续序列标量(cum_yang/move_drift/move_std/wuxing_net/_recent)用原始rank-IC。Phase-1: 最强 mhC_move_std resid2-IC=+0.0463 t=10.87(扣月×板块+线性动量后), 三regime均存活(mom t8.52/mix t3.15/rev t6.93); 次强 mhC_wuxing_net +0.0244 t7.87。诚实预警(SIGN-R12): 动爻=当日涨跌幅幅度桶, 故 move_std='动爻位置离散度'≈已实现波动率换皮代理; 残差化只扣线性动量未含波动率因子, 故 resid2-IC 极可能是'波动率+非线性趋势'超出线性动量的世俗TA结果非占卜 → MT-004 须用含 已实现波动率(std(ret_20)/ATR)+MA堆叠/非线性趋势 的 apples-to-apples baseline 裁决(与 MT-001 同类约束)。"
+      "passes": false,
+      "notes": "设计 §2。执行先 GBDT-on-embedding (稳/便宜)。"
     },
     {
-      "id": "MT-004",
-      "title": "三组对比 + 决策 gate (B/A/C vs 标准动量基线, walk-forward)",
-      "isGate": true,
+      "id": "RT-004",
+      "title": "Phase-1 廉价筛查 (r20 + GBDT-on-emb: A2 embedding 残差是否独立于 A0)",
       "acceptanceCriteria": [
-        "汇总 B/A/C 三方案 Phase1 残差IC对照表 (全期+分regime), 选出最强者(若有)",
-        "若三组全 no_residual → verdict=REJECT (轨迹梅花亦无独立于动量的信号), 不进 walk-forward",
-        "若有 residual → 对最强方案跑 19月 walk-forward apples-to-apples (梅花臂 vs 无梅花 baseline), 断言 phase2_gate (含消融存活)",
-        "research/verdicts/MT-004.json: status in {PASS, REJECT} + B/A/C对比表 + (若跑gate)metrics(alpha_delta_pp/sharpe/worst_month/pos_alpha_month_ratio)"
+        "仅 r20 主标签 + GBDT-on-embedding: A2(张量+A0) embedding 对 r20 的 OOF 残差(扣 A0标量TA + 月×板块)",
+        "残差 rank-IC 按 regime 分层; |IC|>=0.01 且 |t|>=3 → residual_signal",
+        "research/verdicts/RT-004.json: status in {residual_signal, no_residual} + 残差IC表 + 消融对照",
+        "若 no_residual → RT-005 标记 skip:true, RT-006 skipped (廉价 REJECT, 省 walk-forward)"
       ],
       "priority": 4,
-      "passes": true,
-      "completed_at": "2026-06-04",
-      "verdict": "REJECT (walk-forward Δα=+0.308pp 全来自单月202410, 剔除后≈0; 最差月变差不过冻结gate)",
-      "notes": "REJECT 合法完成 (SIGN-R02)。两步定 ship: (1) 升级线性消融 resid3 (扣 线性动量+vol_20/atr_20+多尺度MA堆叠): B/C 残差仍线性存活 (B resid3-IC=+0.0217 t14.6不变 / C +0.0463→+0.0300 t17.5衰减但过闸) → 离散卦象与vol/趋势是非线性关系, 线性OLS扣不干净, 须 walk-forward。(2) 19月 walk-forward apples-to-apples (两臂GBDT(r20) baseline=12标准TA / meihua臂=标准TA+全部mhB/mhC, GBDT非线性吃标准TA): Δα=+0.308pp(刚过阈) Sharpe -1.64→-1.11(↑) 但最差月 -2.875→-3.259(变差) → 冻结phase2_gate第3条不过=REJECT (SIGN-R01不移门柱)。决定性: 全期Δα总和+5.843全来自单月202410(+5.875), 剔除后均Δα=-0.0018pp实质为零, 正Δα月仅11/19 = 单月outlier伪增益非稳健真α。三组裁决: A=动量换皮/B=MA堆叠换皮/C=波动率换皮, SIGN-R12诚实预警全兑现。北极星答案: 否, 梅花数论分桶不能超过/补充标准TA对同一走势的编码。"
+      "passes": false,
+      "notes": "设计 §10 第2步: 廉价 go/no-go, 防一把梭烧算力。precondition 关卡。"
     },
     {
-      "id": "MT-005",
-      "title": "落地 (仅 MT-004 PASS): opt-in 接进 v12_scoring",
+      "id": "RT-005",
+      "title": "walk-forward 决策 gate (A0/A1/A2/A3 四臂, r20 主 + pump 辅)",
+      "isGate": true,
       "acceptanceCriteria": [
-        "以 opt-in 开关接入 v12_scoring.py, 默认关闭",
-        "默认生产路径输出与基线逐位一致",
-        "research/verdicts/MT-005.json: status in {landed, skipped}"
+        "19月(202410-202604) walk-forward apples-to-apples, 先 r20×GBDT-on-emb 四臂(A0标量/A1张量/A2融合/A3替代)",
+        "断言 phase2_gate (Δα≥+0.30pp + Sharpe/最差月不降 + 单月outlier检验 + 分regime不伤 + 标准TA消融存活)",
+        "过了再补 NN head 对比 + pump 辅标签平行报告 (分级跑, 任一级REJECT即止)",
+        "research/verdicts/RT-005.json: status in {PASS, REJECT} + 四臂×双head×双标签对比表 + metrics(alpha_delta_pp/sharpe/worst_month/pos_alpha_month_ratio)"
       ],
       "priority": 5,
       "passes": false,
+      "skip": false,
+      "notes": "REJECT 合法完成 (R02)。gate 决策在 r20×GBDT-on-emb×A2-vs-A0; pump/NN 是对比报告。设计 §5/§10。"
+    },
+    {
+      "id": "RT-006",
+      "title": "落地 (仅 RT-005 PASS): opt-in 接进 v12_scoring",
+      "acceptanceCriteria": [
+        "以 opt-in 开关接入 v12_scoring.py, 默认关闭; 默认生产路径输出与基线逐位一致",
+        "research/verdicts/RT-006.json: status in {landed, skipped}"
+      ],
+      "priority": 6,
+      "passes": false,
       "skip": true,
-      "skipReason": "条件任务: 仅当 MT-004 verdict=PASS 时由迭代解除 skip; REJECT 则保持 skip 并写 skipped。",
+      "skipReason": "条件任务: 仅当 RT-005 verdict=PASS 时由迭代解除 skip; REJECT 或 RT-004 no_residual 则保持 skip 并写 skipped。",
       "notes": "未 PASS 不落地。"
     }
   ]
