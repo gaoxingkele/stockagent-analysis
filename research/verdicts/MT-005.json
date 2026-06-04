@@ -1,0 +1,7 @@
+{
+  "id": "MT-005",
+  "status": "skipped",
+  "conclusion": "条件任务: 仅当 MT-004 verdict=PASS 时解除 skip 并落地。MT-004=REJECT(walk-forward 单月outlier伪增益 + 最差月变差, 不过冻结gate), 故不落地, 保持 skip。生产线 V12.31 冻结未动(SIGN-R05), 默认生产路径输出与基线逐位一致。",
+  "metrics": {},
+  "guardrails": ["SIGN-R05 生产线指纹未变", "依赖 MT-004=PASS, 未满足"]
+}

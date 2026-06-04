@@ -20,8 +20,8 @@
 | MT-001 | B 体用=趋势vs当日 | done | residual_signal (体卦=MA堆叠换皮, 延MT-004) |
 | MT-002 | A 轨迹数字起卦 | done | no_residual (数字起卦=动量换皮, 扣后无残差) |
 | MT-003 | C 累积卦+序列特征 | done | residual_signal (残差=move_std≈波动率换皮, 延MT-004) |
-| MT-004 | 三组对比 + 决策 gate | todo | — |
-| MT-005 | opt-in 落地 (依赖 MT-004=PASS) | skip | — |
+| MT-004 | 三组对比 + 决策 gate | done | REJECT (单月outlier伪增益+最差月变差, 不过冻结gate) |
+| MT-005 | opt-in 落地 (依赖 MT-004=PASS) | skip | skipped (MT-004 REJECT) |
 
 ## 已有资产 / 复用
 - 编码器 research/meihua_encoder.py (单日版已建, 本轮扩展轨迹起卦)
@@ -53,3 +53,10 @@
   - **给 MT-004 的硬约束 (与 MT-001 同类)**: apples-to-apples baseline **必须额外含 已实现波动率 (std(ret_20)/ATR) + MA堆叠/非线性趋势对照**, 否则把波动率/非线性趋势误归功卦象=自欺。
   - 产出: research/features/meihua_traj_C.parquet, research/cache/mt003_panel.parquet(含r20+动量,不进features), research/cache/mt003_results.json, research/verdicts/MT-003.json。verify.py 无违规(无泄漏+生产指纹一致), 剩 MT-004 未裁决=正常。
   - **三组 B/A/C 齐备**: B=residual_signal(MA堆叠换皮) / A=no_residual / C=residual_signal(move_std≈波动率换皮)。两个 residual 都是世俗TA(趋势/波动率)换皮预警, 非占卜独立信号。下一步 MT-004: 三组对比 + 决策 gate (含 MA堆叠+波动率 apples-to-apples baseline)。
+- 迭代4 | MT-004 (gate) | 三组对比 + 两步决策。**裁决=REJECT** (北极星答案: 否, 梅花数论分桶不能超过/补充标准TA对同一走势的编码)。
+  - **第1步 升级线性消融 (mt004_compare_gate.py)**: resid3 = resid1 逐日横截面扣 线性动量 + **已实现波动率(vol_20/atr_20)** + **多尺度MA堆叠斜率(r_c_ma5/r_ma5_ma10/r_ma10_ma20/r_ma20_ma60)+mom_10/60** (即 MT-001/003 甩来的硬约束)。意外: B/C 残差**仍线性存活** — mhB_upper resid3-IC=+0.0217 t14.6(几乎不变!) / mhC_move_std +0.0463→+0.0300 t17.5(衰减35%但仍过 |IC|>=0.01&|t|>=3 闸)。解读: 线性OLS只扣控制集线性投影, 而 mhB_upper=离散MA堆叠卦 / mhC_move_std=|涨跌幅|桶离散度 与 vol/趋势是**非线性**关系, 扣不干净 → 线性消融不足以定 ship, 按 gate 进 walk-forward(让baseline用GBDT非线性吃标准TA)。
+  - **第2步 walk-forward apples-to-apples (mt004_walk_forward.py)**: 19月(202410-202604) 24月lookback+1月gap monthly retrain, 两臂 GBDT(r20) top5%多头, **唯一差异=是否含梅花特征** (baseline=12个标准TA / meihua臂=标准TA+全部mhB_*10+mhC_*10)。结果: Δα=+0.308pp(刚过+0.30阈) Sharpe -1.64→-1.11(↑) 但 **最差月 -2.875→-3.259(变差)** → 冻结 phase2_gate 第3条'最差月不低于baseline'不过 ⇒ REJECT (SIGN-R01 不移门柱)。
+  - **决定性证据 (单月outlier)**: 全期 Δα 总和 +5.843pp 中 **单月 202410 贡献 +5.875pp**, 剔除 202410 后平均 Δα=**-0.0018pp(实质为零)**, 正Δα月仅 11/19。聚合 Δα=+0.308 是单月伪增益, 非稳健真α (SIGN-R02/R03)。
+  - **三组诚实预警全兑现 (SIGN-R12)**: A=动量换皮(no_residual) / B=多尺度MA堆叠换皮 / C=已实现波动率换皮。两个 Phase-1 residual_signal 即便线性存活, 在 GBDT 非线性吃标准TA 的 walk-forward 下也无稳健可落地真α。
+  - 产出: research/mt004_compare_gate.py + mt004_walk_forward.py; research/verdicts/MT-004.json(REJECT) + MT-005.json(skipped); cache: mt004_results.json/mt004_wf_results.json/mt004_wf_monthly.csv/mt004_controls.parquet/mt004_panel.parquet/mt004_wf_panel.parquet。MT-005 保持 skip(依赖 MT-004=PASS 未满足), 生产线 V12.31 冻结未动。
+  - **全部 task 有裁决** (A/B/C residual筛查 + MT-004 gate REJECT + MT-005 skipped)。这是反过拟合脚手架否决的第7个玄学/异类假设 (前6: 单日梅花 + 本轮轨迹三方案)。轨迹版梅花循环完结。

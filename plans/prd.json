@@ -77,9 +77,10 @@
         "research/verdicts/MT-004.json: status in {PASS, REJECT} + B/A/C对比表 + (若跑gate)metrics(alpha_delta_pp/sharpe/worst_month/pos_alpha_month_ratio)"
       ],
       "priority": 4,
-      "passes": false,
-      "skip": false,
-      "notes": "REJECT 合法完成 (SIGN-R02)。三组对比本身是交付物, 即使全 REJECT。按 regime 分层 + 消融存活缺一不可。"
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "verdict": "REJECT (walk-forward Δα=+0.308pp 全来自单月202410, 剔除后≈0; 最差月变差不过冻结gate)",
+      "notes": "REJECT 合法完成 (SIGN-R02)。两步定 ship: (1) 升级线性消融 resid3 (扣 线性动量+vol_20/atr_20+多尺度MA堆叠): B/C 残差仍线性存活 (B resid3-IC=+0.0217 t14.6不变 / C +0.0463→+0.0300 t17.5衰减但过闸) → 离散卦象与vol/趋势是非线性关系, 线性OLS扣不干净, 须 walk-forward。(2) 19月 walk-forward apples-to-apples (两臂GBDT(r20) baseline=12标准TA / meihua臂=标准TA+全部mhB/mhC, GBDT非线性吃标准TA): Δα=+0.308pp(刚过阈) Sharpe -1.64→-1.11(↑) 但最差月 -2.875→-3.259(变差) → 冻结phase2_gate第3条不过=REJECT (SIGN-R01不移门柱)。决定性: 全期Δα总和+5.843全来自单月202410(+5.875), 剔除后均Δα=-0.0018pp实质为零, 正Δα月仅11/19 = 单月outlier伪增益非稳健真α。三组裁决: A=动量换皮/B=MA堆叠换皮/C=波动率换皮, SIGN-R12诚实预警全兑现。北极星答案: 否, 梅花数论分桶不能超过/补充标准TA对同一走势的编码。"
     },
     {
       "id": "MT-005",

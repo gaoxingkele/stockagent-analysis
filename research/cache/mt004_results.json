@@ -1,0 +1,328 @@
+{
+  "task": "MT-004",
+  "kind": "gate (B/A/C 对比 + 升级 apples-to-apples 消融)",
+  "window_days": 20,
+  "horizon_days": 20,
+  "screen_thresholds": {
+    "ic_floor": 0.01,
+    "t_floor": 3.0
+  },
+  "phase1_summary": {
+    "A": {
+      "scheme": "数字起卦",
+      "status": "no_residual",
+      "best_feature": "mhA_moving",
+      "resid2_ic": -0.003749,
+      "resid2_t": -2.534629
+    },
+    "B": {
+      "scheme": "体用=趋势vs当日",
+      "status": "residual_signal",
+      "best_feature": "mhB_upper",
+      "resid2_ic": 0.021385,
+      "resid2_t": 10.315144
+    },
+    "C": {
+      "scheme": "累积卦+序列特征",
+      "status": "residual_signal",
+      "best_feature": "mhC_move_std",
+      "resid2_ic": 0.046334,
+      "resid2_t": 10.871348
+    }
+  },
+  "upgraded_controls": {
+    "linear_momentum_resid2": [
+      "mom_5",
+      "mom_20",
+      "ma_pos",
+      "rsi_14"
+    ],
+    "full_TA_resid3": [
+      "mom_5",
+      "mom_20",
+      "ma_pos",
+      "rsi_14",
+      "vol_20",
+      "atr_20",
+      "mom_10",
+      "mom_60",
+      "r_c_ma5",
+      "r_ma5_ma10",
+      "r_ma10_ma20",
+      "r_ma20_ma60"
+    ],
+    "added_vs_phase1": [
+      "vol_20",
+      "atr_20",
+      "mom_10",
+      "mom_60",
+      "r_c_ma5",
+      "r_ma5_ma10",
+      "r_ma10_ma20",
+      "r_ma20_ma60"
+    ],
+    "rationale": "MT-003 要求加 已实现波动率(vol_20/atr_20) 针对 move_std; MT-001 要求加 多尺度MA堆叠/非线性趋势 针对 mhB_upper。resid3 = 标准TA对同一走势的完整编码, 用于 apples-to-apples。"
+  },
+  "control_self_ic_r20": {
+    "vol_20": {
+      "ic_mean": -0.083594,
+      "ic_t": -14.201052,
+      "n_dates": 1027,
+      "ic_std": 0.188642,
+      "ic_ir": -0.443134
+    },
+    "atr_20": {
+      "ic_mean": -0.087629,
+      "ic_t": -13.684034,
+      "n_dates": 1027,
+      "ic_std": 0.205219,
+      "ic_ir": -0.427001
+    },
+    "mom_10": {
+      "ic_mean": -0.057254,
+      "ic_t": -13.518278,
+      "n_dates": 1027,
+      "ic_std": 0.135728,
+      "ic_ir": -0.421829
+    },
+    "mom_60": {
+      "ic_mean": -0.076674,
+      "ic_t": -16.787422,
+      "n_dates": 987,
+      "ic_std": 0.14349,
+      "ic_ir": -0.53435
+    },
+    "r_c_ma5": {
+      "ic_mean": -0.02989,
+      "ic_t": -6.979374,
+      "n_dates": 1027,
+      "ic_std": 0.137244,
+      "ic_ir": -0.217787
+    },
+    "r_ma5_ma10": {
+      "ic_mean": -0.047997,
+      "ic_t": -11.18016,
+      "n_dates": 1027,
+      "ic_std": 0.137578,
+      "ic_ir": -0.348869
+    },
+    "r_ma10_ma20": {
+      "ic_mean": -0.062184,
+      "ic_t": -14.402255,
+      "n_dates": 1027,
+      "ic_std": 0.138367,
+      "ic_ir": -0.449413
+    },
+    "r_ma20_ma60": {
+      "ic_mean": -0.07317,
+      "ic_t": -16.507492,
+      "n_dates": 988,
+      "ic_std": 0.139325,
+      "ic_ir": -0.525173
+    }
+  },
+  "candidates": {
+    "B": {
+      "feature": "mhB_upper",
+      "encoding": "OOF",
+      "raw_r20": {
+        "all": {
+          "ic_mean": 0.016419,
+          "ic_t": 5.252807,
+          "n_dates": 989,
+          "ic_std": 0.098301,
+          "ic_ir": 0.16703
+        },
+        "momentum": {
+          "ic_mean": 0.026308,
+          "ic_t": 4.219287,
+          "n_dates": 222,
+          "ic_std": 0.092901,
+          "ic_ir": 0.28318
+        },
+        "mixed": {
+          "ic_mean": 0.023432,
+          "ic_t": 2.544624,
+          "n_dates": 132,
+          "ic_std": 0.105797,
+          "ic_ir": 0.221481
+        },
+        "reversal": {
+          "ic_mean": 0.017218,
+          "ic_t": 3.937069,
+          "n_dates": 451,
+          "ic_std": 0.092877,
+          "ic_ir": 0.185389
+        }
+      },
+      "resid2": {
+        "all": {
+          "ic_mean": 0.021493,
+          "ic_t": 10.412123,
+          "n_dates": 789,
+          "ic_std": 0.057983,
+          "ic_ir": 0.370681
+        },
+        "momentum": {
+          "ic_mean": 0.016791,
+          "ic_t": 3.902315,
+          "n_dates": 222,
+          "ic_std": 0.064111,
+          "ic_ir": 0.261906
+        },
+        "mixed": {
+          "ic_mean": 0.024061,
+          "ic_t": 4.530002,
+          "n_dates": 132,
+          "ic_std": 0.061025,
+          "ic_ir": 0.394286
+        },
+        "reversal": {
+          "ic_mean": 0.023113,
+          "ic_t": 8.996522,
+          "n_dates": 435,
+          "ic_std": 0.053584,
+          "ic_ir": 0.43135
+        }
+      },
+      "resid3": {
+        "all": {
+          "ic_mean": 0.021726,
+          "ic_t": 14.61016,
+          "n_dates": 789,
+          "ic_std": 0.041769,
+          "ic_ir": 0.520135
+        },
+        "momentum": {
+          "ic_mean": 0.01897,
+          "ic_t": 6.507904,
+          "n_dates": 222,
+          "ic_std": 0.043431,
+          "ic_ir": 0.436782
+        },
+        "mixed": {
+          "ic_mean": 0.024597,
+          "ic_t": 6.959714,
+          "n_dates": 132,
+          "ic_std": 0.040605,
+          "ic_ir": 0.605765
+        },
+        "reversal": {
+          "ic_mean": 0.022261,
+          "ic_t": 11.251015,
+          "n_dates": 435,
+          "ic_std": 0.041266,
+          "ic_ir": 0.539445
+        }
+      }
+    },
+    "C": {
+      "feature": "mhC_move_std",
+      "encoding": "raw_rankIC",
+      "raw_r20": {
+        "all": {
+          "ic_mean": 0.046006,
+          "ic_t": 10.752465,
+          "n_dates": 1027,
+          "ic_std": 0.137116,
+          "ic_ir": 0.335523
+        },
+        "momentum": {
+          "ic_mean": 0.078392,
+          "ic_t": 8.377539,
+          "n_dates": 222,
+          "ic_std": 0.139423,
+          "ic_ir": 0.562264
+        },
+        "mixed": {
+          "ic_mean": 0.026191,
+          "ic_t": 2.078539,
+          "n_dates": 132,
+          "ic_std": 0.14477,
+          "ic_ir": 0.180914
+        },
+        "reversal": {
+          "ic_mean": 0.035324,
+          "ic_t": 5.257261,
+          "n_dates": 451,
+          "ic_std": 0.142694,
+          "ic_ir": 0.247555
+        }
+      },
+      "resid2": {
+        "all": {
+          "ic_mean": 0.046334,
+          "ic_t": 10.871348,
+          "n_dates": 789,
+          "ic_std": 0.119715,
+          "ic_ir": 0.38703
+        },
+        "momentum": {
+          "ic_mean": 0.069296,
+          "ic_t": 8.521992,
+          "n_dates": 222,
+          "ic_std": 0.121156,
+          "ic_ir": 0.571959
+        },
+        "mixed": {
+          "ic_mean": 0.036903,
+          "ic_t": 3.154816,
+          "n_dates": 132,
+          "ic_std": 0.134393,
+          "ic_ir": 0.274592
+        },
+        "reversal": {
+          "ic_mean": 0.037476,
+          "ic_t": 6.930379,
+          "n_dates": 435,
+          "ic_std": 0.112783,
+          "ic_ir": 0.332286
+        }
+      },
+      "resid3": {
+        "all": {
+          "ic_mean": 0.030028,
+          "ic_t": 17.525884,
+          "n_dates": 789,
+          "ic_std": 0.048126,
+          "ic_ir": 0.623938
+        },
+        "momentum": {
+          "ic_mean": 0.038535,
+          "ic_t": 12.368885,
+          "n_dates": 222,
+          "ic_std": 0.046419,
+          "ic_ir": 0.830145
+        },
+        "mixed": {
+          "ic_mean": 0.033316,
+          "ic_t": 8.975061,
+          "n_dates": 132,
+          "ic_std": 0.042649,
+          "ic_ir": 0.781179
+        },
+        "reversal": {
+          "ic_mean": 0.024688,
+          "ic_t": 10.318607,
+          "n_dates": 435,
+          "ic_std": 0.049901,
+          "ic_ir": 0.494739
+        }
+      }
+    }
+  },
+  "survives_resid3": {
+    "B": true,
+    "C": true
+  },
+  "strongest_candidate": "C",
+  "n_rows": 5085219,
+  "n_dates": 1027,
+  "regime_dist": {
+    "reversal": 0.4468,
+    "momentum": 0.221,
+    "unknown": 0.2001,
+    "mixed": 0.1321
+  },
+  "decision_prelim": "PASS_PHASE1_NEEDS_WF"
+}
