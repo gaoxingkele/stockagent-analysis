@@ -264,3 +264,49 @@
 `[[project_v3c_momentum_regime_mismatch_0603]]` · `[[project_three_rejects_meanreversion_meta_0603]]` ·
 `[[feedback_quant_system_meta_lessons_0524]]` · `[[feedback_train_label_over_inference_hack]]` ·
 `[[feedback_stratified_analysis]]` · `[[feedback_forward_label_assistant_fields]]`
+
+---
+
+## 7. Part VI — 正交信息与隐藏 alpha (实验 9–13, 2026-06-05/06 追加)
+
+8 次价量否决后转向「正交信息」, 又否 4 个, 第 13 个挖到唯一真信号但市场结构不让赚。**全程纪律: 扣[动量+市场]消融 + ≥30-40月功率(防短窗 artifact) + walk-forward + 单月outlier。**
+
+| # | 假设 | 类别 | 结果 | 机理 |
+|---|------|------|------|------|
+| 9 | 基本面成长 (or_yoy/利润增速) | 正交-基本面 | **REJECT** | 18月+0.033是**短窗artifact**, 47月 orth IC+0.0055 t=1.08 塌; 正交≠有α |
+| 10 | 内部人增减持 (stk_holdertrade) | 正交-行为 | **REJECT** | **A股反向**: 逢强减持/逢弱增持=动量镜像, 扣动量后不显著 |
+| — | 业绩预告惊喜 / 解禁压制 | 正交-事件 | **≈0** | 预告被提前price-in; 解禁日程早公告price-in (廉价筛查) |
+| 11 | 概念网络 lead-lag | 正交-结构 | **REJECT** | A股同概念共涨主要是beta, 扣动量后|IC|0.018 t0.97 无领先-滞后结构 |
+| 12 | 跨horizon一致性 label | label工程 | **边际/暂记** | +0.75pp 但有循环水分(labB用r20评测也r20)+未过线+两个都负IC |
+| **13** | **龙虎榜席位印记** | **正交-行为** | **真信号但不可落地** | 见下 ★ |
+
+### ★ 实验 13 的精妙案例 (本研究最有价值的一条)
+
+龙虎榜「席位印记」(跟高战绩 `exalter` 席位) 是**整轮唯一扛过消融的真信号**, 三次独立确证:
+- SEAT-002 横截面残差 IC = **+0.0547 t=8.58 全regime** (扣[动量+市场]仅小幅衰减, 非换皮);
+- SL-003 席位技能净增量 Arm_A(席位排序) − Arm_B(动量排序) = **+1.020pp/月 t=4.43 正月75.6%**。
+
+**但三个市场结构性障碍使它不可作 long-only 独立策略落地** (`[[project_seat_footprint_real_signal_wrong_vehicle_0606]]`):
+1. **相对信号活在输家池**: 龙虎榜净买入股 universe 本身相对市场净输 (r5 均值回归, 毛α −1.7pp) → 席位只让你"最不差"非"赚钱", long-only 净α −2.0pp t=−6.2。
+2. **微容量**: binding 容量中位 ~0.05亿元。
+3. **需做空兑现相对价差, 但 A股做空受限** (融券难/贵/小盘不可空, 龙虎榜多小盘)。
+- **教训: "信号真" ≠ "能赚钱"。** 一个统计显著、扛消融、全regime的正交信号, 仍可能因 universe 绝对方向 + 容量 + 做空约束 而无法 monetize。这是比"又一个REJECT"深一层的发现。
+
+---
+
+## 8. 终章 — 13 实验的总账与方法论价值
+
+**结论**: 生产线 **V12.31 经 13 轮严格证伪, 是一个非常扎实的强局部最优**。手上即时可拉的 alpha 源 (价量编码 / 基本面 / 事件 / 结构 / 行为) **基本探尽**:
+- 价量 8 否 → 全归约为 V12.31 的标准 TA;
+- 正交 4 否 (成长/内部人/概念/事件) → 或动量换皮、或被price-in、或短窗 artifact;
+- 唯一真信号 (席位) → 真但 long-only 不可落地。
+
+**本研究的价值在方法论, 不在新信号** (论文素材):
+1. **反过拟合脚手架**: 事前注册冻结 gate (R01) + 负结果=合法完成禁同段重调 (R02) + 中间指标≠落地 (R03) + 前视泄漏前置闸 (R04) + 按 regime 分层 (R11) + 升级消融扣标准量 (R12++) + 单月 outlier 检验。**13 次裁决 0 次 p-hack, 阻止了 3 次会主动亏钱的修复 + 多次会自欺的伪信号上线。**
+2. **横截面分位审计法**: 一刀切开 beta 拖累 vs 选股 α。
+3. **升级消融 (线性→GBDT)** + **短窗功率检验** (≥40月) + **循环论证防护** + **载体/容量/做空约束的诚实评估**。
+4. **"信号真 ≠ 能赚钱" 的完整案例** (席位印记): 统计显著的正交信号被市场微结构挡在可交易性之外。
+
+**生产线 V12.31 全程冻结未动 (verify.py 指纹校验 13 轮全过)。** Standing plan: 7 月初实盘血洗窗满 20 日复检; 跨horizon一致性暂记待防循环 walk-forward; 方法论 paper 素材完备。
+
+> 分支存档: research/{ratio-phase, regime-overlay, meihua, meihua-traj, relation-tensor, fundamental-orthogonal, hidden-alpha, seat-sleeve}。里程碑 tag: v2.11.0-research-arc-2026.06。
