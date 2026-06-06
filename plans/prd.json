@@ -89,9 +89,10 @@
         "research/verdicts/GATE-001.json: status in {PASS, 真小, REJECT} + metrics(alpha_delta_pp/sharpe/worst_month/pos_alpha_month_ratio)"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "skip": false,
-      "notes": "playbook GATE 分叉。REJECT 合法完成(R02)。真小记 blend 候选。"
+      "completed_at": "2026-06-06",
+      "notes": "裁决 REJECT (合法完成 R02)。仅 SEAT 轨入闸 (NET-002=no_residual 不入)。apples-to-apples: 三臂唯一差异=池内排序键 (baseline ratio_s5 vs seat +z(sf_edge_r20) vs sens +z(sf_edge_r5)), 复用 t005_wf_models 尺度模型 + 生产 r20 池模型不重训 (两臂共模, 仅 Δ 量作 gate SIGN-R03)。席位 D+1 揭示+5d carry, z 空间等权混合无可调 λ。19月(202410-202604): Δα(seat-base)=-0.030pp/月 (需 >=+0.30), Sharpe 3.98<4.00, 最差月/正α月占比持平, 剔单月outlier后 Δα=-0.042 仍<0, 分regime mixed -0.106/reversal -0.04/momentum +0.007 (伤 reversal+mixed)。6 条 gate 过 2/6 (worst_month+pos_ratio)。根因: SEAT-002 横截面残差 IC 真实(+0.05)但接进 V12.31 r20 池后 (a) 池稀疏均值仅 3.71% 池股有新鲜印记, (b) 短线龙虎榜行为信号与 r20 持有期错配且被 V12.31 启动子部分吃掉。sf_edge_r5 sensitivity Δα=-0.034 同向。生产线不动 (R05)。产出 gate001_monthly.csv/gate001_results.json/verdicts/GATE-001.json。"
     },
     {
       "id": "LAND-001",
@@ -103,8 +104,9 @@
       "priority": 6,
       "passes": false,
       "skip": true,
-      "skipReason": "条件: 仅 GATE-001=PASS 解除; 否则保持 skip 按 playbook 写。",
-      "notes": "未 PASS 不落地。"
+      "skipReason": "条件: 仅 GATE-001=PASS 解除; 否则保持 skip 按 playbook 写。GATE-001=REJECT → 保持 skip, 生产线不动。",
+      "completed_at": "2026-06-06",
+      "notes": "未 PASS 不落地。GATE-001=REJECT (Δα -0.030pp/月) → LAND-001 保持 skip, 写 verdicts/LAND-001.json status=skipped, 不接入 v12_scoring, V12.31 冻结 (R05)。"
     }
   ]
 }

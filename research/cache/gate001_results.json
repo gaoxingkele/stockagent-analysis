@@ -1,0 +1,83 @@
+{
+  "window": [
+    "202410",
+    "202604"
+  ],
+  "n_months": 19,
+  "protocol": "walk-forward 24m lookback, scale models reused from t005_wf_models (no retrain), r20 pool model fixed (prod), apples-to-apples (pool sort col only diff)",
+  "seat_integration": {
+    "primary_signal": "sf_edge_r20",
+    "sensitivity_signal": "sf_edge_r5",
+    "carry_days": 5,
+    "blend": "z_pool(ratio_s5) + z_pool(sf_filled), equal-weight, neutral fill = pool mean",
+    "avail": "D+1 reveal (SEAT-001 causal) carried forward 5 trading days, newer overrides"
+  },
+  "baseline_v1231": {
+    "alpha_mean": 3.745680654077407,
+    "alpha_median": 3.078655335264752,
+    "alpha_std": 2.5900744611565494,
+    "sharpe_mean": 3.996251393256405,
+    "worst_month": -0.2024000964551521,
+    "worst_month_id": "202603",
+    "pos_alpha_ratio": 0.9473684210526315,
+    "disaster_months": 0,
+    "n_months": 19
+  },
+  "seat_primary": {
+    "alpha_mean": 3.7156531298730067,
+    "alpha_median": 3.09384339009642,
+    "alpha_std": 2.6060190467121993,
+    "sharpe_mean": 3.980495313166237,
+    "worst_month": -0.2024000964551521,
+    "worst_month_id": "202603",
+    "pos_alpha_ratio": 0.9473684210526315,
+    "disaster_months": 0,
+    "n_months": 19
+  },
+  "seat_sensitivity_r5": {
+    "alpha_mean": 3.7111815767474825,
+    "alpha_median": 3.09384339009642,
+    "alpha_std": 2.6189027537257497,
+    "sharpe_mean": 3.98475774415993,
+    "worst_month": -0.2024000964551521,
+    "worst_month_id": "202603",
+    "pos_alpha_ratio": 0.9473684210526315,
+    "disaster_months": 0,
+    "n_months": 19
+  },
+  "delta_alpha_pp": -0.03,
+  "delta_alpha_pp_sensitivity_r5": -0.0345,
+  "delta_alpha_excl_outlier": -0.0419,
+  "regime_delta": {
+    "mixed": {
+      "d_alpha": -0.106,
+      "n_months": 2,
+      "base_alpha": 1.259,
+      "seat_alpha": 1.153
+    },
+    "momentum": {
+      "d_alpha": 0.007,
+      "n_months": 7,
+      "base_alpha": 3.877,
+      "seat_alpha": 3.884
+    },
+    "reversal": {
+      "d_alpha": -0.04,
+      "n_months": 10,
+      "base_alpha": 4.151,
+      "seat_alpha": 4.111
+    }
+  },
+  "regime_not_hurt": false,
+  "seat_pool_coverage_mean_all": 0.03707,
+  "gate_conditions": {
+    "delta_alpha>=+0.30pp": false,
+    "sharpe>=baseline": false,
+    "worst_month>=baseline": true,
+    "pos_alpha_ratio>=baseline": true,
+    "single_month_outlier_excl_delta>0": false,
+    "all_regime_not_hurt": false
+  },
+  "gate_status": "REJECT",
+  "note": "Δα 等相对量是 gate; 绝对 α 含两臂共模 r20/尺度池 lookahead, 不作判定 (SIGN-R03)。REJECT/真小 合法完成, 禁止同段 OOS 重调 (SIGN-R02)。"
+}

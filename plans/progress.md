@@ -25,8 +25,8 @@
 | NET-002 | 概念 Phase-1 廉价筛查 | ✅ REJECT | no_residual: 扣[动量+市场beta]后最强|IC|=0.0177 t=0.97 ≪线, lead-lag≈动量换皮 |
 | SEAT-001 | 席位印记特征 (top_inst exalter) | ✅ built | 46K行×5特征, 9235买方席位(2722可信), 因果expanding+D+1, 零泄漏, 确定性✓ |
 | SEAT-002 | 席位 Phase-1 廉价筛查 | ✅ residual_signal | **首个 go 信号**: 事件对齐41月, 最强 sf_winrate_r5→fr5 orth_full IC=+0.0547 t=8.58, 扣[动量+市场]存活, 全regime正 → 进 GATE |
-| GATE-001 | walk-forward gate (有残差的轨) | todo (SEAT 臂要跑) | — |
-| LAND-001 | opt-in 落地 (依赖 GATE=PASS) | skip | — |
+| GATE-001 | walk-forward gate (有残差的轨) | ✅ REJECT | 19月 Δα(seat-base)=-0.030pp/月, 过 2/6 gate, 伤 reversal/mixed regime → 无可落地真α |
+| LAND-001 | opt-in 落地 (依赖 GATE=PASS) | ✅ skipped | GATE=REJECT → 保持 skip, 生产线不动 |
 
 ## 数据资产 (已确认)
 - 概念: output/tushare_cache/concept_{detail,list,member_summary}.parquet + output/concept_local/{dc,ths}
@@ -71,3 +71,13 @@
   - **泄漏自查 (R04)**: label fr5/fr20 从信号日 t 起严格未来 (与信号不重叠); 席位战绩 SEAT-001 已时间维 loo 排当前事件 + D+1 生效; 同日同席位其他股 fr 未兑现不入 winrate → 无同日污染。IC≈0.05 (非 0.5) 不在警戒区。features 无 forward 列 (panel 含 fr 留 cache)。
   - **裁决 residual_signal (SIGN-R02 正结果同样合法完成)**: 高战绩/高胜率席位跟随的股票, 扣掉自身动量+市场后**仍有独立横截面预测**。**但 SIGN-R03: IC≠落地, 只认 GATE walk-forward α**, 不得据此宣布胜利。
   - 下一步 → **GATE-001**: SEAT 轨现为 residual_signal → 必须跑 19月 walk-forward apples-to-apples (V12.31 + sf 信号 vs 纯 V12.31), 断言 gate (Δα>=+0.30pp + Sharpe/最差月不降 + 单月outlier + 分regime + 扣[动量+市场]存活)。NET 轨 no_residual 不入 GATE。注意把稀疏 sf 信号接进 V12.31 池排序的对齐方式 (仅上榜股有值, 缺值如何 fill/中性)。
+- **GATE-001 (06-06) REJECT** (合法完成 SIGN-R02): `research/gate001_walk_forward.py` → `research/cache/gate001_{monthly.csv,results.json}` + `verdicts/GATE-001.json`。
+  - **apples-to-apples**: 三臂唯一差异 = 池内排序键。两臂共用同一 V7c/dual-track 池构造 (r20 top + pyr_velocity 低 + 行业动量排除 + s5 pump_down 过滤), 同生产 r20 池模型 (r20_v16_long_nost, 不重训), 同 3way pump 尺度模型 (复用 T-005 月度 checkpoint t005_wf_models, 不重训 → 与 T-005 baseline 逐位可比)。任何共模 lookahead 在 Δα 相消, gate 只看相对量 (SIGN-R03)。
+    - baseline (=V12.31): 池内按 ratio_s5 排序。 seat (PRIMARY): z_pool(ratio_s5)+z_pool(sf_edge_r20) 等权混合。 seat5 (sensitivity): +z_pool(sf_edge_r5)。
+  - **席位接入 (冻结 R01)**: 信号 sf_edge_r20 (与 r20 池同 horizon), D+1 揭示 (SEAT-001 因果防泄漏) 后沿 5 交易日 carry-forward (新事件覆盖旧), 窗外中性 (z≈0)。z 空间等权混合, 无可调 λ (防 p-hack)。
+  - **结果 (19月 202410-202604)**: Δα(seat-base)=**-0.030pp/月** (需 >=+0.30)。Sharpe 3.98<baseline 4.00。最差月/正α月占比持平 (-0.202 / 94.7%)。剔单月 outlier 后 Δα=-0.042 仍 <0。sf_edge_r5 sensitivity Δα=-0.034 同向。
+  - **分 regime (R11, 伤)**: mixed -0.106 (n=2) / reversal -0.040 (n=10) / momentum +0.007 (n=7) → regime_not_hurt=False, 伤 reversal+mixed。
+  - **6 条 gate 过 2/6**: 仅 worst_month + pos_alpha_ratio 持平达标; Δα/Sharpe/单月outlier/分regime 全不过。
+  - **根因**: SEAT-002 横截面残差 IC 真实 (orth_full +0.05) 但 (a) 接进 V12.31 r20 池后池稀疏 — 平均仅 **3.71%** 池股有新鲜印记, tilt 太弱; (b) 短线龙虎榜行为信号 (r5/r20) 与 V12.31 r20 持有期错配, 且增量已被 V12.31 启动子部分吃掉。
+  - **裁决 REJECT (SIGN-R02 负结果=合法完成)**: SEAT 轨横截面有残差但接进生产无可落地真 alpha。生产线 V12.31 不动 (R05)。LAND-001 保持 skip (verdicts/LAND-001.json status=skipped)。
+  - **循环收束**: NET 轨 no_residual + SEAT 轨 GATE REJECT → 本双轨循环全部 task 有裁决, 隐藏/结构 alpha 两轨均未落地。教训补充第 12 个被脚手架否的假设方向 (席位印记: 横截面 IC≠池内可落地, 稀疏信号接稠密池被稀释 + horizon 错配)。

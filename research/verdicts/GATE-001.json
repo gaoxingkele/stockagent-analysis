@@ -1,0 +1,89 @@
+{
+  "id": "GATE-001",
+  "status": "REJECT",
+  "conclusion": "REJECT: 席位印记接进 V12.31 r20 池排序, 19 月 walk-forward Δα=-0.030pp/月, 未满足事前注册 gate (未过: ['delta_alpha>=+0.30pp', 'sharpe>=baseline', 'single_month_outlier_excl_delta>0', 'all_regime_not_hurt'])。SEAT-002 横截面残差 IC 真实但池稀疏 (平均 3.71% 池股有新鲜印记) + 短线行为信号与 V12.31 r20 持有期错配 → 无可落地真 alpha, 生产线不动 (SIGN-R02 负结果=合法完成, R05 冻结)。",
+  "metrics": {
+    "alpha_delta_pp": -0.03,
+    "sharpe": 3.98,
+    "worst_month": -0.202,
+    "pos_alpha_month_ratio": 0.947
+  },
+  "comparison_table": {
+    "metric": [
+      "alpha_monthly_pp",
+      "sharpe",
+      "worst_month_pp",
+      "pos_alpha_month_ratio"
+    ],
+    "baseline_v1231": [
+      3.746,
+      4.0,
+      -0.202,
+      0.947
+    ],
+    "v1231_plus_seat": [
+      3.716,
+      3.98,
+      -0.202,
+      0.947
+    ],
+    "delta": [
+      -0.03,
+      -0.02,
+      0.0,
+      0.0
+    ]
+  },
+  "gate_conditions": {
+    "delta_alpha>=+0.30pp": false,
+    "sharpe>=baseline": false,
+    "worst_month>=baseline": true,
+    "pos_alpha_ratio>=baseline": true,
+    "single_month_outlier_excl_delta>0": false,
+    "all_regime_not_hurt": false
+  },
+  "delta_alpha_excl_single_month_outlier": -0.042,
+  "sensitivity_seat_r5_delta_alpha_pp": -0.034,
+  "regime_delta": {
+    "mixed": {
+      "d_alpha": -0.106,
+      "n_months": 2,
+      "base_alpha": 1.259,
+      "seat_alpha": 1.153
+    },
+    "momentum": {
+      "d_alpha": 0.007,
+      "n_months": 7,
+      "base_alpha": 3.877,
+      "seat_alpha": 3.884
+    },
+    "reversal": {
+      "d_alpha": -0.04,
+      "n_months": 10,
+      "base_alpha": 4.151,
+      "seat_alpha": 4.111
+    }
+  },
+  "regime_not_hurt": false,
+  "seat_pool_coverage_mean": 0.03707,
+  "n_months": 19,
+  "window": [
+    "202410",
+    "202604"
+  ],
+  "arms_evaluated": "NET-002=no_residual 不入闸; 仅 SEAT 轨 (SEAT-002=residual_signal) 入 walk-forward",
+  "artifacts": [
+    "research/cache/gate001_monthly.csv",
+    "research/cache/gate001_results.json"
+  ],
+  "note": "apples-to-apples: 三臂唯一差异=池内排序键 (ratio_s5 vs +z(sf_edge_r20) vs +z(sf_edge_r5)); 复用 t005_wf_models 尺度模型 + 生产 r20 池模型 (两臂共模, 仅 Δ 量作 gate, SIGN-R03); seat_r5 仅 sensitivity 不决定裁决。REJECT/真小 是合法完成。",
+  "guardrails": [
+    "SIGN-R01 gate 阈值冻结",
+    "SIGN-R02 负/真小结果=合法完成不重调",
+    "SIGN-R03 只认 walk-forward α",
+    "SIGN-R05 生产线冻结未动",
+    "SIGN-R06 ST 源头排除 (load_window)",
+    "SIGN-R11 分 regime 评估",
+    "SIGN-R08 复用 t005 月度模型 checkpoint"
+  ]
+}
