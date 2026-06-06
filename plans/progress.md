@@ -20,7 +20,7 @@
 ## 任务台账
 | id | 任务 | 状态 | 裁决 |
 |----|------|------|------|
-| SL-001 | r5席位sleeve回测引擎(D+1+席位排序+成本+三臂对照) | todo | — |
+| SL-001 | r5席位sleeve回测引擎(D+1+席位排序+成本+三臂对照) | built | 引擎落盘,三臂Arm_A>Arm_B>Arm_M |
 | SL-002 | 成本×持有期×容量敏感性 | todo | — |
 | SL-003 | walk-forward gate(net-of-cost α+席位技能净增量) | todo | — |
 | SL-004 | 独立sleeve日频输出(仅PASS) | skip | — |
@@ -38,3 +38,7 @@
 ## 迭代日志
 <!-- 每轮 append -->
 - (init) 由 hidden-alpha(已完结)转入。SEAT轨挖到真信号但载体错, 本轮用正确r5事件sleeve冶炼。等待启动。
+- (r1 SL-001=built) 造好 r5 事件 sleeve 回测引擎 `research/sl001_sleeve_engine.py` (D龙虎榜→D+1开盘建仓→D+1+5开盘平仓, 三臂 apples)。817 entry日 (20230104~20260525), 23978全龙虎榜候选, 席位可信覆盖**98.9%** (对照GATE-001里r20池仅3.7%稀疏=载体确实换对了)。**主测描述统计 (H=5/N=10/30bps往返)**: 毛/笔 Arm_M=-1.82% / Arm_A(席位sf_edge_r5)=-1.43% / Arm_B(动量)=-2.47%; 净/笔 A=-1.73%; **Arm_A−Arm_B 净/笔 +1.04pp** (席位技能净增量初窥,gate在SL-003); 年化换手≈50轮→成本拖累≈15%/yr。
+  - 关键观察: 龙虎榜净买入股 r5 **原始**收益全为负 (均值回归), Arm_A 只是"最不差"。这是原始收益非市场相对α — SL-003 才算 net-of-cost α(Arm_A−等权市场) + Arm_A vs Arm_B 隔离。但**席位排序 > 动量排序 > 等权全集**的次序已支持"席位技能真实"假设。
+  - 产出: `research/cache/sl001_daily_pnl.parquet` (entry×arm gross/net/n) + `research/cache/sl001/picks.parquet` (stock级,含entry_amount供SL-002容量/SL-003 gate复用) + checkpoint px/cand/picks。
+  - 下一步 SL-002: 成本0/15/30 × H=3/5/10 网格 + 基于 entry_amount 的容量估算。注意短线sleeve成本拖累已显著(~15%/yr),容量看上榜股D+1成交额。

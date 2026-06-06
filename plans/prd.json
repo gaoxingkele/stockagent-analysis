@@ -42,8 +42,9 @@
         "research/verdicts/SL-001.json status=built + 三臂毛收益/换手率/平均持仓数"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "正确载体: 短线r5事件sleeve, 非tilt r20池(GATE-001已证载体错)。复用 research/features/seat_footprint.parquet。"
+      "passes": true,
+      "completed_at": "2026-06-06",
+      "notes": "正确载体: 短线r5事件sleeve, 非tilt r20池(GATE-001已证载体错)。复用 research/features/seat_footprint.parquet。引擎 research/sl001_sleeve_engine.py; 三臂初窥 Arm_A(席位)毛/笔-1.43% net-1.73% > Arm_B(动量)-2.47% (净增量+1.04pp) > Arm_M-1.82%; 全龙虎榜r5原始收益均为负(均值回归),裁决看SL-003市场相对净α; 年化换手≈50轮成本拖累≈15%/yr。"
     },
     {
       "id": "SL-002",
