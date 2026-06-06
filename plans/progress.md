@@ -22,7 +22,7 @@
 | id | 任务 | 状态 | 裁决 |
 |----|------|------|------|
 | NET-001 | 概念网络 lead-lag 特征 | ✅ built | 5.3M行×6特征落盘, 因果loo, 零泄漏, 确定性✓ |
-| NET-002 | 概念 Phase-1 廉价筛查 | todo | — |
+| NET-002 | 概念 Phase-1 廉价筛查 | ✅ REJECT | no_residual: 扣[动量+市场beta]后最强|IC|=0.0177 t=0.97 ≪线, lead-lag≈动量换皮 |
 | SEAT-001 | 席位印记特征 (top_inst exalter) | todo | — |
 | SEAT-002 | 席位 Phase-1 廉价筛查 | todo | — |
 | GATE-001 | walk-forward gate (有残差的轨) | todo | — |
@@ -47,3 +47,11 @@
   - 规模过滤: 概念成员数 [5,500], 剔沪深300/融资融券等指数代理 (lead-lag≈市场beta)。1878概念。
   - 产出: 5,295,652 行 / 5432 股 / 1066 日 (2022-01~2026-06)。非空率: pr1=1.0, pr5/lead_ratio=0.996, pr20=0.98。确定性✓(单日重算比对), 零泄漏✓(verify leakage guard 0违规)。月块checkpoint research/cache/net001/。
   - 下一步 → **NET-002**: Phase-1 廉价筛查, 对 cl_* 信号(尤其 cl_pr5/cl_lead_ratio) 算 ≥36月横截面 rank-IC(前向r20), 扣[自身动量mom_5/20/60 + 市场]残差化, 分regime。核心问: 滞后票扣自身动量后还跟不跟领先票。residual_signal→GATE; no_residual→该轨REJECT(SEAT轨还在)。
+- **NET-002 (06-06) no_residual / REJECT**: `research/net002_phase1_screen.py` → `research/cache/net002_{ic_table,panel,beta}.parquet` + `verdicts/NET-002.json`。
+  - 口径: 月末 rebalance (mom 缓存 54 月末日, 47 个有前向 r20 → ≥36月功率达标), 逐月横截面 Spearman(信号, fwd r20) 跨月平均 + t=mean/(std/√n)。复刻 FU-003 框架。
+  - 控制 (R12++): mom_5/20/60 (自身动量, 复用 fu002_momentum) + beta (市场: per-stock trailing 60d vs 等权市场日收益, 因果, 自算落 net002_beta.parquet)。变体 raw/minus_mom/minus_market/orth_full。
+  - **结果**: 4 信号 (cl_pr1/pr5/pr20/lead_ratio) 全期 orth_full(扣动量+市场) 残差 IC: cl_pr1 -0.0177(t-0.97 最强), cl_pr5 -0.0015(t-0.08), cl_pr20 -0.0011, lead_ratio -0.0021 — **全部远未过 |IC|>=0.02 & |t|>=3**。
+  - **定位 (消融)**: cl_pr5 raw IC=-0.0023(≈0) → 扣动量 +0.0152(t=0.70, 仍不显著) → 扣市场 -0.0199 → 全扣 -0.0015。即"扣自身动量后微弱翻正但远不显著"⇒ lead-lag 信号 ≈ 自身动量/市场 beta 换皮, **无独立残差**。
+  - **裁决 no_residual (SIGN-R02 负结果=合法完成)**: 滞后票扣掉自身动量后并不独立跟随同概念领先票 (A股同概念共涨主要是 beta+动量, 非可交易的领先-滞后结构)。该轨 ② 概念网络 **廉价 REJECT**, 不进 GATE walk-forward。
+  - 第 11 个被脚手架否的假设。**SEAT 轨仍在** (③ 龙虎榜席位印记)。GATE-001 是否跑 walk-forward 现完全取决于 SEAT-002: 若 SEAT-002 也 no_residual → GATE-001 status=REJECT 不跑。
+  - 下一步 → **SEAT-001**: 龙虎榜席位印记特征 (top_inst exalter 历史 expanding 胜率→聪明席位跟随, 龙虎榜收盘后 D+1 生效防泄漏)。数据 output/tushare_cache/top_inst.parquet (633613行, 列 trade_date/ts_code/exalter/buy/sell/net_buy/side/reason)。

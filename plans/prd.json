@@ -48,8 +48,9 @@
         "若 no_residual 记录(不一定 skip gate, 因还有 SEAT 轨)"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "核心问: 滞后票扣掉自身动量后, 还跟不跟领先票。"
+      "passes": true,
+      "completed_at": "2026-06-06",
+      "notes": "核心问: 滞后票扣掉自身动量后, 还跟不跟领先票。裁决 no_residual: 47月横截面rank-IC(月末rebalance, fwd r20), 扣[自身动量mom_5/20/60 + 市场beta]残差后最强信号cl_pr1 |IC|=0.0177 |t|=0.97 (cl_pr5 orth_full IC=-0.0015 t=-0.08), 全部远未过线(需|IC|>=0.02 & |t|>=3)。消融: cl_pr5 raw IC≈0 → 扣动量 +0.0152(t=0.70仍不显著) → 全扣 ≈0 = lead-lag≈自身动量/市场换皮无独立残差。该轨廉价REJECT, SEAT轨仍在。产出 net002_ic_table/panel/beta.parquet。"
     },
     {
       "id": "SEAT-001",
