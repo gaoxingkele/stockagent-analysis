@@ -21,7 +21,7 @@
 | id | 任务 | 状态 | 裁决 |
 |----|------|------|------|
 | SL-001 | r5席位sleeve回测引擎(D+1+席位排序+成本+三臂对照) | built | 引擎落盘,三臂Arm_A>Arm_B>Arm_M |
-| SL-002 | 成本×持有期×容量敏感性 | todo | — |
+| SL-002 | 成本×持有期×容量敏感性 | built | 网格全档net负(原始均值回归非市场相对α); 容量min-binding中位仅0.054亿小 |
 | SL-003 | walk-forward gate(net-of-cost α+席位技能净增量) | todo | — |
 | SL-004 | 独立sleeve日频输出(仅PASS) | skip | — |
 
@@ -42,3 +42,9 @@
   - 关键观察: 龙虎榜净买入股 r5 **原始**收益全为负 (均值回归), Arm_A 只是"最不差"。这是原始收益非市场相对α — SL-003 才算 net-of-cost α(Arm_A−等权市场) + Arm_A vs Arm_B 隔离。但**席位排序 > 动量排序 > 等权全集**的次序已支持"席位技能真实"假设。
   - 产出: `research/cache/sl001_daily_pnl.parquet` (entry×arm gross/net/n) + `research/cache/sl001/picks.parquet` (stock级,含entry_amount供SL-002容量/SL-003 gate复用) + checkpoint px/cand/picks。
   - 下一步 SL-002: 成本0/15/30 × H=3/5/10 网格 + 基于 entry_amount 的容量估算。注意短线sleeve成本拖累已显著(~15%/yr),容量看上榜股D+1成交额。
+- (r2 SL-002=built) 造好成本×持有期×容量敏感性 `research/sl002_sensitivity.py` (复用 SL-001 引擎/常数, 仅扫 cost/H, SIGN-R01)。网格 `research/cache/sl002_grid.parquet` 9 cells: cost{0,15,30}bps往返 × H{3,5,10}, 各 H picks 按 H checkpoint (picks_H{3,5,10}.parquet, 812 entry日/41月)。
+  - **网格结论 (Arm_A net, 月度=事件等权当月篮子均值, Sharpe=月序列mean/std×√12)**: 全 9 档 net 月度收益**全为负** (-0.66% ~ -2.46%), Sharpe(年) -1.16 ~ -1.87, 正月%21.9~29.3%。这是龙虎榜净买入股 r5 **原始**均值回归 (同 SL-001 观察), **非市场相对α** — 净α(Arm_A−等权市场) 与席位净增量(Arm_A−Arm_B) 才是裁决量, 在 SL-003 walk-forward (SIGN-R03 中间指标≠落地)。
+  - **成本/持有期纹理**: 持有期越短 net/笔越小但年换手越高 (H=3→84轮 cost拖累25.2%/yr @30bps; H=5→50轮 15.12%; H=10→25轮 7.56%); 成本 0→15→30bps 单调侵蚀每档约 -0.15pp/笔。短线 sleeve 成本拖累确实是核心约束。
+  - **容量 (≤event_date成交额1%/等权top-10/无冲击)**: min-binding (等权受当日最小成交额成分股约束) 中位仅 **0.054亿元** (p25 0.023/p75 0.131) = 540万元, **很小**; sum 松上界中位 0.912亿元。短线高换手日内反复进出会进一步压缩。容量小已文档化 (AC 要求, 非硬gate)。amount 单位=千元×1000=元已校准。
+  - 产出: `research/cache/sl002_grid.parquet` + `research/cache/sl001/picks_H{3,5,10}.parquet` + `research/verdicts/SL-002.json` (status=built)。
+  - 下一步 SL-003 (gate): ≥30月 walk-forward 事件对齐, 主测30bps/H=5。净月度 α = Arm_A 篮子收益 − 等权市场(同日全市场或全龙虎榜?需定口径,建议等权全市场 r5)。席位净增量 = Arm_A − Arm_B (动量对照, 隔离席位技能 vs 龙虎榜效应)。分regime(R11) + 单月outlier剔除 + 扣[动量+市场]存活。断言 preRegisteredGate。**注意全档原始 net 为负, 真正的问题是相对等权市场是否还有正 α (均值回归股可能跑赢同样下跌的市场)**。playbook 五分叉, REJECT 合法完成(R02)。

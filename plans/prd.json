@@ -55,8 +55,9 @@
         "research/verdicts/SL-002.json status=built + 敏感性表 + 容量估算"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "短线sleeve成败常在成本/容量; 先看清再上gate。"
+      "passes": true,
+      "completed_at": "2026-06-06",
+      "notes": "引擎 research/sl002_sensitivity.py; 网格 research/cache/sl002_grid.parquet (9 cells cost{0,15,30}bps×H{3,5,10})。Arm_A net 全档为负 (龙虎榜净买入股 r5 原始均值回归, 同 SL-001), 非市场相对α — 净α/席位净增量裁决在 SL-003。主测 H=5/30bps: net/笔-1.726% 净月度-1.614% Sharpe(年)-1.87 年换手50.4轮成本拖累15.12%/yr。持有期↓换手↑成本拖累↑(H=3→84轮25.2%/yr); 成本0→30bps单调侵蚀。容量(≤成交额1%/等权): min-binding中位仅0.054亿元(p25 0.023/p75 0.131, 受当日最小成交额成分股约束=很小), sum松上界0.912亿元。容量小已文档化。"
     },
     {
       "id": "SL-003",
