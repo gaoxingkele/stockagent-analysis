@@ -21,7 +21,7 @@
 ## 任务台账 (双轨 + 共享 gate)
 | id | 任务 | 状态 | 裁决 |
 |----|------|------|------|
-| NET-001 | 概念网络 lead-lag 特征 | todo | — |
+| NET-001 | 概念网络 lead-lag 特征 | ✅ built | 5.3M行×6特征落盘, 因果loo, 零泄漏, 确定性✓ |
 | NET-002 | 概念 Phase-1 廉价筛查 | todo | — |
 | SEAT-001 | 席位印记特征 (top_inst exalter) | todo | — |
 | SEAT-002 | 席位 Phase-1 廉价筛查 | todo | — |
@@ -41,3 +41,9 @@
 ## 迭代日志
 <!-- 每轮 append -->
 - (init) 由 fundamental-orthogonal(已完结 C_塌缩 REJECT)转入。用户选 ②概念网络 + ③席位印记两轨先做。等待启动。
+- **NET-001 (06-06) built**: `research/net001_build_leadlag.py` → `research/features/concept_leadlag.parquet`。
+  - 设计: 对每(ts_code,t)算同概念邻居 leave-one-out 滞后收益。邻居信号在 d 收盘可知(trailing trail1/5/20),赋给 next_trading_day(d)=t,保证 feature@t 只含 ≤t-1 + 剔本股自身 → 双重防泄漏(同期+自身)。
+  - 6 特征: cl_pr1/cl_pr5/cl_pr20 (邻居loo过去N日收益均值, 跨概念平均), cl_lead_ratio (邻居过去5d上涨比例=先动比例), cl_nbr_count, cl_n_concepts。
+  - 规模过滤: 概念成员数 [5,500], 剔沪深300/融资融券等指数代理 (lead-lag≈市场beta)。1878概念。
+  - 产出: 5,295,652 行 / 5432 股 / 1066 日 (2022-01~2026-06)。非空率: pr1=1.0, pr5/lead_ratio=0.996, pr20=0.98。确定性✓(单日重算比对), 零泄漏✓(verify leakage guard 0违规)。月块checkpoint research/cache/net001/。
+  - 下一步 → **NET-002**: Phase-1 廉价筛查, 对 cl_* 信号(尤其 cl_pr5/cl_lead_ratio) 算 ≥36月横截面 rank-IC(前向r20), 扣[自身动量mom_5/20/60 + 市场]残差化, 分regime。核心问: 滞后票扣自身动量后还跟不跟领先票。residual_signal→GATE; no_residual→该轨REJECT(SEAT轨还在)。

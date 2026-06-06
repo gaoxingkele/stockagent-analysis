@@ -1,0 +1,62 @@
+{
+  "task": "NET-001",
+  "status": "built",
+  "conclusion": "概念网络 lead-lag 特征落盘 5,295,652 行 × 6 特征 (20220106~20260604); 覆盖 5432 股/1066 日; 因果 leave-one-out (邻居 ≤t-1 收益, 剔本股自身), 零泄漏, 确定性=True; 概念规模 [5,500] 过滤剔指数代理。",
+  "artifact": "research\\features\\concept_leadlag.parquet",
+  "metrics": {
+    "rows": 5295652,
+    "n_stocks": 5432,
+    "n_dates": 1066,
+    "date_range": [
+      "20220106",
+      "20260604"
+    ],
+    "feature_cols": [
+      "cl_n_concepts",
+      "cl_pr1",
+      "cl_pr5",
+      "cl_pr20",
+      "cl_nbr_count",
+      "cl_lead_ratio"
+    ],
+    "min_members": 5,
+    "max_members": 500,
+    "n_concepts_used": 1853,
+    "nonnull_frac": {
+      "cl_n_concepts": 0.9959,
+      "cl_pr1": 1.0,
+      "cl_pr5": 0.9959,
+      "cl_pr20": 0.9805,
+      "cl_nbr_count": 0.9959,
+      "cl_lead_ratio": 0.9959
+    },
+    "dist": {
+      "cl_pr5": {
+        "mean": 0.002257,
+        "std": 0.039202,
+        "p5": -0.054299,
+        "p95": 0.057277
+      },
+      "cl_pr20": {
+        "mean": 0.010015,
+        "std": 0.078575,
+        "p5": -0.101319,
+        "p95": 0.135515
+      },
+      "cl_lead_ratio": {
+        "mean": 0.473625,
+        "std": 0.249047,
+        "p5": 0.105115,
+        "p95": 0.884234
+      }
+    },
+    "deterministic": true,
+    "leakage_free": true
+  },
+  "guardrails": [
+    "SIGN-R04 泄漏自查通过",
+    "SIGN-R06 ST 源头排除",
+    "SIGN-R08 月块 checkpoint",
+    "因果: 信号赋下一交易日 (≤t-1)"
+  ]
+}

@@ -35,8 +35,9 @@
         "research/verdicts/NET-001.json status=built + 覆盖/分布"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "结构 alpha, 无新数据。playbook 数据::概念lead 防同期泄漏。"
+      "passes": true,
+      "completed_at": "2026-06-06",
+      "notes": "结构 alpha, 无新数据。playbook 数据::概念lead 防同期泄漏。built: research/features/concept_leadlag.parquet 5.3M行×6特征(cl_pr1/5/20/lead_ratio/nbr_count/n_concepts), 5432股/1066日, leave-one-out邻居≤t-1收益赋下一交易日, 确定性=True, 零泄漏, 概念规模[5,500]过滤。"
     },
     {
       "id": "NET-002",
