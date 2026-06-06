@@ -23,7 +23,7 @@
 |----|------|------|------|
 | NET-001 | 概念网络 lead-lag 特征 | ✅ built | 5.3M行×6特征落盘, 因果loo, 零泄漏, 确定性✓ |
 | NET-002 | 概念 Phase-1 廉价筛查 | ✅ REJECT | no_residual: 扣[动量+市场beta]后最强|IC|=0.0177 t=0.97 ≪线, lead-lag≈动量换皮 |
-| SEAT-001 | 席位印记特征 (top_inst exalter) | todo | — |
+| SEAT-001 | 席位印记特征 (top_inst exalter) | ✅ built | 46K行×5特征, 9235买方席位(2722可信), 因果expanding+D+1, 零泄漏, 确定性✓ |
 | SEAT-002 | 席位 Phase-1 廉价筛查 | todo | — |
 | GATE-001 | walk-forward gate (有残差的轨) | todo | — |
 | LAND-001 | opt-in 落地 (依赖 GATE=PASS) | skip | — |
@@ -55,3 +55,10 @@
   - **裁决 no_residual (SIGN-R02 负结果=合法完成)**: 滞后票扣掉自身动量后并不独立跟随同概念领先票 (A股同概念共涨主要是 beta+动量, 非可交易的领先-滞后结构)。该轨 ② 概念网络 **廉价 REJECT**, 不进 GATE walk-forward。
   - 第 11 个被脚手架否的假设。**SEAT 轨仍在** (③ 龙虎榜席位印记)。GATE-001 是否跑 walk-forward 现完全取决于 SEAT-002: 若 SEAT-002 也 no_residual → GATE-001 status=REJECT 不跑。
   - 下一步 → **SEAT-001**: 龙虎榜席位印记特征 (top_inst exalter 历史 expanding 胜率→聪明席位跟随, 龙虎榜收盘后 D+1 生效防泄漏)。数据 output/tushare_cache/top_inst.parquet (633613行, 列 trade_date/ts_code/exalter/buy/sell/net_buy/side/reason)。
+- **SEAT-001 (06-06) built**: `research/seat001_build_footprint.py` → `research/features/seat_footprint.parquet`。
+  - 设计: top_inst 每 (date,code,exalter) 去重 (side 0/1 净买入重复) → 买方席位=net_buy>0。每席位历史 expanding 战绩 = 过去净买入事件的 fwd_r5/r20 均值 + r5 胜率, **跨股累计** (席位技能跨标的)。
+  - 因果三重防泄漏: ① 席位某历史事件 e 的 outcome 仅当 avail(e)=idx(e)+H ≤ idx(d) (已兑现) 才计入; ② 当前事件自身 avail=idx(d)+H>idx(d) 天然排除 (时间维 leave-one-out); ③ 信号赋 next(d)=D+1 (龙虎榜收盘后公告)。searchsorted 实现 expanding 战绩。
+  - 5 特征: sf_edge_r5/sf_edge_r20 (买方席位历史 fwd 收益 net_buy 加权), sf_winrate_r5, sf_n_seats, sf_seat_nhist。MIN_HIST=5 兑现历史才信任席位。fwd_r5/r20 仅落 cache (research/cache/seat001/), **绝不**进 features (verify forward 黑名单)。
+  - 产出: 46,057 行 / 4704 股 / 812 日 (2023-01~2026-05); 9235 买方席位 (2722 有 ≥5 兑现历史可信)。非空率 sf_edge_r5=1.0/sf_edge_r20=0.985/winrate=1.0。确定性✓(抽样席位重算比对), 零泄漏✓, ST 源头排除。
+  - **观察 (非裁决, 留给 SEAT-002)**: sf_edge_r5 均值 -0.0102 / sf_winrate_r5 均值 0.38 — 席位历史买入**平均跑输** (A股龙虎榜买方多为追涨接盘?)。但这是无符号描述; 横截面 rank-IC 才看"高战绩席位是否真预测高收益", 且 SEAT-002 必扣[自身动量+市场]。
+  - 下一步 → **SEAT-002**: Phase-1 廉价筛查。对 sf_edge_r5/r20/winrate 算 ≥30月横截面 rank-IC (r5/r20 都看, 龙虎榜偏短线), 扣[自身动量 mom_5/20/60 + 市场 beta] 残差化, 分 regime。核心问: 扣自身动量后, 跟"聪明席位"还有没有独立残差。residual_signal→GATE; no_residual→SEAT 轨也 REJECT (则 NET+SEAT 双否 → GATE-001=REJECT 不跑 walk-forward)。注: 信号天然稀疏 (仅上榜股 D+1 有值, 46K 行), 月末 rebalance 对齐时横截面会偏小, SEAT-002 需考虑用事件对齐 (上榜 D+1 起 r5/r20) 而非月末对齐, 以保功率 ≥30月。

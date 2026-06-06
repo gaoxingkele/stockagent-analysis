@@ -62,8 +62,9 @@
         "research/verdicts/SEAT-001.json status=built + 席位数/覆盖"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "行为 alpha(跟游资/机构)。playbook 数据::龙虎榜滞后+席位胜率 防泄漏。"
+      "passes": true,
+      "completed_at": "2026-06-06",
+      "notes": "行为 alpha(跟游资/机构)。playbook 数据::龙虎榜滞后+席位胜率 防泄漏。built: research/features/seat_footprint.parquet 46,057行×5特征(sf_edge_r5/r20/winrate_r5/n_seats/seat_nhist), 4704股/812日(2023-01~2026-05), 9235买方席位(2722有≥5兑现历史可信)。每买方席位(net_buy>0)历史expanding战绩=过去净买入事件fwd_r5/r20均值+r5胜率, 仅计avail(e)=idx(e)+H<=idx(d)已兑现的跨股累计(当前事件自身天然排除=时间维loo), 信号赋next(d)=D+1(龙虎榜收盘后公告防泄漏)。fwd收益仅cache不进features。确定性=True, 零泄漏, ST源头排除。注: sf_edge_r5均值-0.0102/winrate均值0.38(席位历史买入平均跑输)是描述非裁决, 留给SEAT-002 Phase-1筛查。"
     },
     {
       "id": "SEAT-002",

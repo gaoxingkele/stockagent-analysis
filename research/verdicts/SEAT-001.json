@@ -1,0 +1,68 @@
+{
+  "task": "SEAT-001",
+  "status": "built",
+  "conclusion": "龙虎榜席位印记特征落盘 46,057 行 × 5 特征 (20230111~20260525); 覆盖 4704 股/812 日; 9235 买方席位 (2722 有 ≥5 兑现历史可信); 因果: 席位战绩仅用 avail<=d 已兑现 outcome (跨股 expanding), 信号赋 next(d)=D+1, 零泄漏, 确定性=True; ST 源头排除。",
+  "artifact": "research\\features\\seat_footprint.parquet",
+  "design": {
+    "seat_track_record": "每买方席位 (net_buy>0) 的历史 expanding 战绩 = 过去净买入事件的 fwd_r5/r20 均值 (+r5 胜率), 仅计 avail(e)=idx(e)+H<=idx(d) 已兑现的, 跨股累计, 当前事件自身排除。",
+    "stock_day_signal": "每上榜股当日买方席位战绩按 net_buy 加权 → sf_edge_r5/r20 + sf_winrate_r5; 信号赋下一交易日 (龙虎榜收盘后公告, D+1 生效)。",
+    "min_hist": 5,
+    "horizons": [
+      5,
+      20
+    ]
+  },
+  "metrics": {
+    "rows": 46057,
+    "n_stocks": 4704,
+    "n_dates": 812,
+    "date_range": [
+      "20230111",
+      "20260525"
+    ],
+    "feature_cols": [
+      "sf_edge_r5",
+      "sf_edge_r20",
+      "sf_winrate_r5",
+      "sf_n_seats",
+      "sf_seat_nhist"
+    ],
+    "n_seats_total": 9235,
+    "n_seats_trusted": 2722,
+    "nonnull_frac": {
+      "sf_edge_r5": 1.0,
+      "sf_edge_r20": 0.985,
+      "sf_winrate_r5": 1.0,
+      "sf_n_seats": 1.0,
+      "sf_seat_nhist": 1.0
+    },
+    "dist": {
+      "sf_edge_r5": {
+        "mean": -0.010213,
+        "std": 0.02893,
+        "p5": -0.050099,
+        "p95": 0.027103
+      },
+      "sf_edge_r20": {
+        "mean": -0.027223,
+        "std": 0.045873,
+        "p5": -0.087258,
+        "p95": 0.034719
+      },
+      "sf_winrate_r5": {
+        "mean": 0.380094,
+        "std": 0.071279,
+        "p5": 0.27272,
+        "p95": 0.481667
+      }
+    },
+    "deterministic": true,
+    "leakage_free": true
+  },
+  "guardrails": [
+    "SIGN-R04 泄漏自查通过 + 时间维 leave-one-out",
+    "SIGN-R06 ST 源头排除",
+    "SIGN-R08 fwd/edge checkpoint",
+    "因果: 席位战绩 avail<=d + 信号 D+1 生效"
+  ]
+}
