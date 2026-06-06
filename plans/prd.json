@@ -70,9 +70,9 @@
         "research/verdicts/SL-003.json: status in {PASS, 真小, REJECT_成本吃掉, REJECT_龙虎榜效应, REJECT_负} + metrics"
       ],
       "priority": 3,
-      "passes": false,
-      "skip": false,
-      "notes": "playbook SL-003 分叉。REJECT 合法完成(R02)。净α=毛α−成本; 隔离席位技能用 Arm_B 对照。"
+      "passes": true,
+      "completed_at": "2026-06-06",
+      "notes": "引擎 research/sl003_walkforward_gate.py; 逐月 research/cache/sl003_monthly.parquet (41月事件对齐 walk-forward, 主测 H=5/30bps往返)。裁决=REJECT_负: 净α(Arm_A net−等权全市场)=-2.006pp/月 t=-6.206 Sharpe-3.36 正月17.1% 最差月-5.54pp; 毛α也=-1.706pp t=-5.28 (非成本吃掉=本就负)。**但席位技能净增量 Arm_A−Arm_B(扣动量)=+1.020pp t=4.433 正月75.6% 显著为真** — 印证 SEAT-002 席位印记是真信号, 席位排序确实跑赢同集动量排序。问题是整个龙虎榜净买入股 r5 universe 相对等权市场是净输家(均值回归), 席位只是'最不差'。单月outlier剔(202410 +3.80pp)后净α-2.152pp 仍负; 三regime(mixed/momentum/reversal)净α全负不集中也无救。**信号真+载体仍错: 即便换成 r5 短线正确 horizon, 龙虎榜事件池本身就跑输市场。SL-004 保持 skip(仅PASS解除)。** playbook 分叉 REJECT_负(SIGN-R02 合法完成)。"
     },
     {
       "id": "SL-004",

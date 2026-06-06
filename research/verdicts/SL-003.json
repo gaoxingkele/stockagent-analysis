@@ -1,0 +1,127 @@
+{
+  "id": "SL-003",
+  "status": "REJECT_负",
+  "conclusion": "r5 龙虎榜席位事件 sleeve walk-forward 裁决=REJECT_负。主测 H=5/30bps往返, 41 月事件对齐 walk-forward。净 α(Arm_A net−等权全市场)=-2.006pp/月 t=-6.206 Sharpe(年)=-3.357 正月%=17% 最差月=-5.54pp; 毛 α=-1.706pp; 席位技能净增量(Arm_A−Arm_B, 扣动量)=+1.020pp t=4.433; 单月outlier剔(202410)后 -2.152pp 仍正=False。 净 α<0 且毛 α 也<0 → 干净 REJECT。 (REJECT 合法完成 SIGN-R02, 中间指标≠落地仅净α walk-forward 定调 SIGN-R03)",
+  "artifact": "research\\cache\\sl003_monthly.parquet",
+  "preRegisteredGate": {
+    "alpha_pp": 0.5,
+    "t": 3.0,
+    "skill_t": 2.0,
+    "sharpe": 1.0,
+    "min_months": 30,
+    "frozen": "启动写死, 本 task 未改任何阈值 (SIGN-R01)"
+  },
+  "gate_checks": {
+    "alpha>=+0.50pp": false,
+    "|t_alpha|>=3": true,
+    "skill(A-B)>0 & |t|>=2": true,
+    "sharpe>=1.0": false,
+    "outlier_drop_still_pos": false,
+    "regime_not_concentrated": false
+  },
+  "metrics": {
+    "alpha_delta_pp": -2.0064,
+    "sharpe": -3.357,
+    "worst_month": -5.5428,
+    "pos_alpha_month_ratio": 0.1707,
+    "alpha_t": -6.206,
+    "net_alpha_full": {
+      "n_months": 41,
+      "monthly_mean_pp": -2.0064,
+      "monthly_std_pp": 2.0703,
+      "t": -6.206,
+      "sharpe_ann": -3.357,
+      "pos_month_ratio": 0.1707,
+      "worst_month_pp": -5.5428,
+      "best_month_pp": 3.7984
+    },
+    "gross_alpha_full": {
+      "n_months": 41,
+      "monthly_mean_pp": -1.7064,
+      "monthly_std_pp": 2.0703,
+      "t": -5.278,
+      "sharpe_ann": -2.855,
+      "pos_month_ratio": 0.1951,
+      "worst_month_pp": -5.2428,
+      "best_month_pp": 4.0984
+    },
+    "skill_A_minus_B_full": {
+      "n_months": 41,
+      "monthly_mean_pp": 1.0201,
+      "monthly_std_pp": 1.4736,
+      "t": 4.433,
+      "sharpe_ann": 2.398,
+      "pos_month_ratio": 0.7561,
+      "worst_month_pp": -1.9386,
+      "best_month_pp": 3.3999
+    },
+    "outlier_drop": {
+      "dropped_month": "202410",
+      "dropped_value_pp": 3.7984,
+      "mean_after_drop_pp": -2.1516,
+      "t_after_drop": -7.263,
+      "still_positive": false
+    },
+    "regime_alpha": {
+      "mixed": {
+        "n_months": 34,
+        "monthly_mean_pp": -1.5759,
+        "t": -1.943,
+        "pos_month_ratio": 0.3824
+      },
+      "momentum": {
+        "n_months": 26,
+        "monthly_mean_pp": -0.9418,
+        "t": -1.114,
+        "pos_month_ratio": 0.3077
+      },
+      "reversal": {
+        "n_months": 37,
+        "monthly_mean_pp": -1.5706,
+        "t": -3.036,
+        "pos_month_ratio": 0.1892
+      }
+    },
+    "regime_skill": {
+      "mixed": {
+        "n_months": 34,
+        "monthly_mean_pp": 1.6133,
+        "t": 2.434,
+        "pos_month_ratio": 0.6765
+      },
+      "momentum": {
+        "n_months": 26,
+        "monthly_mean_pp": 1.8123,
+        "t": 2.645,
+        "pos_month_ratio": 0.7308
+      },
+      "reversal": {
+        "n_months": 37,
+        "monthly_mean_pp": 0.483,
+        "t": 0.864,
+        "pos_month_ratio": 0.6757
+      }
+    },
+    "n_months": 41
+  },
+  "design": {
+    "walk_forward": "席位战绩 expanding 因果 (avail<=D, D+1 生效) → 逐月 α 序列天然 walk-forward",
+    "market_benchmark": "等权全市场 H=5 open→open 前向收益 (ST 源头排除), 按 entry_date",
+    "alpha": "Arm_A net − market (扣市场)",
+    "skill": "Arm_A − Arm_B (扣动量, cost 抵消)",
+    "monthly": "事件等权: 当月所有 entry-day 均值; t=mean/(std/√n); Sharpe=mean/std×√12",
+    "main_cell": "H=5, N=10, cost=30bps round-trip (复用 SL-001, SIGN-R01)"
+  },
+  "artifacts": [
+    "research\\cache\\sl003_monthly.parquet",
+    "research\\cache\\sl001\\market_bench_H5.parquet"
+  ],
+  "guardrails": [
+    "SIGN-R01 gate 阈值冻结未改",
+    "SIGN-R02 REJECT 合法完成",
+    "SIGN-R03 仅净α walk-forward 定调",
+    "SIGN-R06 ST 源头排除",
+    "SIGN-R11 分 regime",
+    "单月 outlier 剔除检验"
+  ]
+}

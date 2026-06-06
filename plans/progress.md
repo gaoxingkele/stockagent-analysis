@@ -22,8 +22,8 @@
 |----|------|------|------|
 | SL-001 | r5席位sleeve回测引擎(D+1+席位排序+成本+三臂对照) | built | 引擎落盘,三臂Arm_A>Arm_B>Arm_M |
 | SL-002 | 成本×持有期×容量敏感性 | built | 网格全档net负(原始均值回归非市场相对α); 容量min-binding中位仅0.054亿小 |
-| SL-003 | walk-forward gate(net-of-cost α+席位技能净增量) | todo | — |
-| SL-004 | 独立sleeve日频输出(仅PASS) | skip | — |
+| SL-003 | walk-forward gate(net-of-cost α+席位技能净增量) | DONE | **REJECT_负**: 净α-2.0pp/月 t-6.2; 但席位技能净增量+1.02pp t4.4真 |
+| SL-004 | 独立sleeve日频输出(仅PASS) | skip | — (REJECT→保持skip) |
 
 ## 已有资产
 - research/features/seat_footprint.parquet (SEAT-001: sf_edge_r5/r20/winrate_r5, 因果防泄漏, 9235席位/2722可信)
@@ -48,3 +48,10 @@
   - **容量 (≤event_date成交额1%/等权top-10/无冲击)**: min-binding (等权受当日最小成交额成分股约束) 中位仅 **0.054亿元** (p25 0.023/p75 0.131) = 540万元, **很小**; sum 松上界中位 0.912亿元。短线高换手日内反复进出会进一步压缩。容量小已文档化 (AC 要求, 非硬gate)。amount 单位=千元×1000=元已校准。
   - 产出: `research/cache/sl002_grid.parquet` + `research/cache/sl001/picks_H{3,5,10}.parquet` + `research/verdicts/SL-002.json` (status=built)。
   - 下一步 SL-003 (gate): ≥30月 walk-forward 事件对齐, 主测30bps/H=5。净月度 α = Arm_A 篮子收益 − 等权市场(同日全市场或全龙虎榜?需定口径,建议等权全市场 r5)。席位净增量 = Arm_A − Arm_B (动量对照, 隔离席位技能 vs 龙虎榜效应)。分regime(R11) + 单月outlier剔除 + 扣[动量+市场]存活。断言 preRegisteredGate。**注意全档原始 net 为负, 真正的问题是相对等权市场是否还有正 α (均值回归股可能跑赢同样下跌的市场)**。playbook 五分叉, REJECT 合法完成(R02)。
+- (r3 SL-003=DONE 裁决=REJECT_负) 造好 walk-forward 决策 gate `research/sl003_walkforward_gate.py` (复用 SL-001 引擎/常数, SIGN-R01)。市场基准口径定为**等权全市场 H=5 open→open 前向收益** (ST 源头排除, 按 entry_date), 落 `research/cache/sl001/market_bench_H5.parquet`。逐月 41 月事件对齐 walk-forward (席位战绩 expanding 因果 → 逐月 α 天然 walk-forward), 落 `research/cache/sl003_monthly.parquet`。
+  - **裁决 = REJECT_负** (playbook 分叉, SIGN-R02 合法完成): 净α(Arm_A net − 等权全市场) = **-2.006pp/月 t=-6.206** Sharpe(年)-3.36 正月17.1% 最差月-5.54pp; 毛α也=-1.706pp t=-5.28 → 不是成本吃掉 (REJECT_成本吃掉 要求毛α>0), 是**本就跑输市场**。决策树: a_mean≤0 且 g_mean≤0 → REJECT_负。
+  - **关键正向发现 (写进裁决但不改 ship): 席位技能净增量 Arm_A − Arm_B (扣动量, cost 抵消) = +1.020pp/月 t=4.433 正月75.6% 显著为真。** 印证 SEAT-002 席位印记是真信号 — 在同一龙虎榜可信池内, 按席位历史战绩(sf_edge_r5)排序 **确实跑赢** 按动量排序(Arm_B)。即"席位技能"被 Arm_B 对照成功隔离, 不是龙虎榜效应 (否则会落 REJECT_龙虎榜效应)。
+  - **但这救不了 sleeve**: 整个龙虎榜净买入股 r5 universe 相对等权市场是**净输家** (均值回归), 席位只是把"最不差"的子集挑出来, 绝对水平仍 -2pp/月 远低于市场。单月 outlier 剔 (202410 +3.80pp) 后净α -2.152pp **仍负**; 三 regime (mixed -1.58 / momentum -0.94 / reversal -1.57) 净α**全负**不集中也无救; 全部 6 项 gate 仅 2 项过 (|t|≥3 ✓ + 席位技能显著 ✓), magnitude/sharpe/outlier/regime 全✗。
+  - **元结论 (信号真 + 载体再次错)**: SEAT 轨两次 REJECT 但原因不同 — GATE-001 接 V12.31 r20 池 REJECT = horizon/稀疏载体错; 本轮换成正确 r5 短线事件载体, 席位技能本身(相对排序)**确实兑现** (+1.02pp t4.4), 但**事件池(龙虎榜净买入股)整体是负 alpha universe**, 任何只在池内排序的 sleeve 都跑输市场。要用席位印记必须**跳出"只买龙虎榜上榜股"** — 把席位战绩当 cross-sectional 因子作用于更广 universe (但那回到 V12.31 r20 池已 REJECT 的 horizon 问题), 或做多空 (买高战绩席位 / 空低战绩席位 同在龙虎榜内, Arm_A−Arm_B 的 +1.02pp 是 long-short 雏形, 但容量极小+成本高)。本轮 sleeve 路径走完, 干净 REJECT。
+  - 产出: `research/sl003_walkforward_gate.py` + `research/cache/sl003_monthly.parquet` + `research/cache/sl001/market_bench_H5.parquet` + `research/verdicts/SL-003.json` (status=REJECT_负 + 全 gate 指标)。SL-004 保持 skip (仅 PASS 解除)。
+  - **全部非 skip task (SL-001/002/003) 均有裁决, verify.py 退出 0。北极星问题已回答: 席位印记真信号 (席位技能净增量 +1.02pp t4.4) 但龙虎榜事件池是负α universe → sleeve REJECT_负。**
