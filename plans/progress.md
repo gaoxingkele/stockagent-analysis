@@ -24,8 +24,8 @@
 | NET-001 | 概念网络 lead-lag 特征 | ✅ built | 5.3M行×6特征落盘, 因果loo, 零泄漏, 确定性✓ |
 | NET-002 | 概念 Phase-1 廉价筛查 | ✅ REJECT | no_residual: 扣[动量+市场beta]后最强|IC|=0.0177 t=0.97 ≪线, lead-lag≈动量换皮 |
 | SEAT-001 | 席位印记特征 (top_inst exalter) | ✅ built | 46K行×5特征, 9235买方席位(2722可信), 因果expanding+D+1, 零泄漏, 确定性✓ |
-| SEAT-002 | 席位 Phase-1 廉价筛查 | todo | — |
-| GATE-001 | walk-forward gate (有残差的轨) | todo | — |
+| SEAT-002 | 席位 Phase-1 廉价筛查 | ✅ residual_signal | **首个 go 信号**: 事件对齐41月, 最强 sf_winrate_r5→fr5 orth_full IC=+0.0547 t=8.58, 扣[动量+市场]存活, 全regime正 → 进 GATE |
+| GATE-001 | walk-forward gate (有残差的轨) | todo (SEAT 臂要跑) | — |
 | LAND-001 | opt-in 落地 (依赖 GATE=PASS) | skip | — |
 
 ## 数据资产 (已确认)
@@ -62,3 +62,12 @@
   - 产出: 46,057 行 / 4704 股 / 812 日 (2023-01~2026-05); 9235 买方席位 (2722 有 ≥5 兑现历史可信)。非空率 sf_edge_r5=1.0/sf_edge_r20=0.985/winrate=1.0。确定性✓(抽样席位重算比对), 零泄漏✓, ST 源头排除。
   - **观察 (非裁决, 留给 SEAT-002)**: sf_edge_r5 均值 -0.0102 / sf_winrate_r5 均值 0.38 — 席位历史买入**平均跑输** (A股龙虎榜买方多为追涨接盘?)。但这是无符号描述; 横截面 rank-IC 才看"高战绩席位是否真预测高收益", 且 SEAT-002 必扣[自身动量+市场]。
   - 下一步 → **SEAT-002**: Phase-1 廉价筛查。对 sf_edge_r5/r20/winrate 算 ≥30月横截面 rank-IC (r5/r20 都看, 龙虎榜偏短线), 扣[自身动量 mom_5/20/60 + 市场 beta] 残差化, 分 regime。核心问: 扣自身动量后, 跟"聪明席位"还有没有独立残差。residual_signal→GATE; no_residual→SEAT 轨也 REJECT (则 NET+SEAT 双否 → GATE-001=REJECT 不跑 walk-forward)。注: 信号天然稀疏 (仅上榜股 D+1 有值, 46K 行), 月末 rebalance 对齐时横截面会偏小, SEAT-002 需考虑用事件对齐 (上榜 D+1 起 r5/r20) 而非月末对齐, 以保功率 ≥30月。
+- **SEAT-002 (06-06) residual_signal / 首个 go 信号** (打破 NET-002 + 此前 11 连否): `research/seat002_phase1_screen.py` → `research/cache/seat002_{ic_table,panel,controls}.parquet` + `verdicts/SEAT-002.json`。
+  - **事件对齐** (采纳上轮注记): 龙虎榜信号稀疏, 月末 rebalance 会把横截面砍到零。改每个 signal_date t(=D+1) 一个横截面 (当日所有上榜股, 中位 56 股/日, 每日 ≥17), 算当日残差 rank-IC vs 该股从 t 起的 fr5/fr20, 按月聚合 → 跨 41 月 t 检验 (≥30月 功率达标)。
+  - 控制 (R12++): 自算 mom_5/20/60 (=close[t]/close[t-h]-1, trailing, ≤t) + 市场 beta (per-stock trailing 60d vs 等权市场, 因果) @ 全部信号日, 落 seat002_controls.parquet。变体 raw/minus_mom/minus_market/orth_full。4 个 (信号×label) 对: sf_edge_r5→fr5, sf_winrate_r5→fr5, sf_edge_r20→fr20, sf_edge_r5→fr20。
+  - **结果**: 全部 4 对 orth_full(扣动量+市场) 残差 IC 在 +0.044~+0.055 / |t| 6.2~8.6, **全部过线**。最强 sf_winrate_r5→fr5 IC=+0.0547 t=+8.58 (n=41)。
+  - **定位 (消融存活)**: sf_edge_r5→fr5 raw IC=+0.0585 → 扣动量 +0.0542 → 扣市场 +0.0536 → 全扣 +0.0509 — 仅小幅衰减, **非动量/市场换皮** (对照 NET-002 lead-lag raw≈0 扣完仍≈0)。
+  - **分 regime (R11)**: orth_full 在三个 regime 全正且显著 (momentum IC=0.0645 t=5.75 / reversal 0.041 t=5.08 / mixed 0.08 t=3.3), 不伤任何 regime。
+  - **泄漏自查 (R04)**: label fr5/fr20 从信号日 t 起严格未来 (与信号不重叠); 席位战绩 SEAT-001 已时间维 loo 排当前事件 + D+1 生效; 同日同席位其他股 fr 未兑现不入 winrate → 无同日污染。IC≈0.05 (非 0.5) 不在警戒区。features 无 forward 列 (panel 含 fr 留 cache)。
+  - **裁决 residual_signal (SIGN-R02 正结果同样合法完成)**: 高战绩/高胜率席位跟随的股票, 扣掉自身动量+市场后**仍有独立横截面预测**。**但 SIGN-R03: IC≠落地, 只认 GATE walk-forward α**, 不得据此宣布胜利。
+  - 下一步 → **GATE-001**: SEAT 轨现为 residual_signal → 必须跑 19月 walk-forward apples-to-apples (V12.31 + sf 信号 vs 纯 V12.31), 断言 gate (Δα>=+0.30pp + Sharpe/最差月不降 + 单月outlier + 分regime + 扣[动量+市场]存活)。NET 轨 no_residual 不入 GATE。注意把稀疏 sf 信号接进 V12.31 池排序的对齐方式 (仅上榜股有值, 缺值如何 fill/中性)。

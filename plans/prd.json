@@ -74,8 +74,9 @@
         "research/verdicts/SEAT-002.json: status in {residual_signal, no_residual} + 残差IC表"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": "龙虎榜事件偏短线, r5/r20 都看。"
+      "passes": true,
+      "completed_at": "2026-06-06",
+      "notes": "裁决 residual_signal (本循环首个 go 信号, 打破 NET-002 + 此前 11 连否)。事件对齐 (每信号日 D+1 一横截面, 按月聚合跨 41 月 t 检验, 保功率 vs 月末对齐砍到零)。最强 sf_winrate_r5->fr5 扣[自身动量mom_5/20/60 + 市场beta]残差后 orth_full IC=+0.0547 |t|=8.58 (n=41月), 远过线 (需 |IC|>=0.02 & |t|>=3)。消融存活: sf_edge_r5->fr5 raw +0.0585 → 扣动量 +0.0542 → 扣市场 +0.0536 → 全扣 +0.0509 (仅小幅衰减, 非动量/市场换皮)。分 regime 全正且显著 (momentum t=5.77 / reversal t=5.85 / mixed t=6.72, SIGN-R11 不伤任何 regime)。零泄漏: label fr5/fr20 从信号日 t 起严格未来, 席位战绩时间维 loo 排当前事件。注 (SIGN-R03): IC 仅 go/no-go, 不等于落地; 最终只认 GATE-001 walk-forward α。产出 seat002_ic_table/panel/controls.parquet。→ 进 GATE-001 (SEAT 臂跑 walk-forward)。"
     },
     {
       "id": "GATE-001",
