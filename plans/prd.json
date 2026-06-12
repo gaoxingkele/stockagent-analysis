@@ -1,91 +1,95 @@
 {
   "repo": "gaoxingkele/stockagent-analysis",
-  "branchName": "research/seat-sleeve",
-  "northStar": "把已证真正交的龙虎榜席位印记(SEAT-002: 残差IC+0.0547 t8.58全regime, 但接V12.31 r20池walk-forward REJECT因载体错)做成正确载体=独立短线(r5)事件 sleeve: 仅龙虎榜上榜股D+1建仓、短持有、跟高战绩席位。核心是真实交易成本+容量 (短线高换手, 成本会吃掉大半) 和 净α是否扛得住。关键对照: 跟'高战绩席位' vs 跟'任意龙虎榜买入'(隔离席位技能 vs 龙虎榜效应)。生产线 V12.31 冻结, 本 sleeve 是独立 book。",
+  "branchName": "research/consolidation-base",
+  "northStar": "用户洞察: V12.31 偏好'下蹲后起跳'(past_r5<0), 但上涨前形态是一族(回调/宽幅横盘/微涨震荡/旗形三角楔形向上整理), 统一特征=上涨前 MA20 走平+收敛蓄势。系统只抓下蹲、漏掉横盘启动; 且第6铁律'横盘僵尸过滤'可能误杀好的蓄势基底。三问: ① MA20平/蓄势候选能否抓到past_r5≥0的横盘/三角启动(系统漏的)? ② 僵尸过滤是否误杀蓄势基底? ③ 扣现有形态因子(MA/ADX/布林/past_r5)后还有无独立 walk-forward α? 这是选择面细化(非被否的出场/择时overlay), 有公平胜算。生产线 V12.31 冻结。",
   "verifyCommand": "python research/verify.py",
   "acceptanceCriteria": [
     "python research/verify.py 退出码 0",
-    "每个非 skip task 产出工件 + research/verdicts/SL-00x.json",
-    "SL-003 walk-forward 决策 gate 已评估 (PASS/REJECT/真小)",
+    "每个非 skip task 产出工件 + research/verdicts/CB-00x.json (status+结论+命中分支)",
+    "CB-004 walk-forward gate 已评估 (PASS/真小/REJECT), 或 CB-003 无残差触发 precondition skip",
     "生产线指纹未变: v12_scoring.py 与生产模型 hash 与基线一致"
   ],
   "preRegisteredGate": {
     "frozen": true,
-    "note": "启动写死(R01); 分regime(R11); 消融(R12++); 单月outlier; 短线sleeve必含真实成本",
-    "cost_model": "round-trip ≈ 佣金双边 + 印花税0.05%(卖) + 滑点; 主测 15bps 单边(30bps往返), 敏感性 0/15/30bps",
+    "note": "启动写死(R01); 分regime(R11); 消融升级(R12++): 扣[价格动量 + 市场 + 现有形态因子(MA斜率/ADX/布林带宽/past_r5/rsi)]后仍存在",
+    "phase1_screen": "蓄势信号(MA20走平+收敛+量能) 对前向 r20/启动 的横截面残差 IC (扣 动量+市场+现有形态因子) |IC|>=0.02 且 |t|>=3 → residual_signal, 否则廉价 REJECT",
     "gate": [
-      "net-of-cost(主测30bps往返) 月化 α(sleeve − 等权市场) >= +0.50pp 且 |t|>=3 (≥30月 walk-forward, 事件对齐)",
-      "席位技能净增量: Arm_A(席位战绩排序) − Arm_B(同期龙虎榜动量/等权对照) > 0 显著 (隔离=不是只'买龙虎榜')",
-      "净 Sharpe >= 1.0; 单月outlier剔后净α仍>0; 分regime不集中于单一regime; 扣[动量+市场]存活",
-      "容量: 报告基于成交额的估算容量 (非硬gate但必须文档化; 若极小则标注)"
+      "Δα(蓄势候选臂 − V12.31 baseline) >= +0.30pp/月 walk-forward apples-to-apples",
+      "Sharpe/最差月不降; 单月outlier剔后Δα>0; 分regime不伤; 扣[动量+市场+现有形态因子]存活"
     ]
   },
   "responsePlaybook": {
     "note": "事前注册分叉 (冻结 R02)",
-    "SL-003": {
-      "PASS": "净α扛过成本+对照+outlier → SL-004 独立 sleeve 落地(日频输出)",
-      "真小": "净α>0 但 <+0.50pp 或 Sharpe<1 → 记 promising_sleeve 待优化(成本/选股/持有期), 不强上",
-      "REJECT_成本吃掉": "毛α>0 但 net≤0 → 文档化'信号真但成本不经济', 标注容量/换手",
-      "REJECT_龙虎榜效应": "Arm_A≈Arm_B → 不是席位技能, 是'买龙虎榜'本身(可能也无α) → 文档化",
-      "REJECT_负": "净α<0 → 干净 REJECT"
-    }
+    "CB-002_盲点": {"存在": "past_r5≥0 启动占比高且系统漏 → 验证盲点, 继续", "不存在": "启动几乎都来自下蹲 → 用户假设证伪, 文档化, CB-003/004 仍可测但先验降低"},
+    "CB-002_僵尸": {"误杀": "被is_zombie剔的票里蓄势基底假阴性率高 → 僵尸过滤需精炼", "无误杀": "僵尸过滤剔的确实是死横盘 → 不动它"},
+    "CB-003": {"residual_signal": "进 CB-004 walk-forward", "no_residual": "蓄势信号≈现有形态因子换皮, 廉价 REJECT 跳 gate"},
+    "CB-004": {"PASS": "改进v7c池构造落地", "真小(0~0.3)": "记 blend/候选不强上", "REJECT": "文档化, 生产线不动"}
   },
   "features": [
     {
-      "id": "SL-001",
-      "title": "r5 席位事件 sleeve 回测引擎 (D+1 建仓 + 席位战绩排序 + 成本 + 对照臂)",
+      "id": "CB-001",
+      "title": "蓄势候选特征构建 (MA20走平 + 收敛 + 量能) + 僵尸分解",
       "acceptanceCriteria": [
-        "事件驱动: 每日 D 龙虎榜净买入股 → D+1 开盘建仓, 持有 H=5 交易日, 按 sf_winrate_r5/sf_edge_r5 排序取 top-N (默认 N=10)",
-        "三臂 apples: Arm_A 席位战绩排序 / Arm_B 同期龙虎榜内动量排序(对照) / Arm_M 等权全龙虎榜(基线)",
-        "真实成本: round-trip 30bps (佣金+印花税0.05%卖+滑点), 计入每次建/平仓; D+1开盘价建仓 D+1+H开盘平仓",
-        "全因果(席位战绩 SEAT-001 已防泄漏, D+1 生效), ST排除; 落 research/cache/sl001_daily_pnl.parquet",
-        "research/verdicts/SL-001.json status=built + 三臂毛收益/换手率/平均持仓数"
+        "MA20走平: ma20_slope(过去N日MA20变化率), flatness=|ma20_slope|低; 收敛: 近20d振幅/布林带宽收窄(三角/楔量化); 量能: 缩量蓄势(近期量/均量)",
+        "基底类型标签 base_type ∈ {pullback(past_r5<0), flat_base(past_r5≈0 & MA20平), up_drift(微涨震荡), other}",
+        "僵尸分解: is_zombie 拆 '死横盘'(无量阴跌) vs '蓄势横盘'(缩量+收敛) 两类",
+        "全历史因果落盘 research/features/consolidation.parquet, ST排除, 零泄漏, 确定性自检; verdicts/CB-001.json status=built+分布"
       ],
       "priority": 1,
-      "passes": true,
-      "completed_at": "2026-06-06",
-      "notes": "正确载体: 短线r5事件sleeve, 非tilt r20池(GATE-001已证载体错)。复用 research/features/seat_footprint.parquet。引擎 research/sl001_sleeve_engine.py; 三臂初窥 Arm_A(席位)毛/笔-1.43% net-1.73% > Arm_B(动量)-2.47% (净增量+1.04pp) > Arm_M-1.82%; 全龙虎榜r5原始收益均为负(均值回归),裁决看SL-003市场相对净α; 年化换手≈50轮成本拖累≈15%/yr。"
+      "passes": false,
+      "notes": "复用 zombie_filter.py + daily cache OHLCV。MA20走平是用户核心洞察的量化。"
     },
     {
-      "id": "SL-002",
-      "title": "成本 × 持有期 × 容量 敏感性",
+      "id": "CB-002",
+      "title": "盲点 & 僵尸误杀 量化 (描述, 直答前两问)",
       "acceptanceCriteria": [
-        "成本档 0/15/30bps往返 × 持有期 H=3/5/10 网格, 报告 Arm_A 各组合 net 月化收益/Sharpe/换手",
-        "容量估算: 基于上榜股 D+1 成交额, 估 top-N 组合在不冲击假设下可容纳资金 (如 ≤当日成交额 1%)",
-        "research/verdicts/SL-002.json status=built + 敏感性表 + 容量估算"
+        "定义真启动=前向5日 max_gain>=10% & max_dd>=-5%(pump up口径); 启动股按启动前形态(下蹲/横盘/微涨/旗三角)分类",
+        "盲点: 真启动里 past_r5≥0(横盘/微涨基底)占比? V12.31 v7c池抓到/漏掉多少?",
+        "僵尸误杀: 被 is_zombie 剔除的票里, 后续真启动的'蓄势基底'假阴性率多少?",
+        "verdicts/CB-002.json: 命中 responsePlaybook CB-002_盲点/僵尸 分支 + 量化表"
       ],
       "priority": 2,
-      "passes": true,
-      "completed_at": "2026-06-06",
-      "notes": "引擎 research/sl002_sensitivity.py; 网格 research/cache/sl002_grid.parquet (9 cells cost{0,15,30}bps×H{3,5,10})。Arm_A net 全档为负 (龙虎榜净买入股 r5 原始均值回归, 同 SL-001), 非市场相对α — 净α/席位净增量裁决在 SL-003。主测 H=5/30bps: net/笔-1.726% 净月度-1.614% Sharpe(年)-1.87 年换手50.4轮成本拖累15.12%/yr。持有期↓换手↑成本拖累↑(H=3→84轮25.2%/yr); 成本0→30bps单调侵蚀。容量(≤成交额1%/等权): min-binding中位仅0.054亿元(p25 0.023/p75 0.131, 受当日最小成交额成分股约束=很小), sum松上界0.912亿元。容量小已文档化。"
+      "passes": false,
+      "notes": "纯描述(前向仅作outcome测量非特征, 零泄漏)。直接回答'盲点存在吗''僵尸误杀吗'。"
     },
     {
-      "id": "SL-003",
-      "title": "walk-forward 决策 gate (net-of-cost α + 席位技能净增量 + 消融)",
-      "isGate": true,
+      "id": "CB-003",
+      "title": "Phase-1 廉价筛查 (蓄势信号扣[动量+市场+现有形态因子]正交IC)",
       "acceptanceCriteria": [
-        "≥30月 walk-forward(事件对齐, 主测30bps往返/H=5): net 月化 α(Arm_A − 等权市场) + t, 分regime(R11)",
-        "席位技能净增量 Arm_A − Arm_B (vs 龙虎榜动量对照) + t; 扣[动量+市场]存活; 单月outlier剔除检验",
-        "断言 preRegisteredGate.gate (净α>=+0.50pp|t|>=3 且 Arm_A>Arm_B显著 且 Sharpe>=1 且 outlier/regime)",
-        "research/verdicts/SL-003.json: status in {PASS, 真小, REJECT_成本吃掉, REJECT_龙虎榜效应, REJECT_负} + metrics"
+        "≥36月横截面 rank-IC(蓄势信号 ma20_flat/收敛/量能, 前向r20), 扣[动量+市场+现有形态因子(MA斜率/ADX/布林/past_r5/rsi)]残差, 分regime",
+        "逐步消融定位(单扣各组); verdicts/CB-003.json: status in {residual_signal, no_residual} + 残差IC表",
+        "若 no_residual → CB-004 skip:true"
       ],
       "priority": 3,
-      "passes": true,
-      "completed_at": "2026-06-06",
-      "notes": "引擎 research/sl003_walkforward_gate.py; 逐月 research/cache/sl003_monthly.parquet (41月事件对齐 walk-forward, 主测 H=5/30bps往返)。裁决=REJECT_负: 净α(Arm_A net−等权全市场)=-2.006pp/月 t=-6.206 Sharpe-3.36 正月17.1% 最差月-5.54pp; 毛α也=-1.706pp t=-5.28 (非成本吃掉=本就负)。**但席位技能净增量 Arm_A−Arm_B(扣动量)=+1.020pp t=4.433 正月75.6% 显著为真** — 印证 SEAT-002 席位印记是真信号, 席位排序确实跑赢同集动量排序。问题是整个龙虎榜净买入股 r5 universe 相对等权市场是净输家(均值回归), 席位只是'最不差'。单月outlier剔(202410 +3.80pp)后净α-2.152pp 仍负; 三regime(mixed/momentum/reversal)净α全负不集中也无救。**信号真+载体仍错: 即便换成 r5 短线正确 horizon, 龙虎榜事件池本身就跑输市场。SL-004 保持 skip(仅PASS解除)。** playbook 分叉 REJECT_负(SIGN-R02 合法完成)。"
+      "passes": false,
+      "notes": "核心防自欺: 蓄势信号会不会被现有 MA/ADX/布林因子吃掉(换皮)。"
     },
     {
-      "id": "SL-004",
-      "title": "落地 (仅 SL-003=PASS): 独立 seat sleeve 日频输出",
+      "id": "CB-004",
+      "title": "walk-forward 决策 gate (蓄势候选池 / 放松僵尸过滤 vs V12.31)",
+      "isGate": true,
       "acceptanceCriteria": [
-        "建独立日频脚本: 当日龙虎榜 → D+1 跟高战绩席位 top-N 推荐 (独立于 V12.31, 不动生产线)",
-        "输出 output/seat_sleeve/YYYYMMDD.csv; research/verdicts/SL-004.json: status in {landed, skipped}"
+        "三臂 apples: baseline=V12.31现行池(下蹲偏好) / arm_flat=候选池纳入MA20平蓄势基底(past_r5≥0横盘启动) / arm_zombie=精炼僵尸过滤(区分蓄势vs死横盘)",
+        "19月 walk-forward, 断言 gate(Δα>=+0.30pp + Sharpe/最差月不降 + 单月outlier + 分regime + 扣现有形态因子存活)",
+        "verdicts/CB-004.json: status in {PASS, 真小, REJECT} + metrics(alpha_delta_pp/sharpe/worst_month/pos_alpha_month_ratio) + 三臂对照"
       ],
       "priority": 4,
       "passes": false,
+      "skip": false,
+      "notes": "playbook CB-004 分叉。回答第三问(扣形态因子后有无独立α)。REJECT 合法完成(R02)。"
+    },
+    {
+      "id": "CB-005",
+      "title": "落地 (仅 CB-004=PASS): 改进 v7c 池构造 opt-in",
+      "acceptanceCriteria": [
+        "opt-in 开关: v7c 候选池纳入蓄势基底 / 精炼僵尸过滤, 默认关; 默认生产路径逐位一致",
+        "verdicts/CB-005.json: status in {landed, skipped}"
+      ],
+      "priority": 5,
+      "passes": false,
       "skip": true,
-      "skipReason": "条件: 仅 SL-003=PASS 解除; 否则保持 skip 按 playbook 写。",
-      "notes": "独立 sleeve, 不接 v12_scoring, V12.31 冻结。"
+      "skipReason": "条件: 仅 CB-004=PASS 解除; 否则保持 skip。",
+      "notes": "未 PASS 不落地。"
     }
   ]
 }
