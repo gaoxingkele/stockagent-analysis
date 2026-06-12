@@ -21,7 +21,7 @@ V12.31 偏好"下蹲后起跳"(past_r5<0), 但**上涨前形态是一族**: 回�
 ## 任务台账
 | id | 任务 | 状态 | 裁决 |
 |----|------|------|------|
-| CB-001 | 蓄势候选特征(MA20走平+收敛+量能)+僵尸分解 | todo | — |
+| CB-001 | 蓄势候选特征(MA20走平+收敛+量能)+僵尸分解 | done | built (见迭代日志) |
 | CB-002 | 盲点 & 僵尸误杀 量化(直答前两问) | todo | — |
 | CB-003 | Phase-1 廉价筛查(扣现有形态因子正交IC) | todo | — |
 | CB-004 | walk-forward gate(蓄势候选/放松僵尸 三臂) | todo | — |
@@ -40,3 +40,9 @@ V12.31 偏好"下蹲后起跳"(past_r5<0), 但**上涨前形态是一族**: 回�
 ## 迭代日志
 <!-- 每轮 append -->
 - (init) 由 seat-sleeve 转入。用户洞察: 启动前形态一族(下蹲只是其一), MA20走平是统一特征; 疑僵尸过滤误杀蓄势基底。等待启动。
+- **CB-001 done** (2026-06-12): `research/cb001_build_consolidation.py` → `research/features/consolidation.parquet` (5.33M 行 × 17 列, 5439 股 / 1073 日 / 20220104~20260611)。
+  - 特征族 cs_*: MA20走平(cs_ma20_slope/absslope, |slope|<0.02 走平) + 收敛(cs_bw_squeeze/amp_squeeze, /60d基线<1) + 量能(cs_vol_ratio 5d/20d<1 缩量) + cs_past_r5(backward) + cs_is_consolidation(合成候选)。
+  - **base_type 分布**: pullback(下蹲) 27.9% / **flat_base(横盘) 17.5%** / **up_drift(微涨) 18.7%** / other 35.5% / na 0.5% → **非下蹲基底(flat+drift) 占 36%**, 初步支持"系统只抓下蹲会漏 1/3 候选"的盲点假设(CB-002 量化)。
+  - **僵尸分解**: cs_zombie 454k 拆 cs_zombie_coiling(蓄势横盘=收敛&缩量) 228k / cs_zombie_dead(阴跌死水) 226k → 僵尸里近半是收敛缩量的蓄势态, 第6铁律是否误杀待 CB-002 测假阴性率。
+  - 复用 src/.../zombie_filter.compute_zombie_factors; 确定性逐位比对 True; 全 backward 零泄漏(verify 0 violations); ST 源头排除 266 只。checkpoint: research/cache/cb001/。
+  - 下一步 **CB-002**: 定义真启动(前向5日 max_gain>=10% & dd>=-5%, 仅作 outcome 测量), 量化 past_r5≥0 启动占比 + V12.31 v7c 池抓到/漏掉 + 被 is_zombie 剔除票的蓄势基底假阴性率。命中 responsePlaybook 分支。

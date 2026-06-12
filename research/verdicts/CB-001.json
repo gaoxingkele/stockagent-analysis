@@ -1,0 +1,146 @@
+{
+  "task": "CB-001",
+  "status": "built",
+  "conclusion": "蓄势候选特征落盘 5,333,625 行 × 15 列 (20220104~20260611); base_type 占比 {'other': 0.3545, 'pullback': 0.2785, 'up_drift': 0.1874, 'flat_base': 0.1745, 'na': 0.0051}; 蓄势候选(cs_is_consolidation) 771,556 行 (14.5%); 僵尸 454,579 拆 蓄势横盘 228,346/死横盘 226,233 (蓄势占僵尸 50.2%); 确定性=True, 零泄漏(全 backward), ST 源头排除。",
+  "artifact": "research\\features\\consolidation.parquet",
+  "design": {
+    "ma20_flat": "cs_ma20_slope=MA20 过去10日变化率; |slope|<0.02 视为走平",
+    "convergence": "cs_bw_squeeze=布林带宽/60d基线, cs_amp_squeeze=20d振幅/60d基线, <1 收敛(三角/楔)",
+    "volume": "cs_vol_ratio=5d量/20d量 <1.0 缩量蓄势",
+    "base_type": {
+      "pullback": "past_r5<-0.03",
+      "flat_base": "|past_r5|<=0.03 & MA20平",
+      "up_drift": "0.03<past_r5<=0.1",
+      "other": "其余(已发动/未走平)"
+    },
+    "zombie_split": "cs_zombie_coiling=僵尸&收敛&缩量(蓄势疑误杀); cs_zombie_dead=僵尸&非蓄势(阴跌死水)"
+  },
+  "metrics": {
+    "rows": 5333625,
+    "n_stocks": 5439,
+    "n_dates": 1073,
+    "date_range": [
+      "20220104",
+      "20260611"
+    ],
+    "feature_cols": [
+      "cs_ma20_slope",
+      "cs_ma20_absslope",
+      "cs_boll_bw",
+      "cs_bw_squeeze",
+      "cs_amplitude20",
+      "cs_amp_squeeze",
+      "cs_vol_ratio",
+      "cs_vol_ratio60",
+      "cs_past_r5",
+      "cs_is_consolidation",
+      "cs_zombie",
+      "cs_zombie_ma60_slope",
+      "cs_zombie_coiling",
+      "cs_zombie_dead",
+      "base_type"
+    ],
+    "base_type_dist": {
+      "other": 1890637,
+      "pullback": 1485414,
+      "up_drift": 999572,
+      "flat_base": 930814,
+      "na": 27188
+    },
+    "base_type_frac": {
+      "other": 0.3545,
+      "pullback": 0.2785,
+      "up_drift": 0.1874,
+      "flat_base": 0.1745,
+      "na": 0.0051
+    },
+    "n_candidate": 771556,
+    "candidate_frac": 0.1447,
+    "n_zombie": 454579,
+    "n_zombie_coiling": 228346,
+    "n_zombie_dead": 226233,
+    "zombie_coiling_frac_of_zombie": 0.5023,
+    "dist": {
+      "cs_ma20_slope": {
+        "mean": 0.001624,
+        "std": 0.065136,
+        "p5": -0.086495,
+        "p50": -0.002925,
+        "p95": 0.104739,
+        "nonnull": 0.9756
+      },
+      "cs_ma20_absslope": {
+        "mean": 0.044406,
+        "std": 0.04768,
+        "p5": 0.002889,
+        "p50": 0.031878,
+        "p95": 0.126159,
+        "nonnull": 0.9756
+      },
+      "cs_boll_bw": {
+        "mean": 0.095509,
+        "std": 0.073071,
+        "p5": 0.028502,
+        "p50": 0.075915,
+        "p95": 0.226729,
+        "nonnull": 0.9857
+      },
+      "cs_bw_squeeze": {
+        "mean": 1.041949,
+        "std": 0.604389,
+        "p5": 0.400077,
+        "p50": 0.896046,
+        "p95": 2.173206,
+        "nonnull": 0.9563
+      },
+      "cs_amplitude20": {
+        "mean": 0.207117,
+        "std": 0.133179,
+        "p5": 0.071719,
+        "p50": 0.172727,
+        "p95": 0.458984,
+        "nonnull": 0.9857
+      },
+      "cs_amp_squeeze": {
+        "mean": 1.031434,
+        "std": 0.500242,
+        "p5": 0.466615,
+        "p50": 0.920695,
+        "p95": 1.969119,
+        "nonnull": 0.9563
+      },
+      "cs_vol_ratio": {
+        "mean": 1.010923,
+        "std": 0.378346,
+        "p5": 0.550238,
+        "p50": 0.938831,
+        "p95": 1.73524,
+        "nonnull": 0.9908
+      },
+      "cs_vol_ratio60": {
+        "mean": 1.014674,
+        "std": 0.361513,
+        "p5": 0.5276,
+        "p50": 0.957403,
+        "p95": 1.705315,
+        "nonnull": 0.9705
+      },
+      "cs_past_r5": {
+        "mean": 0.001865,
+        "std": 0.075601,
+        "p5": -0.098837,
+        "p50": -0.002648,
+        "p95": 0.117137,
+        "nonnull": 0.9949
+      }
+    },
+    "deterministic": true,
+    "leakage_free": true
+  },
+  "guardrails": [
+    "SIGN-R04 泄漏自查通过(全 backward)",
+    "SIGN-R06 ST 源头排除",
+    "SIGN-R08 panel checkpoint",
+    "确定性逐位比对"
+  ]
+}

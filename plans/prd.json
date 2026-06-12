@@ -36,8 +36,9 @@
         "全历史因果落盘 research/features/consolidation.parquet, ST排除, 零泄漏, 确定性自检; verdicts/CB-001.json status=built+分布"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "复用 zombie_filter.py + daily cache OHLCV。MA20走平是用户核心洞察的量化。"
+      "passes": true,
+      "completed_at": "2026-06-12",
+      "notes": "复用 zombie_filter.py + daily cache OHLCV。MA20走平是用户核心洞察的量化。built: 5.33M 行 5439 股 1073 日; flat_base 17.5%/up_drift 18.7% (非下蹲基底占 36%+); 候选 14.5%; 僵尸 454k 拆 蓄势横盘 228k/死横盘 226k; 确定性 True 零泄漏 ST 排除。"
     },
     {
       "id": "CB-002",
