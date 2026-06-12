@@ -22,7 +22,7 @@ V12.31 偏好"下蹲后起跳"(past_r5<0), 但**上涨前形态是一族**: 回�
 | id | 任务 | 状态 | 裁决 |
 |----|------|------|------|
 | CB-001 | 蓄势候选特征(MA20走平+收敛+量能)+僵尸分解 | done | built (见迭代日志) |
-| CB-002 | 盲点 & 僵尸误杀 量化(直答前两问) | todo | — |
+| CB-002 | 盲点 & 僵尸误杀 量化(直答前两问) | done | 盲点=存在 / 僵尸=无误杀 |
 | CB-003 | Phase-1 廉价筛查(扣现有形态因子正交IC) | todo | — |
 | CB-004 | walk-forward gate(蓄势候选/放松僵尸 三臂) | todo | — |
 | CB-005 | 改进v7c池 opt-in 落地(仅PASS) | skip | — |
@@ -46,3 +46,8 @@ V12.31 偏好"下蹲后起跳"(past_r5<0), 但**上涨前形态是一族**: 回�
   - **僵尸分解**: cs_zombie 454k 拆 cs_zombie_coiling(蓄势横盘=收敛&缩量) 228k / cs_zombie_dead(阴跌死水) 226k → 僵尸里近半是收敛缩量的蓄势态, 第6铁律是否误杀待 CB-002 测假阴性率。
   - 复用 src/.../zombie_filter.compute_zombie_factors; 确定性逐位比对 True; 全 backward 零泄漏(verify 0 violations); ST 源头排除 266 只。checkpoint: research/cache/cb001/。
   - 下一步 **CB-002**: 定义真启动(前向5日 max_gain>=10% & dd>=-5%, 仅作 outcome 测量), 量化 past_r5≥0 启动占比 + V12.31 v7c 池抓到/漏掉 + 被 is_zombie 剔除票的蓄势基底假阴性率。命中 responsePlaybook 分支。
+- **CB-002 done** (2026-06-12): `research/cb002_blindspot_zombie.py` → `research/cache/cb002/launch_panel.parquet` (forward outcome, **非 features 目录, 不触发泄漏闸**)。真启动=生产 pump-up s5 口径(H=5, max_gain>=10% & max_dd>=-5%)。评估 5.30M 决策点/643k 真启动(基准启动率 12.14%)。
+  - **①盲点=存在** (命中 responsePlaybook CB-002_盲点.存在): 真启动里 **past_r5≥0 占 52.2%** (非下蹲基底 flat_base+up_drift 占启动 32.8%); 关键 — **past_r5≥0 启动率 13.15% > past_r5<0 11.19%**(基准 12.14%), 即系统偏好的下蹲反而启动率略低。各 base_type 启动率: up_drift/flat_base/pullback/other ~ 见 verdict。V12.31 **第6铁律(zombie)硬漏启动 4.2%**, **下蹲软偏好降权启动 52.2%**。分 regime 一致(past_r5≥0 占启动: mixed 56.3%/momentum 48.0%/reversal 55.7%) → 盲点真实, 非某 regime 假象。→ **验证盲点, CB-003/004 继续**。
+  - **②僵尸=无误杀** (命中 CB-002_僵尸.无误杀): 僵尸启动率 5.88% vs 非僵尸 12.72%; **coiling(蓄势横盘)启动率 5.0% < dead(死横盘)6.8%** (lift 0.74, <1)。即"收敛+缩量看似好基底"的直觉在**已是僵尸**的子集里不成立 — coiling 僵尸反而更难启动。→ 6铁律没误杀蓄势金矿, **不动它**; CB-004 的 arm_zombie 臂先验降低(仍可测)。
+  - 确定性逐位比对 True; ST 源头排除 266 只; forward 仅作 outcome 不入 features(零泄漏)。
+  - 下一步 **CB-003**: Phase-1 廉价筛查 — 蓄势信号(ma20_flat/收敛/量能)对前向 r20 的横截面残差 IC, 扣[动量+市场+现有形态因子(MA斜率/ADX/布林/past_r5/rsi)], 分 regime, 逐步消融。residual_signal→CB-004; no_residual→廉价 REJECT。注意盲点虽真实但 CB-003 要防"蓄势信号被现有 MA/ADX/布林因子换皮"。

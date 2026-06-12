@@ -50,8 +50,9 @@
         "verdicts/CB-002.json: 命中 responsePlaybook CB-002_盲点/僵尸 分支 + 量化表"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "纯描述(前向仅作outcome测量非特征, 零泄漏)。直接回答'盲点存在吗''僵尸误杀吗'。"
+      "passes": true,
+      "completed_at": "2026-06-12",
+      "notes": "纯描述(前向仅作outcome测量非特征, 零泄漏)。直接回答'盲点存在吗''僵尸误杀吗'。measured: 评估 5.30M 决策点/643k 真启动(率12.14%)。①盲点=存在: 真启动里 past_r5≥0 占 52.2%(非下蹲 flat+drift 占 32.8%), 且 past_r5≥0 启动率 13.15% > past_r5<0 11.19% → 系统下蹲软偏好系统性漏掉过半且更高率的横盘/微涨启动(全 regime 一致 48~56%); V12.31 第6铁律硬漏启动 4.2%, 下蹲偏好软降权 52.2% → CB-003/004 继续。②僵尸=无误杀: coiling(蓄势横盘)启动率 5.0% < dead(死横盘)6.8% < 全样本 12.1%(lift 0.74) → 僵尸里蓄势子类并非被误杀的金矿, 6铁律不动它。脚本 research/cb002_blindspot_zombie.py; outcome research/cache/cb002/launch_panel.parquet(非features目录)。"
     },
     {
       "id": "CB-003",

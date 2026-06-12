@@ -1,0 +1,114 @@
+{
+  "id": "CB-002",
+  "status": "measured",
+  "conclusion": "① 盲点[存在]: 真启动里 past_r5≥0 占 52.2% (非下蹲基底 flat+drift 占启动 32.8%); past_r5≥0 启动率 13.149% vs past_r5<0 11.192% (基准 12.136%); V12.31 第6铁律硬漏启动 4.2%, 下蹲软偏好降权启动 52.2%。 ② 僵尸误杀[无误杀]: 僵尸启动率 5.875% vs 非僵尸 12.723%; 蓄势横盘(coiling) 启动率 4.999% vs 死横盘(dead) 6.760% (lift 0.74); 僵尸里真启动 26,702 个, 蓄势基底占 42.7%。",
+  "playbook": {
+    "CB-002_盲点": "存在",
+    "盲点_note": "past_r5≥0 横盘/微涨启动占比高且启动率不输下蹲 → 验证盲点, CB-003/004 继续。",
+    "CB-002_僵尸": "无误杀",
+    "僵尸_note": "僵尸过滤剔的确实更接近死横盘(coiling 不比 dead 明显更易启动) → 6铁律不动它。"
+  },
+  "launch_def": {
+    "horizon_days": 5,
+    "gain_threshold": 0.1,
+    "max_dd_cap": 0.05,
+    "note": "= 生产 pump-up s5 口径 (t004 build_label up 分支); forward-only outcome, 不入 features"
+  },
+  "interpret_thresholds": {
+    "blindspot_share_hi": 0.3,
+    "coiling_lift_hi": 1.2,
+    "note": "描述性解释阈, 非 gate; ship 由 CB-004 walk-forward 定 (SIGN-R03)"
+  },
+  "metrics": {
+    "universe": {
+      "n_decision_points": 5301002,
+      "n_launch": 643319,
+      "base_launch_rate": 0.12136,
+      "date_range": [
+        "20220111",
+        "20260610"
+      ]
+    },
+    "blindspot": {
+      "base_type_frac_all": {
+        "other": 0.3564,
+        "pullback": 0.2796,
+        "up_drift": 0.1885,
+        "flat_base": 0.1756
+      },
+      "base_type_frac_in_launch": {
+        "other": 0.3689,
+        "pullback": 0.3026,
+        "up_drift": 0.2245,
+        "flat_base": 0.104
+      },
+      "launch_rate_by_base_type": {
+        "up_drift": 0.14457,
+        "other": 0.12562,
+        "pullback": 0.13136,
+        "flat_base": 0.07186
+      },
+      "share_past_r5_ge0_in_launch": 0.5224,
+      "share_nonsquat_in_launch": 0.3285,
+      "launch_rate_past_r5_ge0": 0.13149,
+      "launch_rate_past_r5_lt0": 0.11192,
+      "v1231_hard_miss_zombie_share_in_launch": 0.0415,
+      "v1231_soft_deprior_share_in_launch": 0.5224,
+      "by_regime": {
+        "mixed": {
+          "n_launch": 107928,
+          "share_past_r5_ge0_in_launch": 0.5634,
+          "share_nonsquat_in_launch": 0.3816,
+          "launch_rate": 0.15779
+        },
+        "momentum": {
+          "n_launch": 142544,
+          "share_past_r5_ge0_in_launch": 0.4798,
+          "share_nonsquat_in_launch": 0.3065,
+          "launch_rate": 0.11675
+        },
+        "reversal": {
+          "n_launch": 258879,
+          "share_past_r5_ge0_in_launch": 0.5565,
+          "share_nonsquat_in_launch": 0.3389,
+          "launch_rate": 0.11364
+        }
+      }
+    },
+    "zombie_misskill": {
+      "zombie_launch_rate": 0.05875,
+      "nonzombie_launch_rate": 0.12723,
+      "coiling_launch_rate": 0.04999,
+      "dead_launch_rate": 0.0676,
+      "coiling_vs_dead_lift": 0.74,
+      "n_zombie_launch": 26702,
+      "n_coiling_launch": 11413,
+      "fn_share_coiling_in_zombie_launch": 0.4274,
+      "by_regime": {
+        "mixed": {
+          "coiling_launch_rate": 0.08497,
+          "dead_launch_rate": 0.10164
+        },
+        "momentum": {
+          "coiling_launch_rate": 0.04286,
+          "dead_launch_rate": 0.05801
+        },
+        "reversal": {
+          "coiling_launch_rate": 0.04299,
+          "dead_launch_rate": 0.06455
+        }
+      }
+    },
+    "deterministic": true,
+    "leakage_free": true,
+    "st_excluded": 266
+  },
+  "artifact": "research\\cache\\cb002\\launch_panel.parquet",
+  "guardrails": [
+    "SIGN-R04 forward 仅 outcome 不入 features (零泄漏)",
+    "SIGN-R06 ST 源头排除",
+    "SIGN-R08 launch_panel checkpoint",
+    "SIGN-R11 盲点/僵尸启动率分 regime",
+    "确定性逐位比对"
+  ]
+}
