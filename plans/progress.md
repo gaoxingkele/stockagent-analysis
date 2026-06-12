@@ -23,8 +23,8 @@ V12.31 偏好"下蹲后起跳"(past_r5<0), 但**上涨前形态是一族**: 回�
 |----|------|------|------|
 | CB-001 | 蓄势候选特征(MA20走平+收敛+量能)+僵尸分解 | done | built (见迭代日志) |
 | CB-002 | 盲点 & 僵尸误杀 量化(直答前两问) | done | 盲点=存在 / 僵尸=无误杀 |
-| CB-003 | Phase-1 廉价筛查(扣现有形态因子正交IC) | todo | — |
-| CB-004 | walk-forward gate(蓄势候选/放松僵尸 三臂) | todo | — |
+| CB-003 | Phase-1 廉价筛查(扣现有形态因子正交IC) | done | no_residual (蓄势信号被现有 TA 吸收, 换皮) |
+| CB-004 | walk-forward gate(蓄势候选/放松僵尸 三臂) | skip | precondition skip (CB-003 no_residual) |
 | CB-005 | 改进v7c池 opt-in 落地(仅PASS) | skip | — |
 
 ## 已有资产
@@ -51,3 +51,11 @@ V12.31 偏好"下蹲后起跳"(past_r5<0), 但**上涨前形态是一族**: 回�
   - **②僵尸=无误杀** (命中 CB-002_僵尸.无误杀): 僵尸启动率 5.88% vs 非僵尸 12.72%; **coiling(蓄势横盘)启动率 5.0% < dead(死横盘)6.8%** (lift 0.74, <1)。即"收敛+缩量看似好基底"的直觉在**已是僵尸**的子集里不成立 — coiling 僵尸反而更难启动。→ 6铁律没误杀蓄势金矿, **不动它**; CB-004 的 arm_zombie 臂先验降低(仍可测)。
   - 确定性逐位比对 True; ST 源头排除 266 只; forward 仅作 outcome 不入 features(零泄漏)。
   - 下一步 **CB-003**: Phase-1 廉价筛查 — 蓄势信号(ma20_flat/收敛/量能)对前向 r20 的横截面残差 IC, 扣[动量+市场+现有形态因子(MA斜率/ADX/布林/past_r5/rsi)], 分 regime, 逐步消融。residual_signal→CB-004; no_residual→廉价 REJECT。注意盲点虽真实但 CB-003 要防"蓄势信号被现有 MA/ADX/布林因子换皮"。
+- **CB-003 done = no_residual** (2026-06-12): `research/cb003_phase1_screen.py` → `research/cache/cb003/` (controls_monthend.parquet + ic_table.parquet; **forward fr20 仅 cache 不进 features**)。月末 rebalance 54月/268k 决策点, 5439 股。新算控制: ADX(14)/RSI(14) Wilder + mom_5/20/60 + 等权市场 beta; PATTERN 里 MA斜率/布林带宽/past_r5 复用 CB-001 cs_*。
+  - **裁决 no_residual** (命中 playbook CB-003.no_residual): 最强蓄势信号 s_bw_squeeze orth_full(扣[动量+市场+MA斜率/ADX/布林/past_r5/RSI]) IC=**-0.0273 |t|=2.53** < 阈(|IC|≥0.02 & |t|≥3)。
+  - **逐步消融定位换皮**: s_coil(合成蓄势强度) raw IC=+0.0301(t2.26) → 扣动量 +0.016 → 扣市场 +0.038 → **单扣形态因子即翻负 -0.019** → 全扣 -0.011。即蓄势信号的正向 IC 主要靠"低动量+收敛"这些被现有 MA斜率/ADX/布林/past_r5 标准 TA **完全吸收**, 扣掉后不仅归零还反向 → 纯换皮。唯一扛住 minus_pattern 的 s_vol_shrink(缩量) 全扣后也仅 +0.0132/t1.89, 不过线。
+  - **关键澄清**: 与 CB-002 盲点真实(past_r5≥0 启动被系统漏)**不矛盾** — 盲点='系统漏掉这族启动'(选择面问题), CB-003='蓄势特征是否提供超越现有因子的增量预测'(因子正交性问题), 二者独立。盲点真实但**用蓄势信号去补这个盲点≈用现有 TA 因子换个名字**, 无增量 alpha。
+  - **元观察**: 这是本研究序列第 N 次"价格再编码归约为 V12.31 已有标准 TA"(见 memory project_relation_tensor_reject_0604 元观察)。MA20走平+收敛+缩量本质就是 低|MA斜率|+低布林带宽+低量比, 这些早已是标准 TA 控制项。V12.31 在价量空间是强局部最优, 蓄势形态没逃出这个空间。
+  - **CB-004 自动 skip** (脚本写 prd.json skip=true): no_residual 触发 precondition skip, 不跑 walk-forward (SIGN-R03 中间指标不落地 + SIGN-R12++ 消融闸 + playbook CB-003 分叉)。
+  - 确定性: 复用 CB-001/CB-002 同源 daily; ST 源头排除 266 只; fr20 forward 仅 outcome。checkpoint research/cache/cb003/。
+  - **整轮收尾**: CB-001(built)/CB-002(盲点真+僵尸无误杀)/CB-003(no_residual)/CB-004(skip)/CB-005(skip)。北极星三问已答: ①盲点存在 ②僵尸无误杀 ③扣现有形态因子后无独立 α(蓄势信号换皮)。生产线 V12.31 冻结未动。

@@ -20,10 +20,23 @@
   },
   "responsePlaybook": {
     "note": "事前注册分叉 (冻结 R02)",
-    "CB-002_盲点": {"存在": "past_r5≥0 启动占比高且系统漏 → 验证盲点, 继续", "不存在": "启动几乎都来自下蹲 → 用户假设证伪, 文档化, CB-003/004 仍可测但先验降低"},
-    "CB-002_僵尸": {"误杀": "被is_zombie剔的票里蓄势基底假阴性率高 → 僵尸过滤需精炼", "无误杀": "僵尸过滤剔的确实是死横盘 → 不动它"},
-    "CB-003": {"residual_signal": "进 CB-004 walk-forward", "no_residual": "蓄势信号≈现有形态因子换皮, 廉价 REJECT 跳 gate"},
-    "CB-004": {"PASS": "改进v7c池构造落地", "真小(0~0.3)": "记 blend/候选不强上", "REJECT": "文档化, 生产线不动"}
+    "CB-002_盲点": {
+      "存在": "past_r5≥0 启动占比高且系统漏 → 验证盲点, 继续",
+      "不存在": "启动几乎都来自下蹲 → 用户假设证伪, 文档化, CB-003/004 仍可测但先验降低"
+    },
+    "CB-002_僵尸": {
+      "误杀": "被is_zombie剔的票里蓄势基底假阴性率高 → 僵尸过滤需精炼",
+      "无误杀": "僵尸过滤剔的确实是死横盘 → 不动它"
+    },
+    "CB-003": {
+      "residual_signal": "进 CB-004 walk-forward",
+      "no_residual": "蓄势信号≈现有形态因子换皮, 廉价 REJECT 跳 gate"
+    },
+    "CB-004": {
+      "PASS": "改进v7c池构造落地",
+      "真小(0~0.3)": "记 blend/候选不强上",
+      "REJECT": "文档化, 生产线不动"
+    }
   },
   "features": [
     {
@@ -63,8 +76,9 @@
         "若 no_residual → CB-004 skip:true"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "核心防自欺: 蓄势信号会不会被现有 MA/ADX/布林因子吃掉(换皮)。"
+      "passes": true,
+      "completed_at": "2026-06-12",
+      "notes": "核心防自欺: 蓄势信号会不会被现有 MA/ADX/布林因子吃掉(换皮)。screened: 月末 rebalance 54月/268k 决策点; 最强蓄势信号 s_bw_squeeze orth_full(扣[动量+市场+MA斜率/ADX/布林/past_r5/RSI]) IC=-0.0273 |t|=2.53 < 阈(|IC|≥0.02 & |t|≥3) → no_residual。逐步消融定位: s_coil raw IC=+0.030(t2.26) → 单扣形态因子即翻负 -0.019 → 全扣 -0.011; 唯一扛 minus_pattern 的 s_vol_shrink 全扣后也仅 +0.013/t1.89 不过线。蓄势信号(MA20走平+收敛+缩量)对 r20 预测力被现有标准 TA 吸收(≈换皮), 无独立残差 → 廉价 REJECT, CB-004 precondition skip。与 CB-002 盲点真实性不矛盾(盲点=系统漏这族启动; 本任务=蓄势特征是否提供超越现有因子的增量, 二者独立)。脚本 research/cb003_phase1_screen.py; 工件 research/cache/cb003/。"
     },
     {
       "id": "CB-004",
@@ -77,8 +91,9 @@
       ],
       "priority": 4,
       "passes": false,
-      "skip": false,
-      "notes": "playbook CB-004 分叉。回答第三问(扣形态因子后有无独立α)。REJECT 合法完成(R02)。"
+      "skip": true,
+      "notes": "playbook CB-004 分叉。回答第三问(扣形态因子后有无独立α)。REJECT 合法完成(R02)。",
+      "skipReason": "CB-003=no_residual: 蓄势信号扣[动量+市场+现有形态因子]无残差(换皮), precondition skip (playbook CB-003 分叉)。"
     },
     {
       "id": "CB-005",
