@@ -395,3 +395,42 @@ MOMENTUM(分散闸否)+ BASE(blend 无 α 否)→ **回到单 sleeve 是结论**
 **生产线 V12.31 全程冻结 (verify.py 指纹校验 17 轮全过)。** 三原型 sleeve arc 正式结案 = V12.31 单 sleeve 再获验证。
 关联记忆: `[[project_sleeves_phase0_priors_reversed_0613]]` · `[[project_sleeves_phase1_base_reject_forward_conditioned_0613]]`。
 > 分支存档: research/sleeves(本地全历史)。设计 research/sleeves/DESIGN.md; 裁决 verdicts/{SLV,BL}-00x.json。
+
+---
+
+## 12. Part IX — duokongK 多空K线作 onset 标注维度 (实验 18, 2026-06-14 追加)
+
+用户提供 TradingView `多空K线` Pine 脚本(duokongK = 唐奇安30突破 + 摆动反转状态机), 提议**把它当独立标注维度**, 定义
+「空腿底部确认(pivot 右5根)+ 空翻多变色窗口(≥3根)」作 onset 择时, 问相对 V12.31 已有的 SQUAT(past_r5<0 反弹)是否多了信息。
+全量验证(描述统计 + 残差消融, 非建 sleeve)。
+
+| 任务 | 内容 | 结果 |
+|---|---|---|
+| DK-001 | 状态机全因果移植 + 全量序列 | 4.22M 行 / 5397 股, 0 泄漏, 翻转 12.7万次, 段长中位 17 根 |
+| DK-002 | 底部确认翻多窗口 + 前向画像 | 51,063 窗口; **含启动子 67.3%** 但前向 40d **大涨仅 17.5% / 横盘+失败 65%** |
+| DK-003 | 与 SQUAT 重叠 + 残差消融 (gate) | **REJECT_reskin** (见 ★) |
+
+### ★ DK-003 = REJECT_reskin, 且揭一个反直觉点
+
+- **重叠**: 窗口含 SQUAT launch 28.3%, onset(±5d)匹配 12.5%, Jaccard 0.12 (中度重叠)。
+- **raw IC 是负的**: dk_long_fresh r40 raw RankIC −0.044(t −14.8), rev_strength −0.084 —— **A股均值回归签名: 「确认翻多/强反转向上」反而预测后续下跌**, 与用户「翻多→大涨」直觉**恰好相反**。
+- **残差≈0**: gate 信号扣 [past_r5+pyr_velocity+ADX+RSI] 正交化后残差 r40 IC = **−0.0005(t −0.22)** → 被标准动量/RSI 完全吃掉。
+- **SQUAT 外窗口不兑现**: V12.31 未框的 35,098 窗口前向 40d 大涨仅 16.9% / 失败 35.2% (out_realizes=False)。
+
+**三重否**: ① 换皮(结构反转确认被现有 TA 完全吸收, 同 CB-003/梅花/关系张量); ② 不预测大涨(只 17.5%, 65% 横盘/失败); ③ 方向还反(A股确认翻多 = 均值回归卖出尾)。
+
+### Part IX 结论 — 标注合法, 但无独立 alpha
+
+用户直觉有**一粒真**(67% 窗口确含 onset), 但作可交易 edge 全否。**duokongK 作"因果分段标注维度"是合法且零泄漏的 —— 这一点用户原想法成立**;
+其价值在 **paper 的 movement-onset 因果 episode 分段方法**(变长段标注 vs 我们的逐点 label), **非生产信号**。生产线 V12.31 冻结指纹未变(第 18 轮)。
+关联记忆: `[[project_duokongk_reskin_reject_0614]]`。
+> 分支存档: research/duokongk(本地全历史)。移植规范+窗口定义 research/duokongk/NOTES.md; 裁决 verdicts/DK-00x.json。
+
+---
+
+## 13. 18 实验总账 (截至 2026-06-14)
+
+价量 8 + 正交 4 + label/形态 3(pump-debias/consolidation/sleeve)+ sleeve arc 2 + duokongK 1 ≈ **18 个假设全程严格证伪**, 生产线 V12.31 一字未改。
+**唯一真信号**仍是龙虎榜席位(实验 13, 真但 long-only 不可落地)。**反过拟合脚手架 18 轮 0 次 p-hack**, 拦下 3+ 次会主动亏钱的修复 + 多次自欺伪信号。
+**方法论 paper 素材**: ①反过拟合脚手架 ②横截面分位审计 ③升级消融+短窗功率+循环防护 ④"信号真≠能赚钱"(席位) ⑤"盲点真实≠修了划算"(past_r5偏好) ⑥forward-conditioned 画像陷阱(sleeve)⑦因果 episode 分段标注(duokongK)。
+**元结论**: V12.31 是手上即时可拉信号(价量/基本面/事件/结构/行为/形态/标注)的**强局部最优**; 增量须找真正交信息(另类数据)或转向运营/实盘复检, 而非再挖价量。
