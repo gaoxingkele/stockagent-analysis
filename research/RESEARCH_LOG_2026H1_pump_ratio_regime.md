@@ -355,3 +355,43 @@
 **生产线 V12.31 全程冻结未动 (verify.py 指纹校验 15 轮全过)。** Standing plan 不变: 7 月初实盘血洗窗满 20 日复检; debias pump 记 blend 候选; 方法论 paper 素材完备。
 
 > 追加分支存档: research/{consolidation-base, pump-debias}(本地全历史; 因循环误提 475MB 缓存 parquet 超 GitHub 限, 完整代码+裁决以本日志 + verdicts/{CB,PL}-00x.json + memory 形式归档)。关联记忆: `[[project_consolidation_base_blindspot_confirmed_0612]]` · `[[project_pump_debias_bias_is_feature_0612]]` · `[[feedback_train_label_over_inference_hack]]`。
+
+---
+
+## 11. Part VIII — 三原型 Sleeve 架构 (实验 16–17, 2026-06-13 追加)
+
+承用户洞察「上涨前形态是一族」+ 实验 15「偏好是 feature」, 提出**按启动原型拆 sleeve**: 不再用一个 ratio 评分服务全部,
+而是 SQUAT(深蹲)/ BASE(横盘蓄势)/ MOMENTUM(动量延续)各自 detector + 各自风控, book 层合并。
+设计 `research/sleeves/DESIGN.md`。两个 ralph Phase 把它**完整证伪**, 而且揭穿了一个 forward-conditioned 陷阱。
+
+| Phase | 实验 | 结果 | 机理 |
+|---|---|---|---|
+| 0 (零训练筛查) | 16 路由器+机会量化+动量分散闸 | **MOMENTUM sleeve 砍** | 分散闸 corr(SQUAT,MOM)=0.59≥0.3 REJECT; 且**先验全反转**(见下) |
+| 1 (BASE sleeve) | 17 BASE detector + blend walk-forward | **BASE sleeve 砍 (Δα −1.03pp)** | premium 是 forward 假象 + quota 挤掉高α top-SQUAT(见下 ★) |
+
+### Phase 0 — 质量先验被数据全反转 (SLV-001/002/003)
+
+零训练描述统计 (4.19M stock-day) 把 DESIGN §3 的先验几乎全推翻, 诚实记录:
+- 桶内启动率: **MOMENTUM 0.206(1.69×) > SQUAT 0.151 > BASE 0.063(0.515×, 反低于市场)** —— 教科书"严格横盘蓄势"其实**很少**启动。
+- 质量画像 (20d, **4 项先验全 False**): **BASE 最高**(μ+0.151/胜率0.829/尾最薄) > SQUAT > **MOMENTUM 最差**(力竭肥尾, 印证动量裸 α 已 price-in)。
+- 动量分散闸 corr 0.59 → 砍 MOMENTUM(caveat: 动量态 corr 仅 0.069, 留作 regime overlay 非独立 sleeve)。
+→ 三 sleeve 收窄为**双 sleeve (SQUAT + BASE)**, BASE 重定位为「罕见但最干净的突破」。
+
+### ★ Phase 1 — BASE sleeve REJECT, 且揭穿 forward-conditioned 幸存者偏差 (本 arc 最大收获)
+
+- **SLV-002 的「BASE 质量最高 / 尾最薄(dd −0.075)」是条件 `is_launch`(forward)的画像** —— 描述的是**成功之后的那批**, 非 ex-ante 可交易属性。
+- BL-001/002 建真实 ex-ante 入场规则后: 加突破确认+紧 dd label → **紧尾正例仅 445 个**(训不了 v2); 真实 base_entry 群体 **dd20_p10 ≈ −0.14(和市场一样肥), premium ex-ante 蒸发**; v1 规则分数弱且**排不掉假突破**(各分位 dd ≈ −0.14 持平)。
+- **BL-003 blend gate = REJECT_no_alpha**: ArmA(SQUAT/V12.31) α +3.746pp Sh 4.00 → ArmB(squat+base) α +2.715pp Sh 2.89, **Δα −1.031pp/月 Sharpe −1.1**, 三 regime 全负, 单月剔后仍负。worst_month 小改善(−0.202→−0.086 印证 BASE 略低尾)但**用 −1.03 α 换那点尾 = 坏交易**。
+- **双重根因**: ① premium 是 forward 假象, ex-ante 不更干净 + 样本太小训不出选择器; ② **quota 强制挤掉高 α 的 top-SQUAT 头部** —— V12.31 头部太强(+3.75pp/月), 任何「够好但非顶尖」sleeve 按配额硬塞都稀释(**再证「bias is a feature」/ 选择性即 edge**)。
+
+### Part VIII 结论 — 三 sleeve 架构全否, 单 sleeve V12.31 才是对的
+
+用户「上涨前形态是一族」的洞察**统计上真实**, 但做成可交易 sleeve 时**要么是幸存者偏差(BASE premium ex-ante 蒸发)、要么斗不过 V12.31 头部的选择性(quota 稀释)**。
+MOMENTUM(分散闸否)+ BASE(blend 无 α 否)→ **回到单 sleeve 是结论**。
+
+**方法论价值再 +1 条**(论文素材):
+6. **forward-conditioned 画像陷阱**: 按"成功样本(`is_launch`)"算的桶质量画像会**系统性高估 ex-ante 可交易性**(SLV-002 dd −0.075 vs 真实入场 −0.14)。中间描述统计再漂亮, 唯有**真实 ex-ante 入场规则 + walk-forward gate** 能定真伪 —— 与 R03(中间指标≠落地)同源, 是其在"幸存者偏差"维度的具体化。
+
+**生产线 V12.31 全程冻结 (verify.py 指纹校验 17 轮全过)。** 三原型 sleeve arc 正式结案 = V12.31 单 sleeve 再获验证。
+关联记忆: `[[project_sleeves_phase0_priors_reversed_0613]]` · `[[project_sleeves_phase1_base_reject_forward_conditioned_0613]]`。
+> 分支存档: research/sleeves(本地全历史)。设计 research/sleeves/DESIGN.md; 裁决 verdicts/{SLV,BL}-00x.json。
