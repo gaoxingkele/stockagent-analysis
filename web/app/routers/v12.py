@@ -31,6 +31,25 @@ async def list_dates(user: Annotated[User, Depends(get_current_user)]):
     return V12DatesResponse(dates=dates, latest=dates[-1] if dates else None)
 
 
+@router.get("/pool-dates")
+async def list_pool_dates(user: Annotated[User, Depends(get_current_user)]):
+    """有四池看板数据的日期 (output/daily_pick/dashboard_*)."""
+    dates = v12_service.list_pool_dates()
+    return {"dates": dates, "latest": dates[-1] if dates else None}
+
+
+@router.get("/pools")
+async def get_pools(
+    user: Annotated[User, Depends(get_current_user)],
+    date: str = Query(..., pattern=r"^\d{8}$"),
+):
+    """四池看板: A系统推荐 / B自选 / C基金重仓 / D追高动量 (读 daily_dashboard 产出)."""
+    data = v12_service.read_four_pools(date)
+    if not data["exists"]:
+        raise HTTPException(404, f"{date} 无四池数据 - 请先跑全市场推理生成四池看板")
+    return data
+
+
 @router.get("/recommend", response_model=V12RecommendResponse)
 async def get_recommend(
     user: Annotated[User, Depends(get_current_user)],

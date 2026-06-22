@@ -1,0 +1,53 @@
+{
+  "id": "WFE-001",
+  "status": "built",
+  "conclusion": "WFE-001 = WF-001 + label-availability embargo (训练截止收紧到 P_start - 21 交易日, 保证训练样本 r20 前向20日标签在预测前已全部可知; codex 第二次 review 抓到 WF-001 仍按特征日<train_end 切, 近截止样本标签延伸进预测月)。embargo 后**真·真实可交易**: 年化 +34.9% 净Sharpe +1.31 maxDD -15.7% 月换手 1.52 月胜率 70%。vs WF-001 无embargo版 (年化 +65.9% Sharpe +1.84): **额外缩水 ΔSharpe -0.53 / Δ年化 -31.1%** (label embargo 再削掉 WF-001 残留的近截止泄漏)。vs BT-002 注水版 (Sharpe +2.78): 累计缩水 ΔSharpe -1.47 / Δ年化 -105.7%。基准: hs300 Sharpe +0.46 / CSI1000 +0.81 / 动量 +0.51 (仍跑赢全基准)。因果自检: embargo 后 WF r20 IC 全期 +0.0979 vs WF-001 无embargo +0.1007 (变化 -0.0028)。playbook 命中 [embargo后大缩]: embargo 再削大块 → 真实优势比 WF-001 想象更小, 实盘预期再下修 (WFE-002 须基于这批 embargo picks)。 注: 这是 label embargo 后的真·真实可交易地基, 替代 WF-001 的 1.84 (相对 Δ/受控对照结论不受影响)。",
+  "metrics": {
+    "embargo_ann_return": 0.3486,
+    "embargo_net_sharpe": 1.306,
+    "embargo_max_drawdown": -0.1569,
+    "embargo_avg_monthly_turnover": 1.524,
+    "embargo_monthly_win_rate": 0.7,
+    "wf001_no_embargo_sharpe": 1.838,
+    "wf001_no_embargo_ann_return": 0.6591,
+    "extra_shrink_delta_sharpe": -0.532,
+    "extra_shrink_delta_ann_return": -0.3105,
+    "cum_shrink_delta_sharpe_vs_bt002": -1.473,
+    "embargo_wf_ic_all": 0.0979,
+    "embargo_wf_ic_trueoos": 0.2049,
+    "net_positive": true,
+    "beats_all_bench": true,
+    "playbook": "embargo后大缩"
+  },
+  "regime_table": {
+    "mixed": {
+      "n_months": 2,
+      "book_ret_mean_pct": 0.707,
+      "excess_vs_hs300_mean_pp": -0.541,
+      "excess_vs_hs300_win_rate": 0.5
+    },
+    "momentum": {
+      "n_months": 9,
+      "book_ret_mean_pct": 2.918,
+      "excess_vs_hs300_mean_pp": 1.959,
+      "excess_vs_hs300_win_rate": 0.667
+    },
+    "reversal": {
+      "n_months": 9,
+      "book_ret_mean_pct": 2.848,
+      "excess_vs_hs300_mean_pp": 1.779,
+      "excess_vs_hs300_win_rate": 0.556
+    }
+  },
+  "artifacts": [
+    "research/backtest/wfe001_gen_picks.py",
+    "research/backtest/run_wfe001.py",
+    "research/cache/wfe001/picks_oos_daily.parquet",
+    "research/cache/wfe001/r20_models/",
+    "research/cache/wfe001/r20_oos_diagnostics.csv",
+    "research/cache/wfe001/wfe001_book_oos.parquet",
+    "research/cache/wfe001/wfe001_monthly_regime.parquet",
+    "research/cache/wfe001/wfe001_results.json"
+  ],
+  "note": "唯一改动 vs WF-001 = r20 训练截止从 '特征日 < train_end' 收紧到 'label 可知 (trade_date <= P_start-21交易日)'; 24m lookback 起点/固定120树/引擎/成本/再平衡/双轨配置逐字同 WF-001 (R01)。ST 源头排除 (R06); regime 分层 (R11); 描述性真实 P&L=合法完成 (R02); 生产线只读 (R05); 大缓存 gitignored (R04)。吃进 codex 第二次 review 第1条 (label embargo)。"
+}

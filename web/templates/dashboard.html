@@ -1,94 +1,134 @@
 {% extends "base.html" %}
 {% block title %}{{ t('nav.dashboard') }}{% endblock %}
 {% block content %}
-<div class="grid gap-6">
-  <!-- 顶部数据卡片 -->
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <div class="card p-5">
+<div class="grid gap-5" x-data="homeApp()" x-init="init()">
+
+  <!-- 顶部: 可用积分(左上) + 最近分析 -->
+  <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+    <!-- 可用积分 (左上角) -->
+    <div class="card p-4">
       <div class="text-text-muted text-xs">{{ t('dashboard.points') }}</div>
-      <div class="text-3xl font-semibold mt-1">{{ user.points }}</div>
-      <div class="text-text-muted text-xs mt-2">邀请码: <code class="text-accent">{{ user.invite_code }}</code></div>
+      <div class="text-3xl font-semibold mt-1">{{ user.points }}<span class="text-sm text-text-muted ml-1">pt</span></div>
+      <div class="text-text-muted text-xs mt-2">邀请码 <code class="text-accent">{{ user.invite_code }}</code></div>
+      <div class="text-text-muted text-xs mt-1">已邀 {{ user.invite_count }} 人</div>
     </div>
-    <div class="card p-5">
-      <div class="text-text-muted text-xs">已邀请</div>
-      <div class="text-3xl font-semibold mt-1">{{ user.invite_count }} 人</div>
-      <div class="text-text-muted text-xs mt-2">累计获 <span class="text-success">{{ user.invite_earned_points }}</span> 积分</div>
-    </div>
-    <div class="card p-5">
-      <div class="text-text-muted text-xs">系统状态</div>
-      <div class="text-3xl font-semibold mt-1 text-success">●</div>
-      <div class="text-text-muted text-xs mt-2"><a href="/system/health" class="hover:text-accent">手动检测 →</a></div>
+    <!-- 最近分析 (上移) -->
+    <div class="card p-4 lg:col-span-3">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-sm font-medium">最近分析</div>
+        <div class="flex items-center gap-3 text-xs">
+          <a href="/analyze" class="btn btn-primary text-xs py-1">+ 新建分析</a>
+          <a href="/me/jobs" class="text-accent hover:underline">全部 →</a>
+        </div>
+      </div>
+      <div id="jobs-list" hx-get="/api/jobs?limit=8" hx-trigger="load" hx-swap="innerHTML" class="text-text-muted text-sm">
+        {{ t('common.loading') }}
+      </div>
     </div>
   </div>
 
-  <!-- 最近任务 -->
-  <div class="card">
-    <div class="px-5 py-4 border-b border-line flex items-center justify-between">
-      <h2 class="text-base font-medium">{{ t('dashboard.recent_jobs') }}</h2>
-      <div class="flex gap-2">
-        <button onclick="repairJobs()" class="btn btn-ghost text-xs" title="修复卡在 running 的历史任务">↻ 修复状态</button>
-        <a href="/analyze" class="btn btn-primary text-xs">+ 新建分析</a>
+  <!-- 四池 完整列表 -->
+  <div>
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-lg font-semibold">四池清单</h2>
+      <div class="text-xs text-text-muted flex items-center gap-3">
+        <span x-show="date" x-text="'数据日 '+fmt(date)"></span>
+        <a href="/v12" class="text-accent hover:underline">四池看板 →</a>
       </div>
     </div>
-    <div id="jobs-list" hx-get="/api/jobs?limit=10" hx-trigger="load" hx-swap="innerHTML" class="p-5 text-text-muted text-sm">
-      {{ t('common.loading') }}
+
+    <template x-if="!pools && !loading">
+      <div class="card p-8 text-center text-text-muted text-sm">
+        暂无四池数据 · <a href="/v12" class="text-accent">去四池看板点"跑全市场生成"</a>
+      </div>
+    </template>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4" x-show="pools">
+      <template x-for="k in ['A','B','C','D']" :key="k">
+        <div class="card flex flex-col overflow-hidden">
+          <!-- 池头 -->
+          <div class="px-4 py-3 border-b border-line">
+            <div class="flex items-center justify-between">
+              <a :href="`/v12?tab=${k}`" class="font-semibold hover:text-accent" x-text="'池'+k+' '+(pools?pools[k].name:'')"></a>
+              <span class="badge" :class="poolBadge(k)" x-text="pools?pools[k].count+'股':''"></span>
+            </div>
+            <div class="flex items-center justify-between mt-1">
+              <span class="text-xs text-text-muted" x-text="pools?pools[k].dna:''"></span>
+              <template x-if="k==='B'"><a href="/analyze" class="text-xs text-accent hover:underline">+ 新建分析</a></template>
+              <template x-if="k!=='B'"><span class="text-xs text-text-dim">⚙ 系统自动</span></template>
+            </div>
+          </div>
+          <!-- 完整列表 (滚动) -->
+          <div class="overflow-y-auto" style="max-height: 560px">
+            <table class="w-full text-sm">
+              <thead class="text-xs text-text-muted bg-bg sticky top-0">
+                <tr>
+                  <th class="px-2 py-1.5 text-left">#</th>
+                  <th class="px-2 py-1.5 text-left">名称</th>
+                  <th class="px-2 py-1.5 text-right">ratio</th>
+                  <th class="px-2 py-1.5 text-right">past5</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="(r,i) in (pools?pools[k].items:[])" :key="r.ts_code">
+                  <tr class="border-t border-line/60">
+                    <td class="px-2 py-1.5 text-text-dim" x-text="i+1"></td>
+                    <td class="px-2 py-1.5">
+                      <a :href="`/stock/${r.ts_code}/history`" class="hover:text-accent">
+                        <span x-text="r.name||r.ts_code"></span>
+                        <span class="text-text-dim text-xs ml-1" x-show="k==='C' && r.n_funds!=null" x-text="r.n_funds!=null?('('+r.n_funds+'基)'):''"></span>
+                        <span x-show="r.v7c" class="text-success ml-0.5">★</span>
+                      </a>
+                      <div class="text-text-dim text-xs font-mono" x-text="r.ts_code"></div>
+                    </td>
+                    <td class="px-2 py-1.5 text-right font-medium" :class="r.ratio>=5?'text-warn':'text-text'" x-text="r.ratio!=null?r.ratio.toFixed(1)+'x':'—'"></td>
+                    <td class="px-2 py-1.5 text-right" :class="(r.past5||0)>0?'up':'down'" x-text="r.past5!=null?((r.past5*100>=0?'+':'')+(r.past5*100).toFixed(1)+'%'):'—'"></td>
+                  </tr>
+                </template>
+                <template x-if="pools && pools[k].items.length===0">
+                  <tr><td colspan="4" class="px-2 py-6 text-center text-text-dim text-xs">该池暂无股票</td></tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </div>
 
 <script>
-function symbolBadge(s) {
-  const cls = s.status === 'done' ? 'badge-success' :
-              s.status === 'failed' || s.status === 'refunded' ? 'badge-danger' :
-              s.status === 'running' ? 'badge-accent' : 'badge-warn';
-  const score = s.final_score != null ? ` <span class="opacity-60">${s.final_score.toFixed ? s.final_score.toFixed(1) : s.final_score}</span>` : '';
-  const tip = s.name ? `${s.symbol} ${s.name}` : s.symbol;
-  return `<span class="badge ${cls} mr-1 mb-1" title="${tip}">${s.symbol}${s.name ? ' ' + s.name : ''}${score}</span>`;
-}
-
-async function repairJobs() {
-  const r = await fetch('/api/jobs/repair-status', {method: 'POST', credentials: 'include'});
-  const d = await r.json();
-  alert(`已修复 ${d.repaired} 个任务状态`);
-  location.reload();
+function homeApp() {
+  return {
+    date: '', pools: null, loading: true,
+    async init() {
+      try {
+        let r = await api('/api/v12/pool-dates'); let j = r ? await r.json() : {dates:[]};
+        this.date = (j.dates && j.dates.length) ? j.dates[j.dates.length-1] : '';
+        if (this.date) {
+          const r2 = await fetch(`/api/v12/pools?date=${this.date}`, {credentials:'include'});
+          if (r2.ok) { const d = await r2.json(); this.pools = d.pools; }
+        }
+      } finally { this.loading = false; }
+    },
+    fmt(d){ return d ? `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}` : ''; },
+    poolBadge(k){ return ({A:'badge-success',B:'badge-accent',C:'badge-warn',D:'badge-danger'})[k]||'badge-accent'; },
+  };
 }
 
 document.body.addEventListener('htmx:afterRequest', (e) => {
   if (e.detail.target.id === 'jobs-list' && e.detail.xhr.status === 200) {
     const data = JSON.parse(e.detail.xhr.responseText);
-    const html = data.items.length === 0 ? '<p class="text-text-dim">暂无任务</p>' :
-      `<table class="w-full text-sm">
-        <thead><tr class="text-text-muted text-xs border-b border-line">
-          <th class="text-left py-2">#</th>
-          <th class="text-left">进度</th>
-          <th class="text-left">股票</th>
-          <th class="text-left">扣分</th>
-          <th class="text-left">状态</th>
-          <th class="text-left">时间</th>
-        </tr></thead><tbody>${data.items.map(j => {
-          const total = j.symbols_count;
-          const done = j.done_count != null ? j.done_count : 0;
-          const failed = j.failed_count != null ? j.failed_count : 0;
-          const progressPct = total > 0 ? Math.round((done + failed) / total * 100) : 0;
-          const progressColor = failed > 0 ? 'bg-danger' : 'bg-success';
-          const symbolsHtml = (j.symbols || []).map(symbolBadge).join('');
-          const statusBadge = j.status==='done'?'badge-success':
-                              j.status==='failed'?'badge-danger':
-                              j.status==='partial_done'?'badge-warn':
-                              j.status==='running'?'badge-accent':'badge-warn';
-          return `
-          <tr class="border-b border-line/50 hover:bg-bg-hover cursor-pointer" onclick="location.href='/jobs/${j.id}'">
-            <td class="py-2.5 align-top"><span class="text-text-muted">#${j.id}</span></td>
-            <td class="align-top">
-              <div class="font-mono text-xs">${done}/${total}${failed > 0 ? ' <span class="text-danger">⚠ '+failed+'</span>' : ''}</div>
-              <div class="w-20 h-1 bg-line rounded mt-1 overflow-hidden"><div class="${progressColor} h-full" style="width:${progressPct}%"></div></div>
-            </td>
-            <td class="align-top max-w-md"><div class="flex flex-wrap">${symbolsHtml || '<span class="text-text-dim">-</span>'}</div></td>
-            <td class="align-top">${j.total_points_charged} pt</td>
-            <td class="align-top"><span class="badge ${statusBadge}">${j.status}</span></td>
-            <td class="text-text-muted text-xs align-top">${new Date(j.created_at).toLocaleString('zh-CN')}</td>
-          </tr>`;
-        }).join('')}</tbody></table>`;
+    if (!data.items || data.items.length === 0) { e.detail.target.innerHTML = '<p class="text-text-dim">暂无任务</p>'; return; }
+    const html = data.items.map(j => {
+      const total = j.symbols_count, done = j.done_count||0, failed = j.failed_count||0;
+      const badge = j.status==='done'?'badge-success':j.status==='failed'?'badge-danger':j.status==='running'?'badge-accent':'badge-warn';
+      const syms = (j.symbols||[]).slice(0,5).map(s=>`<span class="badge badge-accent mr-1">${s.symbol||s}${s.name?' '+s.name:''}</span>`).join('');
+      return `<div class="flex items-center justify-between py-1.5 border-b border-line/60 cursor-pointer hover:bg-bg-hover" onclick="location.href='/jobs/${j.id}'">
+        <div class="flex items-center gap-2 min-w-0"><span class="text-text-dim text-xs shrink-0">#${j.id}</span><div class="flex flex-wrap">${syms||'<span class=text-text-dim>-</span>'}</div></div>
+        <div class="flex items-center gap-3 shrink-0 text-xs"><span class="text-text-muted">${done}/${total}</span><span class="badge ${badge}">${j.status}</span></div>
+      </div>`;
+    }).join('');
     e.detail.target.innerHTML = html;
   }
 });

@@ -1,0 +1,21 @@
+{
+  "id": "FC-SUMMARY",
+  "campaign": "fund-crowding (高收益基金抱团→alpha 3方案)",
+  "date": "2026-06-19",
+  "verdict": "三方案全REJECT — 基金抱团持仓对我们净0可交易alpha",
+  "results": {
+    "FC-0": "宽基随机498只(业绩无关避幸存者)11季度PIT持仓, 覆盖5629股.",
+    "FC-1_crowding_factor": "crowding_level C_塌缩(orth IC-0.006 t-0.38=静态抱团零信号已priced) / crowding_weight C / crowding_delta B_边缘(+0.0211 t=2.12 仅17月低功率). 抱团水平=动量镜像, 唯抱团流边缘.",
+    "FC-2_crowding_dip_pool": "crowding_delta入V7c回调池 walk-forward Δα=-0.224pp/月(13/19月负, regime全负, bootstrap fail). 池内机构覆盖27%. 机构抱团∩回调不增量.",
+    "FC-3_crowding_risk": "排≥p90拥挤股 Sharpe3.85 < 随机排除placebo3.94(技能Δ-0.09比随机还差). 零风控技能纯去暴露; 小盘回调池少持极端拥挤龙头→no-op."
+  },
+  "meta_conclusion": "基金抱团持仓数据(真正交于价量的新数据)对V12.31净0可交易alpha。机制: 抱团水平=动量镜像(基金后进已涨票, 扣动量残差=0, 已priced); 唯一边缘信号(抱团流入Δ)低功率且不过book walk-forward; 我们小盘回调池与机构大盘抱团龙头(光模块)风格正交(重叠27%), 交叉无协同; 拥挤风控对我们no-op(本就少持龙头). 描述性发现(高收益基金极端抱团光模块, Jaccard 0.197)作为'看清市场结构/风格对照'有效, 但不构成我们可交易信号. 与正交campaign(0618)+QuantML(0619)一致: 增量不在选股层(价量/正交/基金持仓都试尽), 在book/风控/部署.",
+  "honest_method": ["宽基500随机避按收益选的幸存者偏差", "PIT ann_date对齐零前视(R04)", "扣动量残差区分抱团vs动量镜像", "FC-3随机排除placebo负控隔离去暴露", "全程冻结gate(R01)+负结果=合法完成(R02)"],
+  "what_remains": "基金持仓的其他角度未尽: 重仓变动的事件研究(加仓首次进top10的事件alpha)、基金经理调仓领先性、北向/龙虎榜与基金共振. 但先验低(都与动量同期). 真增量方向仍是 book/风控/部署 + 微结构数据(token无权限).",
+  "artifacts": ["research/fc_fetch_holdings.py", "research/fc1_crowding_factor.py", "research/fc2_crowding_dip_pool.py",
+                "research/fc3_crowding_risk.py", "research/FUND_CROWDING_FINDINGS.md", "research/FUND_CROWDING_ALPHA_FINDINGS.md",
+                "research/verdicts/FC-0.json ~ FC-3.json"],
+  "production": "V12.31 全程只读冻结(R05)",
+  "guardrails": ["R01 gate冻结", "R02 全REJECT=合法完成", "R03 walk-forward才ship", "R04 PIT零前视",
+                 "R05 生产冻结", "R11 分regime", "R13 placebo负控", "R16 廉价闸先杀", "宽基避幸存者"]
+}

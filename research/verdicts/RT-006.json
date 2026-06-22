@@ -1,0 +1,8 @@
+{
+  "id": "RT-006",
+  "status": "skipped",
+  "conclusion": "未落地 (skipped): RT-005 非 PASS (经 RT-004 no_residual precondition REJECT), 关系张量无独立可交易增量, 不接入 v12_scoring。生产线 V12.31 全程冻结未触碰 (SIGN-R05)。",
+  "depends_on": "RT-005 verdict=PASS (未满足: REJECT)",
+  "production_untouched": true,
+  "guardrails": ["SIGN-R05 生产线冻结", "SIGN-R06 未 PASS 不落地"]
+}

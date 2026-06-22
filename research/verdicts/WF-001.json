@@ -1,0 +1,53 @@
+{
+  "id": "WF-001",
+  "status": "built",
+  "conclusion": "de-lookahead r20 月度 walk-forward (24m lookback, 19 月, time-split val 防 OOS 偷看) 重建 V12.31 OOS book 过同一引擎 (基线滑点 0.10%/边, 同 BT-002 配置)。真实可交易: 年化 +65.9% 净Sharpe +1.84 maxDD -18.0% 月换手 1.51 月胜率 65%。vs BT-002 注水版 (单一生产 r20 跨全测试期 = 共模 lookahead, 年化 +140.5% Sharpe +2.78): 缩水 ΔSharpe -0.94 / Δ年化 -74.6%。基准: hs300 年化 +6.6% Sharpe +0.46; CSI1000 +18.5%; 动量 +12.1%。因果自检 (smoking gun): 生产 r20 IC 从 in-sample 段(≤202509, 19月里12月在其<20250930训练窗内) +0.4357 暴跌至 true-OOS 段 +0.1814 (衰减 +0.2543); 而 WF 月度重训在**同一 true-OOS 段** IC +0.1844 ≈ 生产 true-OOS +0.1814 (几乎相等) → 生产模型在真 OOS 上**无 lookahead 优势, 其 in-sample +0.44 全是记忆**; 真实 r20 OOS IC ≈ WF 全期 +0.1007。这正是 +140% 注水的来源 (12/19 测试月在生产模型训练窗内)。playbook 命中 [大幅缩水]: 真实 Sharpe 远低于注水版 → 之前所有绝对数 (BT-001/002/EX 含 r20 池 lookahead) 不可信, 实盘预期须按真实数重设。 注: 这是真 walk-forward 的可交易地基, 替代之前所有含共模 lookahead 的绝对数 (相对 Δ/受控对照结论不受影响)。",
+  "metrics": {
+    "oos_ann_return": 0.6591,
+    "oos_net_sharpe": 1.838,
+    "oos_max_drawdown": -0.1797,
+    "oos_avg_monthly_turnover": 1.51,
+    "oos_monthly_win_rate": 0.65,
+    "lookahead_ann_return": 1.4055,
+    "lookahead_net_sharpe": 2.779,
+    "shrink_delta_sharpe": -0.941,
+    "shrink_delta_ann_return": -0.7464,
+    "oos_sharpe_pct_of_lookahead": 0.661,
+    "r20_prod_ic_insample": 0.4357,
+    "r20_prod_ic_trueoos": 0.1814,
+    "r20_wf_ic_all": 0.1007,
+    "net_positive": true,
+    "playbook": "大幅缩水"
+  },
+  "regime_table": {
+    "mixed": {
+      "n_months": 2,
+      "book_ret_mean_pct": 6.846,
+      "excess_vs_hs300_mean_pp": 5.598,
+      "excess_vs_hs300_win_rate": 1.0
+    },
+    "momentum": {
+      "n_months": 9,
+      "book_ret_mean_pct": 1.746,
+      "excess_vs_hs300_mean_pp": 0.788,
+      "excess_vs_hs300_win_rate": 0.444
+    },
+    "reversal": {
+      "n_months": 9,
+      "book_ret_mean_pct": 5.399,
+      "excess_vs_hs300_mean_pp": 4.33,
+      "excess_vs_hs300_win_rate": 0.778
+    }
+  },
+  "artifacts": [
+    "research/backtest/wf001_gen_picks.py",
+    "research/backtest/run_wf001.py",
+    "research/cache/wf001/picks_oos_daily.parquet",
+    "research/cache/wf001/r20_models/",
+    "research/cache/wf001/r20_oos_diagnostics.csv",
+    "research/cache/wf001/wf001_book_oos.parquet",
+    "research/cache/wf001/wf001_monthly_regime.parquet",
+    "research/cache/wf001/wf001_results.json"
+  ],
+  "note": "唯一 de-lookahead 改动 = r20 池模型由单一生产模型换月度 walk-forward 重训 (pump s5 已 walk-forward); 引擎/成本/再平衡/双轨配置逐字同 BT-002 (R01)。ST 源头排除 (R06); regime 分层 (R11); time-split val 防 OOS 偷看; 描述性真实 P&L=合法完成 (R02); 生产线只读 (R05); 大缓存 gitignored (R04)。"
+}

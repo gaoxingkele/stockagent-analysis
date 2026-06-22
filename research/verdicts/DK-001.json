@@ -1,0 +1,42 @@
+{
+  "id": "DK-001",
+  "status": "built",
+  "conclusion": "duokongK 状态机按 NOTES.md §1 faithful 移植 (klen=30, 单根内 a/b/c 顺序, hhk/llk 用 [1] 全因果), 在全量 OHLC 面板 (复用 SLV-001 同宇宙, ST 源头排除) 逐股跑出 dk_dir/dk_flip/bars_since_flip/dist 序列。研究窗口 20230103~20260611 覆盖 4,217,276 行 / 5397 股 / 831 日。dk_dir 分布 {'-1': 0.5064, '1': 0.4867, '0': 0.0069} (多腿/空腿/中性占比); 翻转事件总 126,879 (翻多 63,159 / 翻空 63,720); 段长中位 17.0 根、均值 33.1 根 (多腿均 32.5 / 空腿均 33.6)。因果自检抽样 5 股: flip 触发逻辑不符 0 例、hhk 未来泄漏 0 例 → 全因果无泄漏。描述统计非 ship; 下一步 DK-002 标底部确认翻多窗口 + 前向画像 (SIGN-R03)。",
+  "metrics": {
+    "window": [
+      "20230103",
+      "20260611"
+    ],
+    "klen": 30,
+    "n_rows": 4217276,
+    "n_stocks": 5397,
+    "n_days": 831,
+    "dir_share": {
+      "-1": 0.5064,
+      "1": 0.4867,
+      "0": 0.0069
+    },
+    "n_flips": 126879,
+    "flip_to_long": 63159,
+    "flip_to_short": 63720,
+    "seg_len_stats": {
+      "n_segments": 132033,
+      "mean": 33.1,
+      "median": 17.0,
+      "p25": 5.0,
+      "p75": 48.0,
+      "p95": 114.0,
+      "max": 493
+    },
+    "seg_len_mean_long": 32.46,
+    "seg_len_mean_short": 33.58,
+    "causal_self_check_ok": true,
+    "self_check_trigger_bad_total": 0,
+    "self_check_hhk_leak_total": 0
+  },
+  "artifacts": [
+    "research/cache/dk001/duokongk_panel.parquet",
+    "research/cache/dk001_results.json"
+  ],
+  "note": "状态机冻结逐字移植 (SIGN-R01); 全因果 hhk/llk[1], 输出列名不撞 forward 黑名单 (R04); ST 源头排除复用 SLV-001 宇宙 (R06); 大缓存写 research/cache/ 非 features; checkpoint (R08); 描述统计非 ship (R03); 生产线只读 (R05)。"
+}

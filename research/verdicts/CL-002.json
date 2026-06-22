@@ -1,0 +1,47 @@
+{
+  "task": "CL-002",
+  "status": "skipped",
+  "playbook_hit": "CL-001 死于消融 → 前提不满足, isGate 不运行 (R02 documented skip)",
+  "conclusion": "CL-002 是预注册的 book 层 apples-to-apples gate (blend=0.5*rank(ratio_s5)+0.5*rank(within_concept_mom), λ=0.5 冻结), 但 prd.cl002_book_gate 与 acceptanceCriteria 明确规定**仅 CL-001 存活才跑**, 否则 skip 并文档化。CL-001 已裁决**死于消融** (within-concept 动量 composite 概念内 demean 后, 扣全因子集 [past_r5, pyr_velocity_20_60, log_mv, pe_ttm, adx, rsi_14, ma20_slope, ratio_s5, pred_r20] 逐日正交化, headline full 残差 IC=+0.0198 NW_t=+1.77 **未过冻结存活闸** |IC|>=0.01 & |t|>=2.0; 非重叠 t=+0.68 去 20d 重叠膨胀后无显著性; full IC 缩到 RETRO-003 2 因子弱消融 +0.0286 的 69% 且显著性蒸发) → **信号未通过存活闸, 不进 book gate**。故 CL-002 **不运行** (R01: 不为了凑出 PASS 而在死信号上硬跑 book; R02: documented skip = 合法完成; R03: 中间指标≠ship)。**纪律意义**: 这正是反过拟合脚手架的设计目的——首个名义过闸正向 (RETRO-003 +0.0286 t+2.68) 在 CL-001 严格全因子消融 + 非重叠去膨胀下被诚实证伪, gate 链在 CL-001 处即终止, 不下探到 book 层 p-hack。残差的**动量 regime 集中性** (CL-001 nuance: momentum IC +0.0393 t+5.41 强, reversal/mixed 不显著) 性质上属**动量 regime overlay** (恰在 V12.31 实盘被血洗的动量态), 非稳健 cross-sectional alpha; 该 nuance 留 CL-003 作 overlay 判定/placebo 对照, 但 book gate 前提既已因 CL-001 死而不成立, CL-002 本身不产生 book 数字。生产线 V12.31 全程只读冻结 (R05)。",
+  "metrics": {
+    "precondition": {
+      "requires": "CL-001 status == 存活",
+      "cl001_status": "死于消融",
+      "satisfied": false
+    },
+    "frozen_design_not_run": {
+      "blend": "final_rank = 0.5*rank(ratio_s5) + 0.5*rank(within_concept_mom)",
+      "lambda": 0.5,
+      "engine": "V12.31 book 重建 (embargo + close-based + A股成本~0.30% + 双轨70-20-10 + 行业cap4 + 20d再平衡 + T+1 + ST源头排除)",
+      "baseline": "PIT-clean V12.31 (DEP-001, 净Sharpe +0.84) / WFE-001 真实基线 (净Sharpe 1.31)",
+      "gate_conditions_not_evaluated": [
+        "ΔSharpe > 0",
+        "block bootstrap CI 不含 0",
+        "maxDD 不升",
+        "单月 outlier 剔后仍优",
+        "分 regime 不伤 (尤其反转月不伤)"
+      ]
+    },
+    "cl001_kill_evidence": {
+      "full_ablation_ic": 0.01984120052821166,
+      "full_ablation_nw_t": 1.7686055323445091,
+      "full_ablation_nonoverlap_t": 0.678668702830111,
+      "gate_ic_threshold": 0.01,
+      "gate_t_threshold": 2.0,
+      "ic_t_pass": false,
+      "ic_share_of_retro003_2factor": 0.693748270217191,
+      "raw_within_bucket_ic": -0.055107689867312425
+    }
+  },
+  "caveats": [
+    "本裁决不产生任何 book 层 P&L 数字: gate 前提 (CL-001 存活) 不满足, 按预注册协议 skip, 非'跑了 book 但失败'。",
+    "blend/λ=0.5/引擎/基线/gate 条件均为预注册冻结配置 (R01), 此处仅记录而不在死信号上实例化, 防止反向过拟合到 book gate。",
+    "若未来 CL-001 信号在带防循环的独立 walk-forward 上意外复活 (当前判死), 才按此冻结设计重启 CL-002, 阈值不动。",
+    "残差的动量 regime 集中性属 overlay 性质 (CL-001 nuance), book gate 不适用; overlay 验证留 CL-003。"
+  ],
+  "artifacts": [
+    "research/verdicts/CL-001.json (存活闸裁决=死于消融, 本 skip 的依据)",
+    "research/cache/cl001/cl001_results.json (全消融残差 IC/t/分regime 证据)"
+  ],
+  "discipline": "R01 gate 阈值/blend/λ 冻结未动, 不在死信号上硬跑 book 凑 PASS; R02 documented skip = 合法完成 (负结果/前提不满足均合法); R03 CL-001 残差 IC 是描述性中间指标, 不据此 ship 也不下探 book; R05 生产线 V12.31 只读冻结; R11 CL-001 已按 regime 分层揭示残差=动量 overlay, CL-002 book gate 前提不成立故不评估。"
+}

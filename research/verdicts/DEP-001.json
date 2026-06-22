@@ -1,0 +1,59 @@
+{
+  "id": "DEP-001",
+  "status": "clean确认",
+  "conclusion": "DEP-001 = WFE-001 (label-embargo r20 真·真实 walk-forward) **唯一改动 = r20 训练特征集严格剔除泄漏因子 holder_pct** (FIN-002 定位的 codex 唯一硬红线: stk_holdernumber 季频股东户数按 end_date<=target 选数未取 ann_date → ~1季度前视; 但 r20 gain 排 118/236 占 0.005% 重要度极低)。234 特征 (剔 1)、24m lookback、embargo P_start-21交易日、固定120树、双轨70-20-10、行业cap4、20d再平衡、close-based 成本、T+1、ST 源头排除逐字同 WFE-001 → apples-to-apples。PIT-clean book: 年化 +19.9% 净Sharpe **+0.84** maxDD -26.8% 月换手 1.54 月胜率 55%。vs WFE-001 基线 (含 holder_pct, Sharpe +1.31): **ΔSharpe -0.464 / Δ年化 -15.0%**。**per-cohort 配对 block bootstrap (1000次): ΔSharpe 95%CI = [-1.246, +0.312]** (中位 -0.477, P(Δ<0)=89%, CI含0=True)。因果自检: 剔 holder 后 r20 全期 IC +0.0952 vs 含 holder +0.0979 (变化 -0.0027 → holder_pct 在信号层无实质贡献)。基准: hs300 +0.46 / CSI1000 +0.81 / 动量 +0.51 (仍跑赢全基准)。**裁决 [clean确认]**: |ΔSharpe| 0.464 落在配对 bootstrap 噪声内 (CI 含 0) → holder_pct 泄漏对 book Sharpe **无实质影响**, 剔除后 PIT-clean r20 是干净可部署变体, **codex 唯一硬红线清除** (零 ann_date 工程, 隐患彻底消除)。真实基线维持 ≈1.31 (CI[+0.11,+2.60] FIN-001)。印证 BT-003: r20 book α 主导来自整池排序非单因子, holder 这种 0.005% gain 的低重要度因子剔除无损 → 反而说明早该剔。 生产线 V12.31 (v12_scoring/v12_dual_track) 全程只读冻结 (R05); PIT-clean r20 是可部署变体, 非动生产。",
+  "metrics": {
+    "clean_net_sharpe": 0.843,
+    "clean_ann_return": 0.1985,
+    "clean_max_drawdown": -0.2681,
+    "clean_avg_monthly_turnover": 1.538,
+    "clean_monthly_win_rate": 0.55,
+    "baseline_net_sharpe": 1.306,
+    "delta_sharpe_vs_baseline": -0.464,
+    "delta_ann_return_vs_baseline": -0.1501,
+    "bootstrap_delta_sharpe_ci95": [
+      -1.246,
+      0.312
+    ],
+    "bootstrap_delta_sharpe_median": -0.477,
+    "bootstrap_p_delta_lt_0": 0.893,
+    "bootstrap_ci_contains_0": true,
+    "clean_wf_ic_all": 0.0952,
+    "baseline_wf_ic_all": 0.0979,
+    "ic_change_all": -0.0027,
+    "net_positive": true,
+    "beats_all_bench": true,
+    "playbook": "clean确认"
+  },
+  "regime_table": {
+    "mixed": {
+      "n_months": 2,
+      "book_ret_mean_pct": 1.204,
+      "excess_vs_hs300_mean_pp": -0.043,
+      "excess_vs_hs300_win_rate": 0.5
+    },
+    "momentum": {
+      "n_months": 9,
+      "book_ret_mean_pct": 1.928,
+      "excess_vs_hs300_mean_pp": 0.97,
+      "excess_vs_hs300_win_rate": 0.333
+    },
+    "reversal": {
+      "n_months": 9,
+      "book_ret_mean_pct": 1.192,
+      "excess_vs_hs300_mean_pp": 0.122,
+      "excess_vs_hs300_win_rate": 0.556
+    }
+  },
+  "artifacts": [
+    "research/backtest/dep001_gen_picks.py",
+    "research/backtest/run_dep001.py",
+    "research/cache/dep001/picks_oos_daily.parquet",
+    "research/cache/dep001/r20_models/",
+    "research/cache/dep001/r20_oos_diagnostics.csv",
+    "research/cache/dep001/dep001_book_oos.parquet",
+    "research/cache/dep001/dep001_monthly_regime.parquet",
+    "research/cache/dep001/dep001_results.json"
+  ],
+  "note": "唯一改动 vs WFE-001 = r20 训练特征集剔 holder_pct (PIT 泄漏因子); 24m lookback/embargo P_start-21交易日/固定120树/引擎/成本/再平衡/双轨配置逐字同 WFE-001 (R01)。配对 block bootstrap 消共模只测 holder 净效应。ST 源头排除 (R06); regime 分层 (R11); 描述性=合法完成 (R02); 中间 IC≠ship (R03); 生产线只读 (R05); 大缓存 gitignored, 无 features 写入 (R04)。剔泄漏因子确认 deployable baseline, 清 codex 唯一硬红线。"
+}

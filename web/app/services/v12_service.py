@@ -35,10 +35,12 @@ from .progress_service import emit_progress, emit_done, emit_failed
 
 logger = logging.getLogger(__name__)
 
-# 把项目 src 加进 sys.path
+# 把项目 src + 根 加进 sys.path (根: 复用 daily_dashboard.build_pools)
 _PROJECT_SRC = settings.project_root / "src"
 if str(_PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(_PROJECT_SRC))
+if str(settings.project_root) not in sys.path:
+    sys.path.insert(0, str(settings.project_root))
 
 # 计费 (可放到 settings)
 POINTS_V12_MARKET = 5
@@ -116,6 +118,71 @@ def read_recommend(date: str) -> dict:
     return {"date": date, "total": len(items),
              "main_count": main, "rescued_count": rescued,
              "items": items, "source_file": used.name}
+
+
+def _dash_dir(date: str) -> Path:
+    return settings.project_root / "output" / "daily_pick" / f"dashboard_{date}"
+
+
+def list_pool_dates() -> list[str]:
+    """扫 output/daily_pick/dashboard_* 看哪些日期有四池数据."""
+    base = settings.project_root / "output" / "daily_pick"
+    if not base.exists():
+        return []
+    out = set()
+    for p in base.glob("dashboard_*"):
+        stem = p.name.replace("dashboard_", "")
+        if len(stem) == 8 and stem.isdigit() and (p / "poolA_system.csv").exists():
+            out.add(stem)
+    return sorted(out)
+
+
+_POOL_FILES = {"A": "poolA_system.csv", "B": "pool_B.csv", "C": "pool_C.csv", "D": "poolD_ratio_ge5.csv"}
+_POOL_META = {
+    "A": {"name": "系统推荐", "dna": "抄底回调 (系统自营)", "desc": "V12.31 v7c主推 → ratio排序 → 行业cap → Top20"},
+    "B": {"name": "自选", "dna": "用户关注", "desc": "自选清单打分排名"},
+    "C": {"name": "基金重仓", "dna": "机构抱团 (动量追高)", "desc": "好基金优选池 (被≥2只高收益基金持有)"},
+    "D": {"name": "追高动量", "dna": "高决断度 (与系统对立, 对照)", "desc": "全市场 ratio≥5"},
+}
+
+
+def _pool_items(df) -> list[dict]:
+    items = []
+    for _, p in df.iterrows():
+        ratio = p.get("ratio")
+        items.append({
+            "ts_code": str(p["ts_code"]),
+            "name": p.get("name") if pd.notna(p.get("name")) else None,
+            "industry": p.get("industry") if pd.notna(p.get("industry")) else None,
+            "r20": float(p["buy_r20_score"]) if pd.notna(p.get("buy_r20_score")) else None,
+            "pump_up": float(p["pump_score"]) if pd.notna(p.get("pump_score")) else None,
+            "pump_down": float(p["pump_down_score"]) if pd.notna(p.get("pump_down_score")) else None,
+            "ratio": float(ratio) if pd.notna(ratio) else None,
+            "past5": float(p["past_r5"]) if pd.notna(p.get("past_r5")) else None,
+            "v7c": bool(p["v7c_recommend"]) if pd.notna(p.get("v7c_recommend")) else False,
+            "n_funds": int(p["n_funds"]) if pd.notna(p.get("n_funds")) else None,
+        })
+    return items
+
+
+def read_four_pools(date: str) -> dict:
+    """读四池看板 CSV (daily_dashboard build_pools 产出). 无则 total=0."""
+    d = _dash_dir(date)
+    pools, total = {}, 0
+    for key, fname in _POOL_FILES.items():
+        fp = d / fname
+        meta = dict(_POOL_META[key], key=key)
+        if fp.exists():
+            df = pd.read_csv(fp, dtype={"ts_code": str})
+            if "ratio" not in df.columns and "pump_score" in df.columns:
+                df["ratio"] = df["pump_score"] / (df["pump_down_score"] + 0.01)
+            items = _pool_items(df)
+            total += len(items)
+            n_star = sum(1 for x in items if x["v7c"])
+            pools[key] = {**meta, "count": len(items), "n_star": n_star, "items": items}
+        else:
+            pools[key] = {**meta, "count": 0, "n_star": 0, "items": []}
+    return {"date": date, "total": total, "pools": pools, "exists": total > 0}
 
 
 def read_contradiction(date: str) -> list[dict]:
@@ -281,46 +348,15 @@ async def _do_v12_market(factory, result_id: int, date: str):
 
         try:
             def _run():
-                from stockagent_analysis.v12_scoring import V12Scorer
-                scorer = V12Scorer.get(settings.project_root)
-                df = scorer.score_market(date, cb=cb)
-                # 保存 csv (兼容现有路径), 包含 zombie 字段
-                out_dir = settings.project_root / "output" / "v12_inference"
-                out_dir.mkdir(parents=True, exist_ok=True)
-                main_pool = df[df["v7c_recommend"] == True].copy()
-                main_pool = main_pool.sort_values("r20_pred", ascending=False).reset_index(drop=True)
-                main_pool["v12_source"] = "V7c-main"
-                main_pool["rank"] = main_pool.index + 1
-                main_pool.to_csv(out_dir / f"v12_inference_{date}.csv",
-                                 index=False, encoding="utf-8-sig")
-                contra = df[df["quadrant"] == "矛盾段"].copy()
-                contra = contra.sort_values("r20_pred", ascending=False).reset_index(drop=True)
-                contra.to_csv(out_dir / f"v12_contradiction_pending_{date}.csv",
-                               index=False, encoding="utf-8-sig")
-                # 同时若已存在 v11 filter 结果, 合并到 final
-                final_p = out_dir / f"v12_inference_final_{date}.csv"
-                v11_p = out_dir / f"v11_filter_results_{date}.csv"
-                if v11_p.exists():
-                    rescued_df = pd.read_csv(v11_p, dtype={"ts_code": str})
-                    rescued_df = rescued_df[(rescued_df["v11_status"] == "ok") &
-                                              (rescued_df["bull_prob"] >= 0.5)].copy()
-                    if len(rescued_df) > 0:
-                        rescued_df["v12_source"] = "V11-rescued-contradiction"
-                        common_cols = [c for c in main_pool.columns if c in rescued_df.columns]
-                        v12 = pd.concat([main_pool[common_cols], rescued_df[common_cols]],
-                                         ignore_index=True)
-                    else:
-                        v12 = main_pool
-                else:
-                    v12 = main_pool
-                v12 = v12.sort_values("r20_pred", ascending=False).reset_index(drop=True)
-                v12["rank"] = v12.index + 1
-                v12.to_csv(final_p, index=False, encoding="utf-8-sig")
+                # 四池统一构建 (复用 daily_dashboard.build_pools, CLI/web 单一真相)
+                import daily_dashboard as dd
+                res = dd.build_pools(date, cb=cb, write_csv=True)
+                p = res["pools"]
                 return {
-                    "n_total": int(len(df)),
-                    "n_main": int(len(main_pool)),
-                    "n_contra": int(len(contra)),
-                    "n_final": int(len(v12)),
+                    "n_pool_A": len(p["A"]["items"]), "n_A_universe": p["A"].get("n_pool", 0),
+                    "n_pool_B": len(p["B"]["items"]), "n_pool_C": len(p["C"]["items"]),
+                    "n_pool_D": len(p["D"]["items"]),
+                    "n_main": len(p["A"]["items"]),
                 }
             stats = await asyncio.to_thread(_run)
 

@@ -1,0 +1,44 @@
+{
+  "id": "DIAG-002",
+  "status": "built",
+  "conclusion": "DIAG-002 (纯只读, 复用 wfe001/dep001 已缓存 OOS book NAV, 不重训不改策略 R05): cohort jackknife 定位 WFE-001 (含 holder, Sharpe +1.31) vs DEP-001 (剔 holder, +0.84) 的 gap +0.46 是否被少数 cohort/月主导。两臂 book 日期逐位对齐 (407 日 / 21 个 20交易日 cohort) → 配对 LOO 干净。**① 配对 leave-one-cohort-out**: 删每个 cohort 后 gap(WFE−DEP) 范围 [+0.27, +0.63]; 删后两臂 Sharpe 最接近 = cohort #14 ('20251201', '20251226') (gap→+0.27, regime reversal), 最远 = cohort #6 ('20250407', '20250507') (gap→+0.63)。**gap 归因**: 前1 cohort #14 占 gap 42%, 前3 占 104%, HHI 0.18 → 有效 ~5.5 个 cohort 拉开两臂。**② 月层 LOO (补充)**: 删后最接近月 202512 / 最远月 202603; 前1月 202512 占 gap 51%, 前3月 124%。**裁决 [少数cohort主导]**: 0.84 vs 1.31 的差 (gap +0.46) **集中在少数 cohort/月**: 前3 cohort 共占 gap 104% (另 18 个近乎相消), 有效仅 ~5.5 个 cohort 拉开两臂; 删最影响的 cohort #14 ('20251201', '20251226') (regime reversal) 后 gap 从 +0.46 缩到 +0.27。→ **短样本噪声 (非真实信息损失)**: 1.31 与 0.84 都是宽带抽样的两个实现, gap 由少数 20d 实现路径驱动 (印证 DEP-001 IC 几乎不变 + 配对 bootstrap CI 含 0)。**诚实 nuance**: 单 cohort 未独占 (前1仅 42%, 删它 gap 仍 +0.27), 且删任一 cohort 后 gap 恒正 [+0.27, +0.63] (含holder 始终 ≥ 剔holder) → 不是纯掷硬币噪声, 是'集中于 ~3-5 个 20d 实现路径'的弱系统偏移, 量级落在 DEP-001 配对噪声带内 → 不改 clean确认。见 responsePlaybook['少数cohort主导']。 与 DIAG-001 互补 — DIAG-001 判'票层'摆动是全局重排, 本 task 判'cohort/月层' gap 来源, 共同把 0.46 摆动讲清 (codex#5 部署稳健性判断)。生产线 V12.31 全程只读冻结 (R05); 描述性定位非 gate (R03); 不改 1.31/0.84 定性。",
+  "metrics": {
+    "n_cohorts": 21,
+    "n_days": 407,
+    "sharpe_wfe": 1.308,
+    "sharpe_dep": 0.8438,
+    "gap_wfe_minus_dep": 0.4642,
+    "gap_loo_min": 0.2695,
+    "gap_loo_max": 0.6309,
+    "closest_cohort_id": 14,
+    "closest_cohort_span": [
+      "20251201",
+      "20251226"
+    ],
+    "closest_cohort_gap": 0.2695,
+    "farthest_cohort_id": 6,
+    "farthest_cohort_span": [
+      "20250407",
+      "20250507"
+    ],
+    "farthest_cohort_gap": 0.6309,
+    "top1_cohort": 14,
+    "top1_gap_frac": 0.4194,
+    "top3_gap_frac": 1.0353,
+    "hhi_cohorts": 0.1818,
+    "effective_n_cohorts": 5.5,
+    "month_closest": "202512",
+    "month_farthest": "202603",
+    "month_top1": "202512",
+    "month_top1_gap_frac": 0.5131,
+    "few_cohort_dominant": true,
+    "playbook": "少数cohort主导"
+  },
+  "artifacts": [
+    "research/backtest/run_diag002.py",
+    "research/cache/diag002/diag002_loo_cohort.parquet",
+    "research/cache/diag002/diag002_loo_month.parquet",
+    "research/cache/diag002/diag002_results.json"
+  ],
+  "note": "纯只读: 复用 wfe001/dep001 已缓存 OOS book NAV (同 FIN-001 口径), 不重训不改策略 (R05, 生产指纹未变)。配对 leave-one-cohort-out: 两臂 book 日期逐位对齐 → 删每个 20交易日 cohort 后各臂重算 Sharpe + gap; gap 归因到单 cohort (前1/前3占比 + HHI 有效数) 判少数主导 vs 普遍。月层 LOO 补充。阈值冻结 (R01, FEW_TOP1=0.50/FEW_TOP3=0.80); ST 已源头排除 (R06); regime 已标注每 cohort (R11); 描述性定位=合法完成 (R02); 中间指标≠ship (R03); 大缓存 research/cache/diag002/ gitignored 无 features 写入 (R04)。codex#5 诊断: 与 DIAG-001 (票层全局重排) 互补, 把 0.46 摆动讲清, 不改 1.31/0.84 定性。"
+}

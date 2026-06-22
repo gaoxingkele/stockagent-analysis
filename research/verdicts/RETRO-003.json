@@ -1,0 +1,266 @@
+{
+  "task": "RETRO-003",
+  "status": "对比学习候选",
+  "playbook_hit": "对比学习候选",
+  "conclusion": "主候选 桶内动量 composite (z(mom_20)+z(mom_60)) 扣桶beta+扣[ratio_s5,pred_r20] 后, 概念桶残差 IC=+0.0287 NW_t=+2.68 **过 gate** (|IC|>=0.01 & |t|>=2.0) → within-bucket LTR/对比学习值得做 (需独立 walk-forward, 非 ship)。概念桶 vs PE市值桶残差: +0.0201 vs +0.0131 → 概念特异结构 (更支持概念对比学习)。",
+  "metrics": {
+    "gate": {
+      "GATE_IC": 0.01,
+      "GATE_T": 2.0,
+      "target": "ret_20",
+      "controls": [
+        "ratio_s5",
+        "pred_r20"
+      ],
+      "primary_candidate": "mom_comp",
+      "nw_lag": 20,
+      "min_bucket": 5
+    },
+    "primary": {
+      "resid_ic_concept_full": 0.028698791835357323,
+      "nw_t": 2.684868425844012,
+      "n_dates": 242,
+      "resid_ic_nonoverlap": 0.02243772744001429,
+      "t_nonoverlap": 1.1540026134684511,
+      "raw_within_bucket_ic": -0.03932208079835284,
+      "passed_gate": true
+    },
+    "concept_full": {
+      "mom_comp": {
+        "mean_ic": 0.028698791835357323,
+        "nw_t": 2.684868425844012,
+        "n_dates": 242,
+        "mean_ic_nonoverlap": 0.02243772744001429,
+        "t_nonoverlap": 1.1540026134684511,
+        "n_nonoverlap": 13,
+        "raw_within_bucket_ic": -0.03932208079835284
+      },
+      "mom_20": {
+        "mean_ic": 0.032720101106521675,
+        "nw_t": 2.1970358561112784,
+        "n_dates": 242,
+        "mean_ic_nonoverlap": 0.036060436669129205,
+        "t_nonoverlap": 1.4877247840323935,
+        "n_nonoverlap": 13,
+        "raw_within_bucket_ic": -0.025233004093286913
+      },
+      "mom_60": {
+        "mean_ic": 0.016443325395206796,
+        "nw_t": 1.8344274808120558,
+        "n_dates": 242,
+        "mean_ic_nonoverlap": 0.006303848552423093,
+        "t_nonoverlap": 0.3340264287581367,
+        "n_nonoverlap": 13,
+        "raw_within_bucket_ic": -0.044177970295309114
+      },
+      "adx": {
+        "mean_ic": -0.0026394285846704987,
+        "nw_t": -0.35721778684750377,
+        "n_dates": 242,
+        "mean_ic_nonoverlap": 0.0010807139831984535,
+        "t_nonoverlap": 0.08832341549975567,
+        "n_nonoverlap": 13,
+        "raw_within_bucket_ic": -0.0435230226705057
+      },
+      "rsi_14": {
+        "mean_ic": 0.01894504701440707,
+        "nw_t": 1.3375993703444418,
+        "n_dates": 242,
+        "mean_ic_nonoverlap": 0.02267590027733879,
+        "t_nonoverlap": 1.1230872250266084,
+        "n_nonoverlap": 13,
+        "raw_within_bucket_ic": -0.017260459699902485
+      },
+      "turn_amt_20": {
+        "mean_ic": 0.012552045436119439,
+        "nw_t": 1.110115599127989,
+        "n_dates": 242,
+        "mean_ic_nonoverlap": 0.005367038733208692,
+        "t_nonoverlap": 0.41821574434948444,
+        "n_nonoverlap": 13,
+        "raw_within_bucket_ic": -0.024406308863416357
+      },
+      "past_r5": {
+        "mean_ic": 0.017452126360433112,
+        "nw_t": 1.707485968511802,
+        "n_dates": 242,
+        "mean_ic_nonoverlap": 0.013613639330628417,
+        "t_nonoverlap": 0.9735339972599428,
+        "n_nonoverlap": 13,
+        "raw_within_bucket_ic": -0.02047079931077737
+      }
+    },
+    "concept_peavail": {
+      "mom_comp": {
+        "mean_ic": 0.020145194222074638,
+        "nw_t": 1.4901272895817774,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.02470655979100505,
+        "t_nonoverlap": 1.2102033508595,
+        "n_nonoverlap": 10
+      },
+      "mom_20": {
+        "mean_ic": 0.020438525300826998,
+        "nw_t": 1.2824862798591201,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.03263240380886398,
+        "t_nonoverlap": 1.3474913604235084,
+        "n_nonoverlap": 10
+      },
+      "mom_60": {
+        "mean_ic": 0.018119242798700308,
+        "nw_t": 1.3621663567077105,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.017403191231902017,
+        "t_nonoverlap": 0.8334266768804115,
+        "n_nonoverlap": 10
+      },
+      "adx": {
+        "mean_ic": -0.00451713583851117,
+        "nw_t": -0.48680224118420234,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.007458038083864671,
+        "t_nonoverlap": 0.5698979251351594,
+        "n_nonoverlap": 10
+      },
+      "rsi_14": {
+        "mean_ic": 0.0028937681048142793,
+        "nw_t": 0.1956863164036976,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.019972893664816777,
+        "t_nonoverlap": 0.8882344498798609,
+        "n_nonoverlap": 10
+      },
+      "turn_amt_20": {
+        "mean_ic": -0.00015666317413407527,
+        "nw_t": -0.011882261257755548,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": -0.000942624860902342,
+        "t_nonoverlap": -0.06766646714678823,
+        "n_nonoverlap": 10
+      },
+      "past_r5": {
+        "mean_ic": 0.010036967107540833,
+        "nw_t": 0.7903361849826335,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.020770326561590214,
+        "t_nonoverlap": 1.0651205787411073,
+        "n_nonoverlap": 10
+      }
+    },
+    "pecap_bucket": {
+      "mom_comp": {
+        "mean_ic": 0.013123003713460426,
+        "nw_t": 0.9615078786741412,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.02394030061671876,
+        "t_nonoverlap": 0.9950487338725179,
+        "n_nonoverlap": 10
+      },
+      "mom_20": {
+        "mean_ic": 0.013676350774132455,
+        "nw_t": 0.9771203530430835,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.03577730290734318,
+        "t_nonoverlap": 1.4577842555791825,
+        "n_nonoverlap": 10
+      },
+      "mom_60": {
+        "mean_ic": 0.011820276495307319,
+        "nw_t": 0.7997393099187244,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.01205094225969824,
+        "t_nonoverlap": 0.48331630283445487,
+        "n_nonoverlap": 10
+      },
+      "adx": {
+        "mean_ic": -0.012438619809972141,
+        "nw_t": -1.2684528344592012,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.0034173881647360143,
+        "t_nonoverlap": 0.23010631030441792,
+        "n_nonoverlap": 10
+      },
+      "rsi_14": {
+        "mean_ic": -0.0021143565777585463,
+        "nw_t": -0.1685060581928634,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.011521888428978156,
+        "t_nonoverlap": 0.4552231286226806,
+        "n_nonoverlap": 10
+      },
+      "turn_amt_20": {
+        "mean_ic": -0.0017220721815260007,
+        "nw_t": -0.15050731214771282,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": -0.005785548735045665,
+        "t_nonoverlap": -0.43341875407921104,
+        "n_nonoverlap": 10
+      },
+      "past_r5": {
+        "mean_ic": 0.005132962210437317,
+        "nw_t": 0.44849562715548785,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.00805003817294289,
+        "t_nonoverlap": 0.3520303957807702,
+        "n_nonoverlap": 10
+      }
+    },
+    "concept_specific": true,
+    "concept_vs_pecap_primary": {
+      "concept_ic": 0.020145194222074638,
+      "pecap_ic": 0.013123003713460426
+    },
+    "by_regime_primary": {
+      "momentum": {
+        "mean_ic": 0.001857909412521406,
+        "nw_t": 0.11254093101277976,
+        "n_dates": 77
+      },
+      "reversal": {
+        "mean_ic": 0.04404695868132889,
+        "nw_t": 3.023751520254386,
+        "n_dates": 92
+      },
+      "mixed": {
+        "mean_ic": 0.037667512338494046,
+        "nw_t": 3.3544330370289765,
+        "n_dates": 73
+      }
+    },
+    "candidates_passing_gate": [
+      {
+        "feat": "mom_comp",
+        "ic": 0.028698791835357323,
+        "t": 2.684868425844012
+      },
+      {
+        "feat": "mom_20",
+        "ic": 0.032720101106521675,
+        "t": 2.1970358561112784
+      }
+    ],
+    "coverage": {
+      "total_mv_cov": 0.7238584820561824,
+      "pe_ttm_cov": 0.5451138182216217,
+      "concept_member_rows": 34558618,
+      "concept_member_rows_peavail": 18784395,
+      "pecap_rows": 682265
+    }
+  },
+  "caveats": [
+    "残差 IC 是 in-sample 描述性, NEW 仅表示'值得 walk-forward'非 ship (R03); REJECT 是合法完成 (R02)。",
+    "TARGET=ret_20 (可交易前向 close 收益), 非 winner 定义用的 max_gain_20 (hindsight); 故 gate 测的是可交易残差。",
+    "概念桶 member-level: 一股属多概念则多行, IC 按桶内成员加权 (within-bucket 可分性度量)。",
+    "PE/市值来自 factor_lab 合并, 覆盖到 ~20260126; 202602-04 (最后 3 月) 无市值/PE → PE市值桶交叉验证缺尾部, 概念桶 vs PE市值桶对照在 PE/市值可得子样本上 apples-to-apples。",
+    "t 用 Newey-West (lag=20) 修 20d 前向重叠致 t 膨胀; 非重叠 (每20日取样) 作 robustness。",
+    "多重检验: gate 只判预注册主候选 (mom_comp, 来自 RETRO-002 top 差异); 个体候选过阈仅记 '真小' 不强上。",
+    "控制 = [ratio_s5, pred_r20] (= prd 冻结的 'pump ratio + r20'); 模型分本身不作候选 (套套逻辑, picks 被其选出)。"
+  ],
+  "artifacts": [
+    "research/backtest/run_retro003.py",
+    "research/cache/retro003/mvpe_panel.parquet",
+    "research/cache/retro003/retro003_results.json"
+  ],
+  "discipline": "R01 gate/候选/控制/桶定义冻结未在结果上调; R02 REJECT=合法完成; R03 残差 IC≠ship (NEW 也只'值得 walk-forward'); R04 大缓存 gitignored 无 features 写入; R05 复用缓存评分未碰生产; R06 ST 源头排除 (universe 已排); R11 regime 分层必带; R12 异类增益须存活朴素消融 (扣桶 beta + 扣现有因子 = 朴素对照); ex-ante vs hindsight 严格分 (TARGET=可交易 ret_20)。"
+}

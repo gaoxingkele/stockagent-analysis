@@ -1,0 +1,99 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/quantml-models",
+  "northStar": "QuantML-Qlib 48篇合集的方法过我们的gate. 核心洞察: 23个被否假设全是feature侧, 从未测过'模型class/目标函数'是否漏信号. 这是唯一未测轴. 用户要求Tier1+2+3顺序全做. 每个实验: 同factor_lab特征 → 换模型/目标 → 两阶段(Phase-1廉价OOS RankIC walk-forward → Phase-2 book Δα walk-forward + skeptic DSR/placebo/PBO). apples-to-apples唯一差异=模型/目标. 诚实预期: LGBM是截面tabular极强基线, 多数REJECT; 警惕PoC IC(0.023-0.087)=我们LGBM样本内0.44→OOS0.18的同类. 生产线V12.31冻结(R05).",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "每个非skip task产出工件 + research/verdicts/QML-*.json",
+    "每实验Phase-1有OOS RankIC walk-forward裁决; 仅改善者进Phase-2 book Δα gate",
+    "Phase-2必带skeptic_report(DSR n_trials=模型变体数×3 + placebo + PBO)",
+    "生产线指纹未变(v12_scoring.py+生产模型hash基线一致)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "启动写死(R01); 分regime(R11); 廉价闸先行(R16); 多重检验含DoF(R15); 只认walk-forward(R03)",
+    "baseline": "r20_v16 同特征同超参 objective=regression(MSE)+spearman_ic早停, 月度walk-forward重训(非固定生产模型, 隔离唯一差异=模型/目标)",
+    "phase1_screen": {
+      "method": "walk-forward(24月lookback, TEST_MONTHS 19月)重训候选 vs baseline, 测试月OOS RankIC(pred vs r20_fresh因果), 月度序列NW-t",
+      "gate": "候选mean OOS RankIC > baseline 且差异NW-t>=2 → 进Phase-2; 否则廉价REJECT(模型/目标不漏信号)"
+    },
+    "phase2_gate": {
+      "method": "候选模型接V7c dual-track book walk-forward(oa_gate/walk_forward_validation同harness, 唯一差异=r20源), Δα vs baseline-r20 book",
+      "gate": "c1 Δα>=+0.30pp; c2-c4 Sharpe/最差月/正α月占比不低于base; c5剔outlier后>0; c6各regime不为负; c7 skeptic(bootstrap p<0.05 + PBO<=0.5 + DSR含DoF)",
+      "verdict": "全过PASS; 0<Δα<0.30不伤=真小; 否则REJECT. 负/真小=合法完成(R02)"
+    }
+  },
+  "responsePlaybook": {
+    "phase1": {"improve": "进Phase-2 book gate", "no_improve": "廉价REJECT, 该模型轴不漏信号, 文档化"},
+    "phase2": {"PASS": "真增量→记LAND候选独立评估不动V12.31", "真小": "记promising不强上", "REJECT": "干净REJECT文档化"}
+  },
+  "features": [
+    {
+      "id": "QML-1",
+      "title": "Tier1 排序目标函数: LGBM r20 regression→lambdarank/rank_xendcg (文章33精神, 最高性价比)",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "research/qml1_ranking_obj.py: walk-forward重训r20 objective∈{regression(base),lambdarank,rank_xendcg}, 同特征同超参, 每月OOS RankIC vs r20_fresh",
+        "Phase-1: 候选mean RankIC vs base + NW-t; research/verdicts/QML-1.json",
+        "若Phase-1改善→Phase-2 book Δα walk-forward gate + skeptic; 否则廉价REJECT"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-19",
+      "notes": "research/qml1_ranking_obj.py 19月walk-forward. **REJECT_cheap**: regression(base) OOS RankIC=+0.1145 vs lambdarank +0.0744(Δ-0.0400 NW-t-3.66) / rank_xendcg +0.0800(Δ-0.0345 NW-t-2.68). 排序目标显著劣于回归(NW-t<-2.6, 仅3-4/19月胜base). 文章33'MSE错配'假设不成立: 回归+spearman_ic早停已优化排序信号, r20分桶给lambdarank反丢信息. 目标函数不漏信号, 无Phase-2. verdict QML-1.json."
+    },
+    {
+      "id": "QML-2",
+      "title": "Tier2 模型class: 一个序列/截面NN(候选LNN或精简iTransformer)作r20预测器 vs LGBM",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "research/qml2_nn_model.py: 一个NN(挑一个, 不17个全试)同特征walk-forward vs LGBM r20 baseline, OOS RankIC",
+        "Phase-1 RankIC对照; 若改善→Phase-2 book Δα + skeptic; research/verdicts/QML-2.json",
+        "诚实预期: LGBM对截面tabular极强, NN先验低-中"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-19",
+      "notes": "research/qml2_nn_model.py torch MLP vs LGBM 同236特征19月walk-forward. **REJECT_cheap**: LGBM OOS RankIC=+0.0953 vs MLP=+0.0660 (Δ-0.0294 NW-t-1.87, MLP仅6/19月胜, 且202501/202601大崩-0.11/+0.00). NN非线性在我们工程特征上不漏信号, GBDT对截面tabular仍最优. 序列-NN-on-raw未测(CPU昂贵, 但236特征已编码时序信息, 先验低). verdict QML-2.json. 与QML-1合: 模型/目标轴非杠杆=数据不行非模型不行."
+    },
+    {
+      "id": "QML-3",
+      "title": "Tier2 Alpha/Beta解耦(ABCM/FactorVAE轻量): r20预测对估计beta中性化, 残差-alpha book",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "research/qml3_alpha_beta.py: r20预测残差化(扣市场/估计beta) → 残差-alpha排序book walk-forward vs base; 接上'book beta主导alpha bull-loaded'发现",
+        "Phase-1/2同协议; research/verdicts/QML-3.json"
+      ],
+      "priority": 3,
+      "passes": true,
+      "completed_at": "2026-06-19",
+      "notes": "research/qml3_alpha_beta.py beta-中性选股 vs 原始 pred_r20 选股, 19月 book walk-forward. **REJECT**: Δα=-0.381pp/月(剔outlier-0.470, 14/19月负), c1-c7多数fail, regime动量-0.715/反转-0.247都伤. 去beta选股反而伤 → 印证[[project_market_state_exposure_reject_0618]]: 我们edge与beta耦合(alpha bull-loaded), ABCM/FactorVAE alpha/beta解耦不适用long-only净多头book(牛市要beta). verdict QML-3.json. QML-1/2/3三模型轴全REJECT=数据不行非模型不行."
+    },
+    {
+      "id": "QML-4",
+      "title": "Tier3 自动因子挖掘: GP/RL-AlphaGen/LLM(择一或多), 高假阳风险全过DSR/placebo",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "research/qml4_factor_mining.py: 生成因子(GP符号回归 或 RL/LLM), 过oa_screen正交IC廉价闸(扣FULL_CTRL)",
+        "存活者→walk-forward book Δα + skeptic; DSR n_trials=生成因子数(惩罚极狠)",
+        "research/verdicts/QML-4.json; AI Scientist教训: 预期多数REJECT, gate>吞吐"
+      ],
+      "priority": 4,
+      "passes": true,
+      "completed_at": "2026-06-19",
+      "notes": "research/qml4_factor_mining.py 随机符号搜索80价量因子+正交闸+Bonferroni. 机械PROCEED(24存活)但**元判断REJECT_known_families**: 24存活全是已walk-forward否决族换皮(最强tsstd_intraday_60=OA-VOL intraday_vol_60 GATE已REJECT; intraday/overnight=OA-VP已REJECT; max_ret=彩票已否; sum_ret_60=动量控制). 最强存活=OA-VOL-GATE同因子→Phase-2等价已做=REJECT. AI Scientist教训实证: 枯竭价量空间自动搜索重新发现已死因子族, 廉价闸过但walk-forward死. verdict QML-4.json."
+    },
+    {
+      "id": "QML-SUMMARY",
+      "title": "收尾: 模型class/目标函数轴是否杠杆 + 元结论 + memory",
+      "acceptanceCriteria": [
+        "research/verdicts/QML-SUMMARY.json + research/QUANTML_MODELS_FINDINGS.md + progress + memory",
+        "回答: 是模型不行还是数据不行(关掉模型追逐 或 找到真增量)"
+      ],
+      "priority": 5,
+      "passes": true,
+      "completed_at": "2026-06-19",
+      "notes": "research/verdicts/QML-SUMMARY.json + research/QUANTML_MODELS_FINDINGS.md + memory + progress. 元结论: QuantML 4轴(目标函数/NN模型class/Alpha-Beta解耦/自动因子搜索)全REJECT → 模型/搜索轴非杠杆, 是数据/信号枯竭非模型不行. 与23 feature侧+正交campaign+市场状态 一致收敛."
+    }
+  ]
+}

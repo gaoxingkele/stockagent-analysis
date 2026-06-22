@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ lang }}" class="dark">
+<html lang="{{ lang }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,43 +11,48 @@
   <script src="/static/vendor/echarts.min.js"></script>
   <script>
     tailwind.config = {
-      darkMode: 'class',
       theme: {
         extend: {
           colors: {
-            // Linear 风格基底
-            bg: { DEFAULT: '#0B0E14', card: '#10131A', hover: '#161A22' },
-            line: { DEFAULT: '#1F2430', strong: '#2A2F3D' },
-            text: { DEFAULT: '#E2E4EA', muted: '#8A8F9A', dim: '#5A5F6B' },
-            accent: { DEFAULT: '#7B61FF', hover: '#9075FF' },
-            success: '#3FB950',
-            warn: '#D29922',
-            danger: '#F85149',
+            // 雪球(Xueqiu)风格: 浅色财经
+            bg: { DEFAULT: '#f4f5f7', card: '#ffffff', hover: '#f0f2f5' },
+            line: { DEFAULT: '#e7eaf0', strong: '#d8dce3' },
+            text: { DEFAULT: '#1c2026', muted: '#6a737d', dim: '#99a0aa' },
+            accent: { DEFAULT: '#1772e6', hover: '#0e5fc4' },   // 雪球蓝
+            success: '#11b15c',   // 语义绿 (操作/通过)
+            warn: '#f5a623',
+            danger: '#eb5454',    // 语义红 (错误)
           },
           fontFamily: {
-            sans: ['"Inter"', 'system-ui', '"PingFang SC"', '"Microsoft YaHei"', 'sans-serif'],
+            sans: ['system-ui', '"PingFang SC"', '"Microsoft YaHei"', '"Helvetica Neue"', 'sans-serif'],
           },
         }
       }
     }
   </script>
   <style>
-    body { background: #0B0E14; color: #E2E4EA; font-feature-settings: 'cv11','ss01','ss03'; }
-    .card { background: #10131A; border: 1px solid #1F2430; border-radius: 12px; }
-    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 6px; font-size: 14px; font-weight: 500; transition: all .15s; }
-    .btn-primary { background: #7B61FF; color: #FFF; }
-    .btn-primary:hover { background: #9075FF; }
-    .btn-ghost { color: #E2E4EA; border: 1px solid #2A2F3D; }
-    .btn-ghost:hover { background: #161A22; }
-    input, textarea, select { background: #161A22; border: 1px solid #2A2F3D; border-radius: 6px; padding: 8px 12px; color: #E2E4EA; outline: none; }
-    input:focus, textarea:focus, select:focus { border-color: #7B61FF; }
+    body { background: #f4f5f7; color: #1c2026; }
+    .card { background: #fff; border: 1px solid #e7eaf0; border-radius: 8px; box-shadow: 0 1px 3px rgba(18,38,63,.04); }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 6px; font-size: 14px; font-weight: 500; transition: all .15s; cursor: pointer; }
+    .btn-primary { background: #1772e6; color: #FFF; }
+    .btn-primary:hover { background: #0e5fc4; }
+    .btn-ghost { color: #1c2026; border: 1px solid #d8dce3; background: #fff; }
+    .btn-ghost:hover { background: #f0f2f5; }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    input, textarea, select { background: #fff; border: 1px solid #d8dce3; border-radius: 6px; padding: 8px 12px; color: #1c2026; outline: none; }
+    input:focus, textarea:focus, select:focus { border-color: #1772e6; box-shadow: 0 0 0 3px rgba(23,114,230,.12); }
+    table thead th { font-weight: 600; }
+    tbody tr:hover { background: #f7f9fc; }
     .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
-    .badge-success { background: rgba(63,185,80,.12); color: #3FB950; }
-    .badge-warn { background: rgba(210,153,34,.12); color: #D29922; }
-    .badge-danger { background: rgba(248,81,73,.12); color: #F85149; }
-    .badge-accent { background: rgba(123,97,255,.12); color: #7B61FF; }
-    .progress { height: 4px; background: #1F2430; border-radius: 2px; overflow: hidden; }
-    .progress > div { height: 100%; background: linear-gradient(90deg, #7B61FF 0%, #9075FF 100%); transition: width .4s; }
+    .badge-success { background: rgba(17,177,92,.12); color: #11b15c; }
+    .badge-warn { background: rgba(245,166,35,.14); color: #d98a00; }
+    .badge-danger { background: rgba(235,84,84,.12); color: #eb5454; }
+    .badge-accent { background: rgba(23,114,230,.10); color: #1772e6; }
+    .progress { height: 4px; background: #e7eaf0; border-radius: 2px; overflow: hidden; }
+    .progress > div { height: 100%; background: linear-gradient(90deg, #1772e6 0%, #3393ff 100%); transition: width .4s; }
+    /* 中式 红涨绿跌 (雪球配色) — 用于价格/收益数字 */
+    .up { color: #eb5454; }     /* 涨=红 */
+    .down { color: #11b15c; }   /* 跌=绿 */
   </style>
   {% block head %}{% endblock %}
 </head>
@@ -61,12 +66,15 @@
       </a>
       <div class="flex items-center gap-1 text-sm">
         <a href="/" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.dashboard') }}</a>
-        <a href="/analyze" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.analyze') }}</a>
-        <a href="/v12" class="px-3 py-1.5 rounded hover:bg-bg-hover text-accent">V12 评分</a>
+        <!-- 四池 顶级切换 -->
+        <div class="flex items-center gap-0.5 mx-1 px-1 py-0.5 rounded-lg bg-bg">
+          <a href="/v12?tab=A" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent font-medium">池A·系统</a>
+          <a href="/v12?tab=B" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent font-medium">池B·自选</a>
+          <a href="/v12?tab=C" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent font-medium">池C·基金重仓</a>
+          <a href="/v12?tab=D" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent font-medium">池D·追高</a>
+        </div>
         <a href="/me/jobs" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.jobs') }}</a>
-        <a href="/me/transactions" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.transactions') }}</a>
         <a href="/share" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.share') }}</a>
-        <a href="/system/health" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.health') }}</a>
         {% if user.is_admin %}
         <a href="/admin" class="px-3 py-1.5 rounded hover:bg-bg-hover text-warn">{{ t('nav.admin') }}</a>
         {% endif %}

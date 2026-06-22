@@ -1,0 +1,215 @@
+{
+  "task": "CL-001",
+  "status": "死于消融",
+  "playbook_hit": "死于消融",
+  "conclusion": "主候选 within-concept 动量 composite 概念内 demean 后, 扣**全因子集** [past_r5, pyr_velocity_20_60, log_mv, pe_ttm, adx, rsi_14, ma20_slope, ratio_s5, pred_r20] 逐日正交化, headline=full(9因子,PE可得) 残差 IC=+0.0198 **NW_t=+1.77 未过冻结 gate** (|IC|>=0.01 & |t|>=2.0); 且**非重叠 t=+0.68** (core 同 ~+0.69) → 去 20d 重叠膨胀后无显著性。core(7因子,full universe) NW_t=+2.05 仅勉强擦边 2.0 但非重叠 t 同样 ~+0.69 不过 → **整体不稳健, 死于消融**。对照 RETRO-003 2 因子弱消融 (+0.0286): 全消融后 full IC 缩到 69% (core 66%) 且显著性蒸发 → +0.0286 约 1/3 被更全的因子 (多窗动量 past_r5 + 形态 ma20_slope + size/value) 吃掉, 余下整体不过闸。 ★**诚实 nuance (与 RETRO-003 反转, 不许据此移门柱 R01)**: 全消融后残差**不是均匀归零, 而是集中到动量 regime** — momentum IC=+0.0393 t=+5.41 (强), reversal +0.0111 t=+0.70, mixed +0.0151 t=+0.98 (后两者不显著); 即**仅动量 regime 显著**, 揭示 RETRO-003 '动量月≈0' 是其 2 因子控制被 regime 混淆的 artifact (那两个 mean-reversion 控制在反转月吸收了信号)。 桶内 raw 动量 IC=-0.0551 (负=均值回归, suppressor 仍在)。by_month 不稳 (202505/06 负, 202508~202601 正, 202602 又负)。 **裁决**: 按冻结 gate (headline 全消融 |IC|&|t|) **死于消融** = within-concept 相对动量 re-rank **未通过存活闸, 不进 CL-002** (REJECT 文档化, R02/R03)。 但残差的动量 regime 集中性 ≠ 干净归零, 性质上属**动量 regime 条件/overlay** (恰在 V12.31 实盘被血洗的动量态, [[project_v3c_momentum_regime_mismatch_0603]] + SIGN-R11): 若后续要追, 须按 CL-003 当**动量 overlay** 验 (RG-002 已证 overlay tricky), 而非当稳健 cross-sectional alpha。生产线 V12.31 不动 (R05)。",
+  "metrics": {
+    "gate": {
+      "GATE_IC": 0.01,
+      "GATE_T": 2.0,
+      "target": "ret_20",
+      "primary": "mom_comp",
+      "controls_full": [
+        "past_r5",
+        "pyr_velocity_20_60",
+        "log_mv",
+        "pe_ttm",
+        "adx",
+        "rsi_14",
+        "ma20_slope",
+        "ratio_s5",
+        "pred_r20"
+      ],
+      "controls_core": [
+        "past_r5",
+        "pyr_velocity_20_60",
+        "adx",
+        "rsi_14",
+        "ma20_slope",
+        "ratio_s5",
+        "pred_r20"
+      ],
+      "nw_lag": 20,
+      "min_bucket": 5,
+      "headline": "full(9因子,PE可得)",
+      "ic_t_pass": false,
+      "n_pos_regimes": 3,
+      "two_regime_pass": true,
+      "momentum_regime_positive": true,
+      "significant_regimes": [
+        "momentum"
+      ],
+      "momentum_regime_only_significant": true,
+      "headline_nonoverlap_t": 0.678668702830111
+    },
+    "full_ablation_pe_avail": {
+      "mean_ic": 0.01984120052821166,
+      "nw_t": 1.7686055323445091,
+      "n_dates": 181,
+      "mean_ic_nonoverlap": 0.012825213341362867,
+      "t_nonoverlap": 0.678668702830111,
+      "n_nonoverlap": 10,
+      "raw_within_bucket_ic": -0.055107689867312425,
+      "by_month": {
+        "202505": {
+          "mean_ic": -0.022867511697688206,
+          "n": 19
+        },
+        "202506": {
+          "mean_ic": -0.040062709284884604,
+          "n": 20
+        },
+        "202507": {
+          "mean_ic": 0.001985779127863501,
+          "n": 23
+        },
+        "202508": {
+          "mean_ic": 0.030682628469508713,
+          "n": 21
+        },
+        "202509": {
+          "mean_ic": 0.05089372536348318,
+          "n": 22
+        },
+        "202510": {
+          "mean_ic": -0.012385207003935469,
+          "n": 17
+        },
+        "202511": {
+          "mean_ic": 0.036294383315070546,
+          "n": 20
+        },
+        "202512": {
+          "mean_ic": 0.06011661443217221,
+          "n": 23
+        },
+        "202601": {
+          "mean_ic": 0.06995642803677725,
+          "n": 16
+        }
+      }
+    },
+    "core_ablation_full_universe": {
+      "mean_ic": 0.018790257709635542,
+      "nw_t": 2.054825357249473,
+      "n_dates": 242,
+      "mean_ic_nonoverlap": 0.011181604141476831,
+      "t_nonoverlap": 0.6930400940151888,
+      "n_nonoverlap": 13,
+      "raw_within_bucket_ic": -0.04282249971587283,
+      "by_month": {
+        "202505": {
+          "mean_ic": -0.022344370213428846,
+          "n": 19
+        },
+        "202506": {
+          "mean_ic": -0.028577849208391404,
+          "n": 20
+        },
+        "202507": {
+          "mean_ic": 0.028294302779705002,
+          "n": 23
+        },
+        "202508": {
+          "mean_ic": 0.029730876372787585,
+          "n": 21
+        },
+        "202509": {
+          "mean_ic": 0.04167383195011505,
+          "n": 22
+        },
+        "202510": {
+          "mean_ic": -0.022255593495965266,
+          "n": 17
+        },
+        "202511": {
+          "mean_ic": 0.038847313120881535,
+          "n": 20
+        },
+        "202512": {
+          "mean_ic": 0.05479456023653132,
+          "n": 23
+        },
+        "202601": {
+          "mean_ic": 0.06484218007744443,
+          "n": 20
+        },
+        "202602": {
+          "mean_ic": -0.047638228126018235,
+          "n": 14
+        },
+        "202603": {
+          "mean_ic": 0.01783993778501054,
+          "n": 22
+        },
+        "202604": {
+          "mean_ic": 0.03191131503853258,
+          "n": 21
+        }
+      }
+    },
+    "by_regime": {
+      "core": {
+        "momentum": {
+          "mean_ic": 0.03011367275111285,
+          "nw_t": 2.709286645778793,
+          "n_dates": 77
+        },
+        "reversal": {
+          "mean_ic": 0.01212174851191841,
+          "nw_t": 1.1036382229748731,
+          "n_dates": 92
+        },
+        "mixed": {
+          "mean_ic": 0.015250530147939971,
+          "nw_t": 2.056492418990306,
+          "n_dates": 73
+        }
+      },
+      "full": {
+        "momentum": {
+          "mean_ic": 0.0392879700091642,
+          "nw_t": 5.414491757263612,
+          "n_dates": 48
+        },
+        "reversal": {
+          "mean_ic": 0.011068317182027257,
+          "nw_t": 0.701224997130488,
+          "n_dates": 75
+        },
+        "mixed": {
+          "mean_ic": 0.01509156804335145,
+          "nw_t": 0.9832779845938737,
+          "n_dates": 58
+        }
+      }
+    },
+    "vs_retro003_2factor": {
+      "retro003_2factor_ic": 0.0286,
+      "full_ic_share_of_2factor": 0.693748270217191,
+      "core_ic_share_of_2factor": 0.6570020178194246
+    },
+    "coverage": {
+      "total_mv_cov": 0.7238584820561824,
+      "pe_ttm_cov": 0.5451138182216217,
+      "ma20_slope_cov": 0.9976550034715537,
+      "n_pick_concepts": 1886,
+      "member_rows": 34558618
+    }
+  },
+  "caveats": [
+    "残差 IC 是 in-sample 描述性, 存活也只表示'值得 CL-002 book gate'非 ship (R03); 死于消融=合法完成 (R02)。",
+    "TARGET=ret_20 (可交易前向 close 收益, 非 winner 定义用的 max_gain hindsight)。",
+    "全消融 (full, 9 因子) 含 size/value (factor_lab 覆盖到 ~20260126), 故 PE/市值可得子样本损最后 ~3 月; core (7 因子) 在 full universe 242 日, 二者并报。headline gate 用最严的 full 全消融。",
+    "形态z = ma20_slope (趋势/形态); mkt多窗动量 = past_r5 (短窗, 与信号 mom_20/mom_60 不同窗, 非循环正交)。",
+    "概念 membership 是 current 快照 (PIT 风险: 对历史的轻 lookahead, 须在 CL-002/003 落地前 PIT 化)。",
+    "控制 ratio_s5/pred_r20 早月 (202505~09) 含 r20 in-sample 暴露 (vintage); 作控制只会让消融更激进 (保守)。",
+    "t 用 Newey-West (lag=20) 修 20d 前向重叠致 t 膨胀; 非重叠 (每 20 日取样) 作 robustness; embargo=仅 full-20d 日。"
+  ],
+  "artifacts": [
+    "research/backtest/run_cl001.py",
+    "research/cache/cl001/blocks/*.json",
+    "research/cache/cl001/cl001_results.json"
+  ],
+  "discipline": "R01 候选/控制集/gate 阈值冻结未在结果上调 (= RETRO-003 同候选, 仅按 prd cl001_ablation 扩控制集); R02 REJECT=合法完成; R03 残差 IC≠ship; R04 大缓存 gitignored 无 features 写入; R05 复用缓存评分未碰生产; R06 ST 源头排除 (universe 已排); R08 block-level checkpoint; R11 regime 分层必带且为 gate 关键; R12 全因子集 = 最严朴素对照。"
+}

@@ -1,0 +1,102 @@
+{
+  "id": "STAB-001",
+  "status": "无差异",
+  "conclusion": "STAB-001 (A1 低换手/稳定化构建): 在 **DEP-001 PIT-clean 分数 + BT 引擎** 上, **选股分数/池构造逐字不动** (复用 stab001_gen_pool 重建的每日 V7c 候选池, NO retrain, R05), 仅改组合构建规则跑 4 变体 (20241008~20260611, 21 个 20d 再平衡 cohort)。baseline 复刻 DEP-001 PIT-clean book: Sharpe +0.84 vs DEP-001 +0.84 (|Δ|=0.00, 忠实复刻)。变体 vs baseline (换手1.54/Sharpe+0.84/maxDD-26.8%/连续J0.02/扰动J0.33): V_stick(换手1.50/+2%, Sharpe+0.84 ΔCI[-0.093, 0.131], maxDD-27.5%, 连续J0.02/扰动J0.32 vs base0.02/0.33 => fail); V_N30(换手1.53/+0%, Sharpe+0.77 ΔCI[-0.365, 0.252], maxDD-25.8%, 连续J0.02/扰动J0.33 vs base0.02/0.33 => fail); V_combo(换手1.51/+2%, Sharpe+0.57 ΔCI[-0.515, -0.019], maxDD-28.0%, 连续J0.03/扰动J0.34 vs base0.02/0.33 => fail)。配对 block bootstrap (1000次) 消共模只测构建净效应。**裁决 [无差异]**: 构建变化 (粘性/N30) 对 21 月 book Sharpe 无材料性影响 (ΔSharpe CI 含 0, 噪声主导), 且未同时满足换手↓20%+稳定↑+Sharpe不降的全部条件 → 文档化, **稳定性靠增 N 不靠粘性** (responsePlaybook['无差异']); 若仅换手↓但 Sharpe 不增不减, 作 STAB-002 deployable 候选保留判。 分 regime (R11): 各变体超额 hs300 见 regime_table。生产线 V12.31 全程只读冻结 (R05); 构建层改进候选须过 STAB-002 深验才谈纳入 V12.32 (中间不 ship, R03)。",
+  "metrics": {
+    "baseline_net_sharpe": 0.843,
+    "baseline_avg_monthly_turnover": 1.538,
+    "baseline_max_drawdown": -0.2681,
+    "baseline_consec_jaccard": 0.0176,
+    "baseline_perturb_jaccard": 0.3265,
+    "dep001_sharpe_reference": 0.843,
+    "variants": {
+      "baseline": {
+        "net_sharpe": 0.843,
+        "avg_monthly_turnover": 1.538,
+        "turnover_drop_frac": 0.0,
+        "max_drawdown": -0.2681,
+        "consec_holding_jaccard": 0.0176,
+        "perturb_jaccard_vs_holder": 0.3265,
+        "boot_delta_sharpe_ci95": null,
+        "boot_ci_contains_0": null,
+        "gate_PASS": null
+      },
+      "V_stick": {
+        "net_sharpe": 0.842,
+        "avg_monthly_turnover": 1.5,
+        "turnover_drop_frac": 0.025,
+        "max_drawdown": -0.2753,
+        "consec_holding_jaccard": 0.0231,
+        "perturb_jaccard_vs_holder": 0.3175,
+        "boot_delta_sharpe_ci95": [
+          -0.093,
+          0.131
+        ],
+        "boot_ci_contains_0": true,
+        "gate_PASS": false
+      },
+      "V_N30": {
+        "net_sharpe": 0.773,
+        "avg_monthly_turnover": 1.532,
+        "turnover_drop_frac": 0.004,
+        "max_drawdown": -0.2575,
+        "consec_holding_jaccard": 0.0204,
+        "perturb_jaccard_vs_holder": 0.3324,
+        "boot_delta_sharpe_ci95": [
+          -0.365,
+          0.252
+        ],
+        "boot_ci_contains_0": true,
+        "gate_PASS": false
+      },
+      "V_combo": {
+        "net_sharpe": 0.575,
+        "avg_monthly_turnover": 1.508,
+        "turnover_drop_frac": 0.02,
+        "max_drawdown": -0.2799,
+        "consec_holding_jaccard": 0.025,
+        "perturb_jaccard_vs_holder": 0.3427,
+        "boot_delta_sharpe_ci95": [
+          -0.515,
+          -0.019
+        ],
+        "boot_ci_contains_0": false,
+        "gate_PASS": false
+      }
+    },
+    "winners": [],
+    "best_variant": null,
+    "playbook": "无差异"
+  },
+  "regime_table": {
+    "baseline": {
+      "mixed": -0.043,
+      "momentum": 0.97,
+      "reversal": 0.122
+    },
+    "V_stick": {
+      "mixed": -0.013,
+      "momentum": 1.184,
+      "reversal": -0.059
+    },
+    "V_N30": {
+      "mixed": -1.132,
+      "momentum": 1.508,
+      "reversal": -0.373
+    },
+    "V_combo": {
+      "mixed": 0.856,
+      "momentum": 0.454,
+      "reversal": -0.636
+    }
+  },
+  "artifacts": [
+    "research/backtest/stab001_gen_pool.py",
+    "research/backtest/run_stab001.py",
+    "research/cache/stab001/candidate_pool_clean.parquet",
+    "research/cache/stab001/candidate_pool_holder.parquet",
+    "research/cache/stab001/stab001_results.json",
+    "research/cache/stab001/book_baseline.parquet"
+  ],
+  "note": "A1 book 层构建实验; 唯一改动=组合构建 (粘性/N30), 选股分数=DEP-001 PIT-clean 候选池不动 (R01)。复用缓存 dep001 r20(剔holder)+t005 s5 模型, NO retrain (R05 生产指纹未变)。embargo+close-based 成本, apples-to-apples vs DEP-001 PIT-clean 基线; ST 源头排除 (R06); regime 分层 (R11)。配对 block bootstrap 同分数共模相消; 扰动重排率接 DIAG-001 (对 holder 含泄漏分数同构建 pick 重叠); 大缓存 gitignored 无 features 写入 (R04); 负结果=合法完成 (R02); 中间指标≠ship (R03)。"
+}

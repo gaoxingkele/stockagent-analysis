@@ -1,0 +1,38 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/fund-crowding",
+  "northStar": "基金持仓=真正交于价量的新数据(正交camp结论唯一可能出alpha方向). 用户要3方案全做. 核心纪律: (1)幸存者偏差——用宽基业绩无关基金宇宙(随机500只成立<2023)非ex-post赢家测抱团; (2)PIT——fund_portfolio按ann_date公告日对齐(一季报4月底才可用), 信号 ann_date→下次ann_date 前向填充到月度调仓日, 零前视; (3)区分抱团vs动量镜像(扣动量残差). FC-1抱团度因子廉价闸→FC-2机构抱团∩回调池walk-forward→FC-3拥挤风控. 生产线V12.31冻结(R05).",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "每非skip task产出工件 + research/verdicts/FC-*.json",
+    "FC-1抱团度正交IC(PIT ann_date对齐, 扣动量+size+value, NW-t)出A/B/C/D",
+    "FC-2机构抱团∩回调池 walk-forward Δα + skeptic; FC-3拥挤风控overlay + placebo",
+    "生产线指纹未变"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "启动写死(R01); PIT零前视(R04 ann_date对齐); 宽基避幸存者; 扣动量残差(R12); 分regime(R11); 廉价闸(R16); placebo(R13)",
+    "universe": "随机500只 股票/混合型 成立<2023 (业绩无关, 避按收益选的look-ahead); 抱团=n_funds持有(top10披露)",
+    "pit": "持仓按 ann_date 公告日生效, 信号在 [ann_date, 下次ann_date) 有效, 前向填充到月度调仓日; 绝不用未公告季度",
+    "fc1_phase1": "crowding_level(n_funds持有) + crowding_delta(环比进入基金数) 扣[mom5/20/60+size+value]残差 rank-IC vs 前向r20, NW-t, 分regime. gate |orth IC|>=0.02 & |t|>=3 → A进FC-2; 否则C/D廉价REJECT(抱团≈动量镜像). 诚实先验: 大概率动量镜像(基金后进已涨票)如概念lead-lag",
+    "fc2_gate": "机构抱团∩回调池(高抱团∩V12.31回调信号 pump_down低)入池排序 vs V12.31 baseline, walk-forward Δα(窗口受持仓数据限). gate Δα>=+0.30pp + 分regime + skeptic(bootstrap/PBO). 数据窗短则标低功率",
+    "fc3_gate": "拥挤风控: 对≥p90抱团极端拥挤股减仓/排除 vs base book, 看maxDD/Sharpe改善 + 随机排除placebo负控(排除'少持仓数学抬Sharpe')"
+  },
+  "responsePlaybook": {
+    "FC-1": {"A/B": "进FC-2", "C/D": "廉价REJECT(抱团≈动量), 但FC-2/3仍按用户要求做(不同用途)"},
+    "FC-2": {"PASS": "机构抱团∩回调真增量→记LAND候选不动V12.31", "真小": "记promising", "REJECT": "文档化"},
+    "FC-3": {"PASS": "拥挤风控降回撤不伤Sharpe→记risk工具", "REJECT": "纯降暴露非timing(placebo不显著)"}
+  },
+  "features": [
+    {"id": "FC-0", "title": "宽基基金宇宙(随机500业绩无关) + 历史持仓拉取(PIT)", "priority": 1, "passes": true, "completed_at": "2026-06-19", "notes": "research/fc_fetch_holdings.py 随机498只(业绩无关避幸存者) 22.6万行 11季度(2023Q3~2026Q1) 覆盖5629股, 含ann_date供PIT. verdict FC-0.json.",
+     "acceptanceCriteria": ["research/fc_fetch_holdings.py: 随机500只成立<2023股票/混合型, fund_portfolio 20231001-20260430(含ann_date), checkpoint", "research/cache/fc_holdings_broad.parquet", "research/verdicts/FC-0.json status=built + 覆盖统计"]},
+    {"id": "FC-1", "title": "基金抱团度正交因子 Phase-1 (PIT, 扣动量残差, NW-t)", "isGate": true, "priority": 2, "passes": true, "completed_at": "2026-06-19", "notes": "research/fc1_crowding_factor.py PIT 33调仓日. crowding_level C_塌缩(orth IC-0.006 t-0.38=静态抱团零信号已priced); crowding_weight C; **crowding_delta(环比新进基金)B_边缘 orth IC+0.0211 t=2.12(仅17月低功率)**=唯抱团流有边缘残差. 抱团水平≈动量镜像, 唯流量微弱. B→PROCEED FC-2(低功率flag). verdict FC-1.json.",
+     "acceptanceCriteria": ["research/fc1_crowding_factor.py: crowding_level + crowding_delta PIT(ann_date)前向填充→月度, 扣FULL_CTRL残差IC+消融+分regime", "research/verdicts/FC-1.json A/B/C/D + 诚实survivorship/动量镜像flag"]},
+    {"id": "FC-2", "title": "机构抱团∩回调 交叉池 walk-forward Δα", "isGate": true, "priority": 3, "passes": true, "completed_at": "2026-06-19", "notes": "research/fc2_crowding_dip_pool.py crowding_delta入V7c回调池排序19月walk-forward. **REJECT**: Δα=-0.224pp/月(13/19月负, regime全负 mixed-0.614, bootstrap fail). 池内机构持有覆盖均值27%(回调池约1/4被宽基持有). 机构抱团∩回调不增量(FC-1 delta仅边缘B, 风格正交). verdict FC-2.json.",
+     "acceptanceCriteria": ["research/fc2_crowding_dip_pool.py: 高抱团∩V12.31回调 入池 vs baseline walk-forward Δα + skeptic", "research/verdicts/FC-2.json status + 数据窗标注"]},
+    {"id": "FC-3", "title": "抱团拥挤度风控 overlay (+placebo)", "isGate": true, "priority": 4, "passes": true, "completed_at": "2026-06-19", "notes": "research/fc3_crowding_risk.py 排≥p90拥挤股 vs 随机排除placebo 19月. **REJECT**: base Sharpe4.00, excl_crowd 3.85 < excl_random(placebo)3.94 (技能Δ-0.09=比随机还差). crowding_level零IC→拥挤排除≈随机纯去暴露; 小盘回调池少持极端拥挤龙头→对V12.31 no-op. verdict FC-3.json.",
+     "acceptanceCriteria": ["research/fc3_crowding_risk.py: 排除≥p90拥挤股 vs base, maxDD/Sharpe + 随机排除placebo", "research/verdicts/FC-3.json"]},
+    {"id": "FC-SUMMARY", "title": "收尾: 三方案汇总 + 基金持仓数据有无alpha元结论 + memory", "priority": 5, "passes": true, "completed_at": "2026-06-19", "notes": "三方案全REJECT: 基金抱团持仓对我们净0可交易alpha. 抱团水平=动量镜像(已priced), 唯抱团流delta边缘B不过book. verdict FC-SUMMARY.json + FUND_CROWDING_ALPHA_FINDINGS.md + memory.",
+     "acceptanceCriteria": ["research/verdicts/FC-SUMMARY.json + research/FUND_CROWDING_ALPHA_FINDINGS.md + progress + memory"]}
+  ]
+}

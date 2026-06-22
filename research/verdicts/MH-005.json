@@ -1,0 +1,11 @@
+{
+  "id": "MH-005",
+  "status": "skipped",
+  "conclusion": "skip: 未落地。落地条件 = MH-004 walk-forward gate PASS; 但 MH-002 (2026-06-04) 即判 no_residual_signal, MH-003/004 全 skip, gate 从未 PASS。生产线 v12_scoring.py 不接入梅花特征, 指纹保持冻结 (SIGN-R05)。",
+  "metrics": {
+    "precondition": "MH-004 == PASS",
+    "precondition_met": false,
+    "mh004_status": "skipped (no_residual_signal upstream)"
+  },
+  "guardrails": ["SIGN-R05 生产线冻结未动", "SIGN-R02 未 PASS 不落地"]
+}

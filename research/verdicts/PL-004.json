@@ -1,0 +1,80 @@
+{
+  "id": "PL-004",
+  "status": "真小",
+  "conclusion": "真小 (0<Δα 但未满全 gate): 去偏 pump 19 月 walk-forward Δα=+0.161pp/月, 捕捉了 flat-mid 横盘启动但增益不足以单独 ship (未过: ['delta_alpha>=+0.30pp', 'worst_month>=v3c'])。记 blend 候选不强上 (SIGN-R02/R03), 生产 V12.31 v3c 不动。",
+  "metrics": {
+    "alpha_delta_pp": 0.161,
+    "sharpe": 4.08,
+    "worst_month": -1.434,
+    "pos_alpha_month_ratio": 0.947
+  },
+  "comparison_table": {
+    "metric": [
+      "alpha_monthly_pp",
+      "sharpe",
+      "worst_month_pp",
+      "pos_alpha_month_ratio"
+    ],
+    "v3c_baseline": [
+      3.52,
+      4.03,
+      -0.115,
+      0.947
+    ],
+    "debias": [
+      3.681,
+      4.08,
+      -1.434,
+      0.947
+    ],
+    "delta": [
+      0.161,
+      0.05,
+      -1.318,
+      0.0
+    ]
+  },
+  "gate_conditions": {
+    "delta_alpha>=+0.30pp": false,
+    "sharpe>=v3c": true,
+    "worst_month>=v3c": false,
+    "pos_alpha_ratio>=v3c": true,
+    "outlier_trim_delta>0": true,
+    "regime_not_hurt": true
+  },
+  "outlier_trim": {
+    "dropped_month": "202602",
+    "dropped_delta": -1.318,
+    "delta_alpha_trimmed": 0.244
+  },
+  "regime_table": {
+    "momentum": {
+      "n_months": 7,
+      "v3c_alpha": 3.53,
+      "debias_alpha": 3.794,
+      "delta": 0.264
+    },
+    "reversal": {
+      "n_months": 10,
+      "v3c_alpha": 3.962,
+      "debias_alpha": 4.165,
+      "delta": 0.203
+    },
+    "mixed": {
+      "n_months": 2,
+      "v3c_alpha": 1.275,
+      "debias_alpha": 0.87,
+      "delta": -0.404
+    }
+  },
+  "n_months": 19,
+  "window": [
+    "202410",
+    "202604"
+  ],
+  "artifacts": [
+    "research/cache/pl004_monthly.csv",
+    "research/cache/pl004_results.json"
+  ],
+  "note": "apples-to-apples: 两臂仅 pump label 的 past_r5 约束不同 (filter+sort 全用本臂 pump, pump 分数复用 PL-002 月度 walk-forward 重训); 绝对 α 含共模 r20 池 lookahead, 仅 Δ 量作 gate (SIGN-R03)。捕捉验证已在 PL-003 完成 (捕捉成功)。REJECT 是合法完成 (SIGN-R02)。"
+}

@@ -1,0 +1,55 @@
+{
+  "id": "T-005",
+  "status": "REJECT",
+  "conclusion": "REJECT: 动态窗口 ratio_dyn 在 19 月 walk-forward 上 Δα=-0.357pp/月, 未满足事前注册 gate (未过: ['delta_alpha>=+0.30pp', 'sharpe>=baseline', 'worst_month>=baseline'])。相对 V12.31 固定窗口 baseline 无可落地真 alpha → 不落地, 负结论文档化 (SIGN-R02 合法完成)。门控切换 65% 但 ratio_dyn 与 s5 高度相关, 增量空间有限, 与 T-004 预判一致。",
+  "metrics": {
+    "alpha_delta_pp": -0.357,
+    "sharpe": 3.79,
+    "worst_month": -1.031,
+    "pos_alpha_month_ratio": 0.947
+  },
+  "comparison_table": {
+    "metric": [
+      "alpha_monthly_pp",
+      "sharpe",
+      "worst_month_pp",
+      "pos_alpha_month_ratio"
+    ],
+    "baseline_v1231_fixed_s5": [
+      3.754,
+      4.0,
+      -0.202,
+      0.947
+    ],
+    "dynamic_ratio_dyn": [
+      3.397,
+      3.79,
+      -1.031,
+      0.947
+    ],
+    "delta": [
+      -0.357,
+      -0.21,
+      -0.829,
+      0.0
+    ]
+  },
+  "gate_conditions": {
+    "delta_alpha>=+0.30pp": false,
+    "sharpe>=baseline": false,
+    "worst_month>=baseline": false,
+    "pos_alpha_ratio>=baseline": true
+  },
+  "n_months": 19,
+  "window": [
+    "202410",
+    "202604"
+  ],
+  "frac_switch_mean": 0.646,
+  "artifacts": [
+    "research/cache/t005_monthly.csv",
+    "research/cache/t005_results.json",
+    "research/cache/t005_wf_models/"
+  ],
+  "note": "apples-to-apples: 两臂唯一差异=池内排序列 (ratio_s5 vs ratio_dyn); 绝对 α 含共模 r20 池 lookahead, 仅 Δ 量作 gate (SIGN-R03)。REJECT 是合法完成。"
+}

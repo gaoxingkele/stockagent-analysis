@@ -1,0 +1,420 @@
+{
+  "id": "SEAT-002",
+  "status": "residual_signal",
+  "conclusion": "席位印记 Phase-1 (事件对齐 41月): 最强 sf_winrate_r5->fr5 扣[自身动量+市场]残差后 全期 IC=+0.0547 |t|=8.58 (n=41月), 过线 (需 |IC|>=0.02 & |t|>=3.0) → residual_signal: 高战绩席位跟随扣自身动量后仍有独立预测, 进 GATE-001 walk-forward (最终只认 walk-forward α, SIGN-R03)。",
+  "alignment": "event-aligned (每信号日 D+1 一横截面, 按月聚合跨月 t 检验; vs NET-002 月末对齐)",
+  "screen_thresholds": {
+    "ic_sig": 0.02,
+    "t_sig": 3.0,
+    "ic_collapse": 0.01,
+    "min_months": 30,
+    "applies_to": "best (signal×label) orth_full(扣动量+市场) full-sample residual IC"
+  },
+  "labels": "fr5/fr20 = close[t+H]/close[t]-1 (因果, 从信号日 t 起, 复用 seat001 fwd_returns)",
+  "controls": {
+    "mom": [
+      "mom_5",
+      "mom_20",
+      "mom_60"
+    ],
+    "market": [
+      "beta"
+    ],
+    "mom_def": "mom_h=close[t]/close[t-h]-1 (trailing, ≤t)",
+    "market_def": "per-stock trailing 60d beta vs 等权市场日收益 (因果)"
+  },
+  "power_ok_ge30months": true,
+  "best_pair": "sf_winrate_r5->fr5",
+  "primary_pair": "sf_edge_r5->fr5",
+  "metrics": {
+    "n_months": 41,
+    "best_orth_full_ic": 0.0547,
+    "best_orth_full_t": 8.58,
+    "by_pair": {
+      "sf_edge_r5->fr5": {
+        "raw": {
+          "ic": 0.0585,
+          "t": 7.46,
+          "n_months": 41,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0481,
+              "t": 1.28,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.0787,
+              "t": 5.55,
+              "n": 14
+            },
+            "reversal": {
+              "ic": 0.048,
+              "t": 5.12,
+              "n": 25
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": 0.0542,
+          "t": 8.29,
+          "n_months": 41,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0689,
+              "t": 3.44,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.0688,
+              "t": 6.03,
+              "n": 14
+            },
+            "reversal": {
+              "ic": 0.0449,
+              "t": 5.49,
+              "n": 25
+            }
+          }
+        },
+        "minus_market": {
+          "ic": 0.0536,
+          "t": 6.83,
+          "n_months": 41,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0623,
+              "t": 1.43,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.075,
+              "t": 5.38,
+              "n": 14
+            },
+            "reversal": {
+              "ic": 0.0409,
+              "t": 4.44,
+              "n": 25
+            }
+          }
+        },
+        "orth_full": {
+          "ic": 0.0509,
+          "t": 7.8,
+          "n_months": 41,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.08,
+              "t": 3.3,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.0645,
+              "t": 5.75,
+              "n": 14
+            },
+            "reversal": {
+              "ic": 0.041,
+              "t": 5.08,
+              "n": 25
+            }
+          }
+        }
+      },
+      "sf_winrate_r5->fr5": {
+        "raw": {
+          "ic": 0.0704,
+          "t": 9.94,
+          "n_months": 41,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0702,
+              "t": 3.86,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.0819,
+              "t": 6.63,
+              "n": 14
+            },
+            "reversal": {
+              "ic": 0.064,
+              "t": 6.94,
+              "n": 25
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": 0.0577,
+          "t": 8.9,
+          "n_months": 41,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0824,
+              "t": 10.06,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.0656,
+              "t": 5.75,
+              "n": 14
+            },
+            "reversal": {
+              "ic": 0.0514,
+              "t": 6.13,
+              "n": 25
+            }
+          }
+        },
+        "minus_market": {
+          "ic": 0.061,
+          "t": 8.3,
+          "n_months": 41,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0839,
+              "t": 4.11,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.0776,
+              "t": 6.17,
+              "n": 14
+            },
+            "reversal": {
+              "ic": 0.0498,
+              "t": 5.42,
+              "n": 25
+            }
+          }
+        },
+        "orth_full": {
+          "ic": 0.0547,
+          "t": 8.58,
+          "n_months": 41,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0934,
+              "t": 6.72,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.0646,
+              "t": 5.77,
+              "n": 14
+            },
+            "reversal": {
+              "ic": 0.0461,
+              "t": 5.85,
+              "n": 25
+            }
+          }
+        }
+      },
+      "sf_edge_r20->fr20": {
+        "raw": {
+          "ic": 0.0559,
+          "t": 5.93,
+          "n_months": 40,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0686,
+              "t": 2.19,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.081,
+              "t": 4.38,
+              "n": 13
+            },
+            "reversal": {
+              "ic": 0.0419,
+              "t": 3.87,
+              "n": 25
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": 0.0504,
+          "t": 5.91,
+          "n_months": 40,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0421,
+              "t": 3.08,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.0778,
+              "t": 4.78,
+              "n": 13
+            },
+            "reversal": {
+              "ic": 0.0368,
+              "t": 3.77,
+              "n": 25
+            }
+          }
+        },
+        "minus_market": {
+          "ic": 0.0524,
+          "t": 6.18,
+          "n_months": 40,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0646,
+              "t": 2.86,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.0764,
+              "t": 4.72,
+              "n": 13
+            },
+            "reversal": {
+              "ic": 0.0388,
+              "t": 3.97,
+              "n": 25
+            }
+          }
+        },
+        "orth_full": {
+          "ic": 0.0467,
+          "t": 6.23,
+          "n_months": 40,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.044,
+              "t": 8.84,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.071,
+              "t": 4.77,
+              "n": 13
+            },
+            "reversal": {
+              "ic": 0.0342,
+              "t": 4.12,
+              "n": 25
+            }
+          }
+        }
+      },
+      "sf_edge_r5->fr20": {
+        "raw": {
+          "ic": 0.048,
+          "t": 5.48,
+          "n_months": 41,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0331,
+              "t": 1.05,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.0659,
+              "t": 3.39,
+              "n": 13
+            },
+            "reversal": {
+              "ic": 0.0402,
+              "t": 4.23,
+              "n": 26
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": 0.0477,
+          "t": 6.52,
+          "n_months": 41,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0369,
+              "t": 1.21,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.068,
+              "t": 4.46,
+              "n": 13
+            },
+            "reversal": {
+              "ic": 0.0384,
+              "t": 4.78,
+              "n": 26
+            }
+          }
+        },
+        "minus_market": {
+          "ic": 0.0451,
+          "t": 5.21,
+          "n_months": 41,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0351,
+              "t": 1.06,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.0653,
+              "t": 3.31,
+              "n": 13
+            },
+            "reversal": {
+              "ic": 0.0358,
+              "t": 3.98,
+              "n": 26
+            }
+          }
+        },
+        "orth_full": {
+          "ic": 0.0437,
+          "t": 6.23,
+          "n_months": 41,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0356,
+              "t": 1.19,
+              "n": 2
+            },
+            "momentum": {
+              "ic": 0.0668,
+              "t": 4.7,
+              "n": 13
+            },
+            "reversal": {
+              "ic": 0.0327,
+              "t": 4.34,
+              "n": 26
+            }
+          }
+        }
+      }
+    },
+    "primary_ablation": {
+      "raw_ic": 0.0585,
+      "raw_t": 7.46,
+      "minus_mom_ic": 0.0542,
+      "minus_market_ic": 0.0536,
+      "orth_full_ic": 0.0509,
+      "orth_full_t": 7.8
+    }
+  },
+  "ablation_note": "逐步消融 (raw → 单扣动量 → 单扣市场 beta → 全扣) 定位席位信号来源: 若 raw 有 IC 但扣自身动量即塌 = 聪明席位跟随本质是被买股的自身动量 (席位追涨/接力), 非独立行为 alpha。横截面 rank-IC 天然差掉当日全市场常数项, beta 控制额外捕捉市场暴露。",
+  "artifacts": [
+    "research/cache/seat002_ic_table.parquet",
+    "research/cache/seat002_panel.parquet",
+    "research/cache/seat002_controls.parquet"
+  ],
+  "guardrails": [
+    "SIGN-R01 阈值冻结未改",
+    "SIGN-R02 负结果=合法完成",
+    "SIGN-R03 IC 仅 go/no-go 非落地",
+    "SIGN-R04 fr 因果 label 不进 features",
+    "SIGN-R06 ST 源头排除 (SEAT-001 + daily 控制侧)",
+    "SIGN-R11 分 regime 评估",
+    "SIGN-R12++ 扣[自身动量+市场]残差化消融"
+  ],
+  "downstream": "residual_signal → 进 GATE-001 walk-forward (SEAT 臂)。"
+}

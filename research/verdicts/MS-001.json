@@ -1,0 +1,8 @@
+{
+  "id": "MS-001",
+  "status": "built",
+  "conclusion": "GOOD_TIMES 市场状态指标 (paper 复刻, 事前无前瞻) 建成: MA200_state + UP3y_state over 沪深300+中证500, 月末状态赋下月, ∈{0熊,0.5过渡,1牛}. 全样本2022-2026(54月): 11熊/30过渡/13牛 std0.353 (含2023-09~2024-09连续12月深熊). de-lookahead OOS窗2024-10~2026-06(21月): 0熊/10过渡/11牛 std0.249 — 有过渡→牛变化但无熊月. timing测试可行(测牛市侧)但熊市侧诚实数据测不动.",
+  "artifact": "research/cache/ms_goodtimes.parquet",
+  "feasibility": "OOS窗 GOOD_TIMES std0.249>0.15 可行, 但无熊月 → 只能测paper规则的'牛市减仓'侧, '熊市加仓'侧无诚实数据.",
+  "guardrails": ["SIGN-R04 事前无前瞻(月末状态赋下月)", "SIGN-R05 生产线不碰", "paper防前瞻设计复刻"]
+}

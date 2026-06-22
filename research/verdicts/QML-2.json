@@ -1,0 +1,19 @@
+{
+  "id": "QML-2",
+  "status": "REJECT_cheap",
+  "test_months": 19,
+  "mean_rankic_lgbm": 0.0953,
+  "mean_rankic_mlp": 0.066,
+  "delta_mean": -0.0294,
+  "delta_nw_t": -1.87,
+  "mlp_win_months": 6,
+  "scope": "NN(MLP)非线性 vs GBDT 在236 factor_lab工程特征上; 序列-NN-on-raw未测(CPU昂贵)",
+  "conclusion": "walk-forward 19月 OOS RankIC: LGBM(base)=+0.0953, MLP=+0.0660 (Δ-0.0294 NW-t-1.87, MLP胜base 6/19月). MLP未显著超LGBM(NW-t<2) → 廉价REJECT: 模型class(NN非线性)在我们236工程特征上不漏信号, GBDT对截面tabular仍是最优。序列-NN-on-raw另作CPU昂贵后续(本结论不覆盖)。",
+  "guardrails": [
+    "SIGN-R01 gate冻结",
+    "SIGN-R03 walk-forward OOS RankIC",
+    "SIGN-R16 廉价闸+NW-t",
+    "apples同特征同subsample同月窗唯一差异模型",
+    "SIGN-R05 生产线冻结"
+  ]
+}

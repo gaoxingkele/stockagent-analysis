@@ -1,0 +1,32 @@
+{
+  "id": "FIN-002",
+  "status": "built",
+  "conclusion": "冻结 V12.31 真·真实基线 + 前向 paper-trade 协议 + 部署前 checklist (吃进 codex 第三次 review②)。**① 产 research/backtest/V12.31_BASELINE.md** 按 prd.freeze_protocol: (a) 冻结配置 (V7c dual-track 池 / ratio_s5 排序 / r20 label-embargo walk-forward / 双轨 70-20-10 / 行业 cap 4 / 每 20 交易日再平衡 / close-based 保守 / A股成本 round-trip≈0.30% / T+1 / 涨跌停 / ST 源头排除) 逐字钉死, 任何改动=新策略另测; (b) 真实期望 = 净 Sharpe **1.31** (年化+35%/maxDD-16%) ± bootstrap 95%CI **[+0.11,+2.60]** (来自 FIN-001), 标注 P(>0)=99%/P(>1)=66%/LOO稳健/regime均衡/CI宽是样本短非过拟合, **1.31 是点估计非可承诺下限**; (c) 前向 paper-trade 协议 (每日 append-only 落 picks→满20/40d 按冻结口径算实现P&L→分regime对照1.31→累计≥6cohort或过2026-07血洗窗后重跑FIN-001误差条复检, 红线=前向数据不回流调参 SIGN-R01/R02); (d) 注水链 (2.78→1.84→1.31) 钉清, 凡引用旧绝对Sharpe须腰斩重读。**② 部署前 checklist 可执行部分已执行** (run_fin002.py): r20 池模型 r20_v16_long_nost 共 **235 特征仅 6 个基本面** (229 全价量/技术/资金流/形态/市场环境无披露滞后); 5/6 (total_mv/pe/pe_ttm/pb 来自 daily_basic 日频快照 + winner_rate 来自 cyq_perf 日频) = **point-in-time 安全 (LOW)**; **唯一 MEDIUM 风险 = holder_pct** (季频股东户数, factor_lab 合并源未在代码层断言 ann_date 公告日对齐, 若按 end_date 报告期末则有 ~1季度前视) → 部署前须核实 as-of 对齐或替换为 FU-001 已建 ann_date PIT 面板。codex#3 残留盲点已定位且影响有限 (单字段, BT-003 证 r20 信号主导来自整池排序非单因子)。基线已冻结 + 前向协议就绪 + checklist 结果: r20 基本面 PIT 风险整体低, 唯 holder_pct 须上线前核。",
+  "metrics": {
+    "baseline_net_sharpe": 1.308,
+    "baseline_sharpe_ci95": [0.114, 2.605],
+    "baseline_ann_return": 0.3486,
+    "baseline_max_drawdown": -0.1569,
+    "r20_n_features_total": 235,
+    "r20_n_fundamental_pit_fields": 6,
+    "r20_fundamental_pit_fields": ["holder_pct", "winner_rate", "total_mv", "pe", "pe_ttm", "pb"],
+    "r20_pit_medium_risk": ["holder_pct"],
+    "r20_pit_low_risk": ["winner_rate", "total_mv", "pe", "pe_ttm", "pb"],
+    "r20_n_none_risk_price_volume_tech": 229
+  },
+  "checklist": {
+    "executed": "r20 基本面 point-in-time 风险核查 — 235特征/6基本面/5 LOW(日频快照PIT安全)/1 MEDIUM(holder_pct 季频对齐未断言)",
+    "deferred_to_deploy": [
+      "holder_pct as-of 对齐核实/替换 FU-001 ann_date PIT 面板 (唯一已识别 PIT 风险)",
+      "模型重建须按 embargo walk-forward 口径 (训练截止 ≤ P_start−21交易日), 非 in-sample 生产单模型注水",
+      "成本/滑点上线初期实测校准 (基线 0.10%/边, 小盘流动性须实测)",
+      "ST 推理当日按最新 stock_basic 实时过滤 (SIGN-R06)"
+    ]
+  },
+  "artifacts": [
+    "research/backtest/V12.31_BASELINE.md",
+    "research/backtest/run_fin002.py",
+    "research/cache/fin002/fin002_checklist.json"
+  ],
+  "note": "不改策略不动门柱 (R01); 只读冻结基线 + checklist, 复用 WFE-001/FIN-001 缓存 + 生产 feature_meta 未碰生产文件 (R05); 描述性冻结+核查=合法完成 (R02); 中间指标≠ship (R03); ST 已源头排除 (R06); 大缓存 research/cache/fin002/ gitignored 无 features 写入 (R04)。吃进 codex 第三次 review②: 基线已冻结 (1.31±CI), 前向 paper-trade 协议就绪 (接 7月血洗窗复检), 部署前 checklist 执行 — r20 基本面 PIT 风险整体低, 唯 holder_pct 须上线前核 as-of 对齐。下一步 FIN-003 = triple-barrier V12.32 独立挑战者。"
+}

@@ -1,0 +1,218 @@
+{
+  "task": "DLV-004",
+  "status": "全块正/噪声内",
+  "playbook_hit": "全块正/噪声内",
+  "conclusion": "r20 246 特征 12 块 embargo-WF block-ablation (N_train=300k, 19 月): **无净负块** (无块剔除后 IC 显著上升)。各块 ΔRankIC 95%CI 均多数含 0 → 效应落 21 月噪声带内, r20 特征集已干净, 剪枝无实质收益。最'拖后腿'(Δ最大但仍噪声内): trend_ma(Δ+0.0027, CI[-0.0081,+0.0137]), volume_liquidity(Δ+0.0007, CI[-0.0065,+0.0080]), valuation_size(Δ+0.0005, CI[-0.0166,+0.0140])。 baseline(300k) 全期 IC=+0.1091 (dep001 900k 参照 +0.0952)。",
+  "n_features_total": 246,
+  "n_blocks": 12,
+  "n_test_months": 19,
+  "n_train_ablate": 300000,
+  "metric": "OOS RankIC (pred_r20 vs r20_fresh); r20 是回归器故无 AUC, RankIC 作 ΔAUC 类比",
+  "baseline_ic_300k_mean": 0.10909121463549505,
+  "dep001_baseline_ic_900k_mean": 0.09522125855118527,
+  "net_negative_blocks": [],
+  "blocks_ci_excludes_zero": [
+    "moneyflow",
+    "market_context"
+  ],
+  "block_stats": {
+    "valuation_size": {
+      "n_feat_in_block": 4,
+      "mean_delta_rankic": 0.0005430471672115616,
+      "ci_low": -0.016618856604637897,
+      "ci_high": 0.013999471696443421,
+      "ci_excludes_zero": false,
+      "net_negative_block": false,
+      "regime_delta": {
+        "momentum": 0.001141497409135786,
+        "reversal": -0.003771785112788431,
+        "mixed": 0.02002263272047674
+      },
+      "n_months": 19
+    },
+    "fundamental_chip": {
+      "n_feat_in_block": 1,
+      "mean_delta_rankic": -0.011908151216815382,
+      "ci_low": -0.02492935324467007,
+      "ci_high": 0.0003091306926000797,
+      "ci_excludes_zero": false,
+      "net_negative_block": false,
+      "regime_delta": {
+        "momentum": -0.015461708527901201,
+        "reversal": -0.014362685374190432,
+        "mixed": 0.01280197015886024
+      },
+      "n_months": 19
+    },
+    "trend_ma": {
+      "n_feat_in_block": 25,
+      "mean_delta_rankic": 0.0027186277261889054,
+      "ci_low": -0.008121474457224023,
+      "ci_high": 0.013663621097155519,
+      "ci_excludes_zero": false,
+      "net_negative_block": false,
+      "regime_delta": {
+        "momentum": -0.0013277832129989424,
+        "reversal": 0.006065080783861131,
+        "mixed": 0.00014880072498524993
+      },
+      "n_months": 19
+    },
+    "oscillator": {
+      "n_feat_in_block": 19,
+      "mean_delta_rankic": -0.005536699920540624,
+      "ci_low": -0.016280871055721655,
+      "ci_high": 0.004319768996066024,
+      "ci_excludes_zero": false,
+      "net_negative_block": false,
+      "regime_delta": {
+        "momentum": -0.011025800923637526,
+        "reversal": -0.004540516839105868,
+        "mixed": 0.008694238183124751
+      },
+      "n_months": 19
+    },
+    "volatility": {
+      "n_feat_in_block": 6,
+      "mean_delta_rankic": -0.006429267957025285,
+      "ci_low": -0.01904064546301665,
+      "ci_high": 0.004501103183637492,
+      "ci_excludes_zero": false,
+      "net_negative_block": false,
+      "regime_delta": {
+        "momentum": -0.016884066232605455,
+        "reversal": -0.0010766898278666815,
+        "mixed": 0.003399635361712297
+      },
+      "n_months": 19
+    },
+    "volume_liquidity": {
+      "n_feat_in_block": 20,
+      "mean_delta_rankic": 0.0006720233610242058,
+      "ci_low": -0.006542343822940633,
+      "ci_high": 0.007990683744226965,
+      "ci_excludes_zero": false,
+      "net_negative_block": false,
+      "regime_delta": {
+        "momentum": -0.001309717170739261,
+        "reversal": -0.0001925262639158775,
+        "mixed": 0.011930863346896754
+      },
+      "n_months": 19
+    },
+    "candle_pattern": {
+      "n_feat_in_block": 70,
+      "mean_delta_rankic": -0.007322192973073187,
+      "ci_low": -0.01898377499308041,
+      "ci_high": 0.0043677161885032345,
+      "ci_excludes_zero": false,
+      "net_negative_block": false,
+      "regime_delta": {
+        "momentum": -0.011034991034456426,
+        "reversal": -0.005714067522791489,
+        "mixed": -0.0023680270096403527
+      },
+      "n_months": 19
+    },
+    "breakout_position": {
+      "n_feat_in_block": 22,
+      "mean_delta_rankic": -0.0036908779802145224,
+      "ci_low": -0.013006774311040742,
+      "ci_high": 0.006380971964841592,
+      "ci_excludes_zero": false,
+      "net_negative_block": false,
+      "regime_delta": {
+        "momentum": -0.006178685546904503,
+        "reversal": 0.0015443282175575182,
+        "mixed": -0.021159582485659807
+      },
+      "n_months": 19
+    },
+    "moneyflow": {
+      "n_feat_in_block": 45,
+      "mean_delta_rankic": -0.01355758857579543,
+      "ci_low": -0.025871407708340996,
+      "ci_high": -0.0015715183692980269,
+      "ci_excludes_zero": true,
+      "net_negative_block": false,
+      "regime_delta": {
+        "momentum": -0.012395205930449807,
+        "reversal": -0.019025224691529164,
+        "mixed": 0.009712252744163555
+      },
+      "n_months": 19
+    },
+    "pyramid": {
+      "n_feat_in_block": 10,
+      "mean_delta_rankic": -0.00741458665834973,
+      "ci_low": -0.020272162294130702,
+      "ci_high": 0.0019294022477076645,
+      "ci_excludes_zero": false,
+      "net_negative_block": false,
+      "regime_delta": {
+        "momentum": -0.018949458134248306,
+        "reversal": -0.0009107207721266514,
+        "mixed": 0.0004381340761799024
+      },
+      "n_months": 19
+    },
+    "market_context": {
+      "n_feat_in_block": 12,
+      "mean_delta_rankic": -0.08784507693887154,
+      "ci_low": -0.15363287004908635,
+      "ci_high": -0.02412639470001416,
+      "ci_excludes_zero": true,
+      "net_negative_block": false,
+      "regime_delta": {
+        "momentum": -0.06757315341253885,
+        "reversal": -0.10133117341627425,
+        "mixed": -0.09136632689402241
+      },
+      "n_months": 19
+    },
+    "cross_sectional_rel": {
+      "n_feat_in_block": 12,
+      "mean_delta_rankic": -0.009169456180188211,
+      "ci_low": -0.02735124520350994,
+      "ci_high": 0.00780198056404419,
+      "ci_excludes_zero": false,
+      "net_negative_block": false,
+      "regime_delta": {
+        "momentum": -0.008356516972811045,
+        "reversal": -0.023587501985265262,
+        "mixed": 0.06007548561937696
+      },
+      "n_months": 19
+    }
+  },
+  "months": [
+    "202410",
+    "202411",
+    "202412",
+    "202501",
+    "202502",
+    "202503",
+    "202504",
+    "202505",
+    "202506",
+    "202507",
+    "202508",
+    "202509",
+    "202510",
+    "202511",
+    "202512",
+    "202601",
+    "202602",
+    "202603",
+    "202604"
+  ],
+  "frozen_params": {
+    "n_train_ablate": 300000,
+    "n_trees": 120,
+    "embargo_tdays": 21,
+    "n_boot": 2000,
+    "ci": 0.95,
+    "seed": 42
+  },
+  "discipline": "R01 块/阈值冻结; R02 描述性消融=合法完成; R03 中间IC≠ship; R05 仅 load 缓存 feature_meta 0 生产改动; R06 ST 源头排除; R08 月度 checkpoint; R11 regime 分层"
+}

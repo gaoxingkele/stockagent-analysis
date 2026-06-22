@@ -1,0 +1,76 @@
+{
+  "id": "WFE-002",
+  "status": "结构也不成立",
+  "conclusion": "在 **WFE-001 label-embargo 真·真实 OOS picks** (20 cohort, 20241008~20260611) 上强化版止盈复测, 吃进 codex 第二次 review 第2+5条: **主口径=close-based 保守成交** / 强化 gate (TP 须 > 随机阈值 **p90** 非均值) / 扩展负控分解 edge。baseline_40d 净Sharpe +1.26; TP_40d_close (主口径) 净Sharpe +1.38。★close-based apples-to-apples ΔSharpe(TP40c−base40) = +0.117 (Δ年化 -3.60pp, ΔmaxDD +1.99pp); 日内 high 乐观口径 ΔSharpe +0.279 (WF-002 用的是这个乐观成交); EX-001 混淆口径 (TP−base20) ΔSharpe +0.357。placebo: 静态降暴露 (f=0.804) ΔSharpe -0.008 (≈0 → 增益非'少持仓数学抬升'); 随机阈值 TP (50 seed, close-based) ΔSharpe mean +0.155 **p90=+0.279** [p5,p95]=(+0.021,+0.309)。★强化 gate (随机 **p90** 非均值): TP_close ΔSharpe +0.117 vs 随机 p90 +0.279 → 择价 alpha = False。分解负控 (各控 ΔSharpe vs base40, 越接近 TP_close +0.117 越是 edge 主源): 盈利条件 +0.247 / 缩短持有 +0.227 / 收益分位档位 +0.116 / 随机阈值 +0.155 → **edge 主来源 = 收益分位档位**。block bootstrap (1000次) ΔSharpe 95%CI=[-0.242,+0.523] (含0? 是); leave-one-out [-0.055,+0.271] 符号稳定 False; regime (R11) mixed +0.15pp / momentum -0.45pp / reversal -0.19pp。gate_tp_v2: 结构性减仓改进=False (close-based ΔSharpe>0 AND CI 不含0 AND >静态降暴露 placebo); 择价 alpha=False (TP>随机p90) → **status=结构也不成立** (frozen gate, R01)。close-based 保守口径下结构性减仓 ΔSharpe CI 含0 或 ≤ 静态降暴露 placebo → WF-002 的 '+0.809' 是日内 high 成交乐观 + Δ算术的假象, 弃止盈。 ★关键 nuance (SIGN-R03 诚实): (1) 主口径从 WF-002 的日内 high 乐观成交收紧到 close-based 保守成交后, ΔSharpe +0.279→+0.117; (2) 强化 gate 用随机阈值 **p90** (非 WF-002 的均值): TP < p90 → 固定档位无择价 alpha, 边际全是 timing-agnostic 结构性 de-risk (任意阈值都行, 符合 codex 预期); (3) 分解 4 控指向 edge 主源 = **收益分位档位**; (4) Δ年化 -3.60pp 但 maxDD 砍 2.0pp = 保收益降波动。【绝对量级已是 de-lookahead+embargo 真实 OOS, 受控 Δ 两臂相消 + close-based 保守口径 + 随机 p90 强 gate + 4 控分解 → 止盈是否真技能的最干净裁决】。",
+  "metrics": {
+    "n_cohorts": 20,
+    "main_caliber": "close-based",
+    "baseline_20d_sharpe": 1.02,
+    "baseline_40d_sharpe": 1.26,
+    "TP_40d_close_sharpe": 1.377,
+    "TP_40d_high_sharpe": 1.54,
+    "d_sharpe_TP40c_minus_base40": 0.1168,
+    "d_sharpe_TP40high_minus_base40_optimistic": 0.2793,
+    "d_sharpe_TP40c_minus_base20_EX001_confounded": 0.3568,
+    "d_ann_return_pp": -3.605,
+    "d_maxdd_pp": 1.993,
+    "placebo_static_reduce_dsharpe": -0.0079,
+    "placebo_random_TP_dsharpe_mean": 0.1555,
+    "placebo_random_TP_dsharpe_p90": 0.2795,
+    "TP_gt_random_p90_level_alpha": false,
+    "struct_improve": false,
+    "edge_decomposition_dsharpe": {
+      "cond_profit": 0.2474,
+      "short_hold_random": 0.2275,
+      "ret_quantile": 0.1157,
+      "random_threshold": 0.1555,
+      "TP_close": 0.1168
+    },
+    "edge_source_nearest_TP": "收益分位档位",
+    "bootstrap_ci95": [
+      -0.242,
+      0.5229
+    ],
+    "bootstrap_excludes_0": false,
+    "bootstrap_p_gt_0": 0.766,
+    "loo_min": -0.0548,
+    "loo_max": 0.271,
+    "loo_sign_stable": false,
+    "gate_conditions": {
+      "struct_dsharpe_40c_positive": true,
+      "struct_bootstrap_ci_excludes_0": false,
+      "struct_beats_static_placebo": true,
+      "level_TP_gt_random_p90": false
+    }
+  },
+  "regime_delta": {
+    "mixed": {
+      "n_months": 2,
+      "d_month_pp": 0.149
+    },
+    "momentum": {
+      "n_months": 9,
+      "d_month_pp": -0.445
+    },
+    "reversal": {
+      "n_months": 9,
+      "d_month_pp": -0.193
+    }
+  },
+  "cost_model": {
+    "commission": 0.00025,
+    "stamp_sell": 0.0005,
+    "transfer": 1e-05,
+    "slippage": 0.001,
+    "enabled": true,
+    "buy_rate": 0.00126,
+    "sell_rate": 0.00176
+  },
+  "playbook_hit": "结构也不成立",
+  "artifacts": [
+    "research/backtest/run_wfe002.py",
+    "research/cache/wfe002/wfe002_results.json",
+    "research/cache/wfe002/wfe002_nav_*.parquet"
+  ],
+  "note": "网格冻结于 prd.preRegisteredGate.tp_retest_v2 (R01, 不搜不调); picks=WFE-001 label-embargo 真·真实 OOS (codex 第1条 + SIGN-R13①); 主口径=close-based 保守成交 (codex 第2条); 强化 gate=TP 须 > 随机阈值 p90 非均值 (codex 第2条); 扩展负控分解 edge=盈利条件控/缩短持有控/收益分位控 (codex 第5条); baseline-40d 对齐去持有期混淆 (R13③); 静态降暴露 placebo 去'少持仓数学抬升' (R13②); block bootstrap CI + leave-one-out + 分regime (R11); 受控 Δ 两臂入场逐位一致共模相消 (R03); ST 源头排除 (R06); 大缓存 gitignored (R04); 生产线只读 (R05); 描述性受控对照=合法完成 (R02)。"
+}

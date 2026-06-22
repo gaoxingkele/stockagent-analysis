@@ -1,0 +1,71 @@
+{
+  "id": "FIN-001",
+  "status": "built",
+  "conclusion": "V12.31 真·真实基线 (WFE-001 label-embargo OOS book, 20241009~20260611, 407日/21个20日cohort) 的点估计 净Sharpe **+1.31** (WFE-001 报 +1.31) / 年化 +34.9% / maxDD -15.7% 补误差条 (不改策略, R01)。**① per-cohort block bootstrap (1000次): Sharpe 95% CI = [+0.11, +2.60]** (中位 +1.27, SE 0.62, P(>0)=99%, P(>1)=66%); 年化 95% CI [-1%, +80%]。→ **CI 很宽是核心结论**: 仅 ~21 个 cohort / 21 月样本, 统计功率有限; 真实 Sharpe 几乎必正 (P>0 99%) 但 '稳超1' 信心只有 66% → 1.31 是点估计而非可承诺下限。**② leave-one-out (逐cohort): Sharpe ∈ [+1.02, +1.53], 符号恒正=True** → **对删任一单期稳健** (不靠某个孤立 cohort); 最撑 Sharpe 的 cohort #15 ('20251229', '20260127') 删后仍 +1.02。**③ 集中度 = 中等 (非极端)**: top-3 赢月 ['202512', '202508', '202601'] 占正收益 46%, HHI 0.11 → 有效 ~9.3 个独立赢月 (共 14/21 正月); LOO-by-month 删最重的 202508 Sharpe 仅降到 +1.05 = 单月依赖不强。regime 归因 (主贡献 **reversal**, 但实为均衡): momentum 组内日Sharpe +1.44 贡献 48% / reversal 组内日Sharpe +1.47 贡献 50% / mixed 组内日Sharpe +0.47 贡献 3% → 动量/反转两态贡献近 50/50, 非靠单一 regime。**诚实结论: 1.31 是最干净真实基线点估计, 且对 LOO (删单 cohort/月) 稳健、收益分布跨月/跨 regime 中等均衡 — 但 bootstrap CI 宽 [0.1,2.6] 暴露真实瓶颈是样本短/功率低, 而非过拟合到某几个月**。故 1.31 非最终可部署期望, 主要不确定性来自样本量; 接 7 月血洗窗前向 paper-trade 复检 (见 FIN-002 冻结协议)。",
+  "metrics": {
+    "point_net_sharpe": 1.308,
+    "point_ann_return": 0.3486,
+    "point_max_drawdown": -0.1569,
+    "bootstrap_sharpe_ci95": [
+      0.114,
+      2.605
+    ],
+    "bootstrap_sharpe_median": 1.265,
+    "bootstrap_sharpe_se": 0.621,
+    "bootstrap_p_sharpe_gt_0": 0.988,
+    "bootstrap_p_sharpe_gt_1": 0.665,
+    "bootstrap_ann_return_ci95": [
+      -0.0063,
+      0.8006
+    ],
+    "loo_cohort_sharpe_min": 1.016,
+    "loo_cohort_sharpe_max": 1.53,
+    "loo_cohort_sign_stable_positive": true,
+    "loo_by_month_sharpe_min": 1.054,
+    "most_supportive_month": "202508",
+    "top3_winning_months": [
+      "202512",
+      "202508",
+      "202601"
+    ],
+    "top3_share_of_positive_return": 0.459,
+    "hhi_positive_months": 0.107,
+    "effective_n_winning_months": 9.31,
+    "n_positive_months": 14,
+    "n_total_months": 21,
+    "regime_main_contributor": "reversal"
+  },
+  "regime_attribution": {
+    "momentum": {
+      "n_days": 168,
+      "n_months": 9,
+      "daily_sharpe_within": 1.437,
+      "mean_daily_ret_bp": 15.38,
+      "log_ret_contrib": 0.2341,
+      "log_ret_contrib_share": 0.485
+    },
+    "reversal": {
+      "n_days": 185,
+      "n_months": 9,
+      "daily_sharpe_within": 1.47,
+      "mean_daily_ret_bp": 14.23,
+      "log_ret_contrib": 0.2413,
+      "log_ret_contrib_share": 0.5
+    },
+    "mixed": {
+      "n_days": 37,
+      "n_months": 2,
+      "daily_sharpe_within": 0.473,
+      "mean_daily_ret_bp": 4.41,
+      "log_ret_contrib": 0.0124,
+      "log_ret_contrib_share": 0.026
+    }
+  },
+  "artifacts": [
+    "research/backtest/run_fin001.py",
+    "research/cache/fin001/fin001_results.json",
+    "research/cache/fin001/fin001_loo_cohort.parquet",
+    "research/cache/fin001/fin001_monthly.parquet"
+  ],
+  "note": "不改策略 (R01 不动门柱); 在 WFE-001 embargo 真·真实 OOS book 上补误差条 (per-cohort block bootstrap 1000次 + LOO + 月度/regime 归因); cohort=20交易日再平衡/持有期 (= 自然依赖块); ST 已 WFE-001 源头排除 (R06); regime 分层必带 (R11); 描述性=合法完成 (R02); 中间指标≠ship (R03); 复用 WFE-001 缓存未碰生产 (R05); 大缓存 research/cache/fin001/ gitignored (R04)。吃进 codex 第三次 review: 1.31 是最干净真实基线点估计 (非最终可部署期望, CI/集中度已补)。"
+}

@@ -1,0 +1,103 @@
+{
+  "id": "MS-002",
+  "status": "真小_仅降回撤",
+  "window": [
+    "20241008",
+    "20260611"
+  ],
+  "n_months": 21,
+  "n_days": 408,
+  "base_is": "WFE-001 de-lookahead+embargo book (最诚实, 净Sharpe~1.31)",
+  "good_times_dist": {
+    "0.5": 179,
+    "0.75": 23,
+    "1.0": 206
+  },
+  "avg_exposure_paper_rule": 0.549,
+  "arms": {
+    "base": {
+      "sharpe": 1.3064,
+      "ann_return": 0.3476,
+      "max_dd": -0.1569,
+      "worst_month": -0.104,
+      "monthly_win_rate": 0.6667,
+      "final_nav": 1.6209
+    },
+    "dynamic_paper": {
+      "sharpe": 1.2072,
+      "ann_return": 0.162,
+      "max_dd": -0.101,
+      "worst_month": -0.0417,
+      "monthly_win_rate": 0.6667,
+      "final_nav": 1.2752
+    },
+    "trend": {
+      "sharpe": 1.3188,
+      "ann_return": 0.3194,
+      "max_dd": -0.1569,
+      "worst_month": -0.104,
+      "monthly_win_rate": 0.6667,
+      "final_nav": 1.5664
+    },
+    "static_dele": {
+      "sharpe": 1.3064,
+      "ann_return": 0.1872,
+      "max_dd": -0.0886,
+      "worst_month": -0.0572,
+      "monthly_win_rate": 0.6667,
+      "final_nav": 1.3203
+    }
+  },
+  "state_diagnostic": {
+    "0.5": {
+      "n_days": 179,
+      "sharpe": 0.806,
+      "ann_return": 0.1571,
+      "mean_daily_bps": 6.66
+    },
+    "0.75": {
+      "n_days": 23,
+      "sharpe": 1.263,
+      "ann_return": 0.2831,
+      "mean_daily_bps": 10.76
+    },
+    "1.0": {
+      "n_days": 206,
+      "sharpe": 1.649,
+      "ann_return": 0.5468,
+      "mean_daily_bps": 18.99
+    }
+  },
+  "placebo": {
+    "n": 1000,
+    "dynamic_sharpe": 1.2072,
+    "base_sharpe": 1.3064,
+    "placebo_mean_sharpe": 1.2579,
+    "placebo_p5_p95": [
+      0.9492,
+      1.5745
+    ],
+    "p_value_random_ge_dynamic": 0.588
+  },
+  "gate_conditions": {
+    "dynamic>base_sharpe": false,
+    "placebo_p<0.05": false,
+    "maxdd_not_worse": true
+  },
+  "gate_status": "真小_仅降回撤",
+  "conclusion": "市场状态暴露overlay在de-lookahead WFE-001 book (21月, 无熊月只过渡+牛) 上: dynamic_paper(熊加牛减) Sharpe=1.207 vs base=1.306 (Δ-0.099), trend(牛加熊减)=1.319, placebo p=0.588. → 真小_仅降回撤. OOS窗无熊市故paper'熊市加仓'侧未测(caveat); static_dele Sharpe≡base 证任何提升来自timing非降暴露。",
+  "excess_alpha_by_state_KEY": {
+    "note": "决定性调和: paper讲alpha(超额), 我们看绝对Sharpe被beta主导, 故检验超额alpha分state. 结论=超额也bull-loaded, 与paper双维度全反转.",
+    "transition_0.5": {"n_months": 8, "book": 0.01489, "excess_hs300": 0.00346, "excess_csi1000": 0.00158},
+    "bull_1.0": {"n_months": 11, "book": 0.03554, "excess_hs300": 0.02822, "excess_csi1000": 0.02061},
+    "interpretation": "超额alpha牛市最强(+2.82% vs 过渡+0.35%)不只绝对收益; 选股edge本身bull-loaded与paper'alpha熊市强'完全相反. 机制(a)long-only吃不到paper空头端熊市alpha (b)启动子/动量捕捉系统牛市离散度最大时最有效. regime维(momentum+1.96%/reversal+1.78%)对称→是GOOD_TIMES牛熊level维bull-loaded非动量反转维."
+  },
+  "caveat": "long-only净多头吃不到paper空头端alpha; OOS窗(2024-10~2026-06)无熊月只能测'牛市减仓'侧; 全de-lookahead book都只到2024-10诚实数据无熊市段, 不补lookahead避免误导数。SIGN-R13 placebo负控已含。",
+  "guardrails": [
+    "SIGN-R01 gate冻结",
+    "SIGN-R02 负/真小=合法完成",
+    "SIGN-R11 分state",
+    "SIGN-R13 placebo负控+static_dele隔离降暴露",
+    "SIGN-R05 生产线冻结"
+  ]
+}

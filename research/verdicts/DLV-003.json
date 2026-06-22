@@ -1,0 +1,47 @@
+{
+  "id": "DLV-003",
+  "status": "built",
+  "conclusion": "研究环升级三件套就绪 (Track B, ROADMAP_2026H2.md): 一个可被未来每个候选 gate 复用的 `research/research_env.py` + reviewer panel checklist, 让搜索出的候选'骗不过'。**①replication 默认化 (B2)**: `block_bootstrap_ci` (per-cohort block bootstrap 误差条) + `multi_seed_replicate` (跨 seed 稳定性)。在 WFE-001 真实 book 上跑 → Sharpe 95% CI=[0.1143, 2.6049] P(>0)=0.99 **精确复刻 FIN-001 已发布 CI[0.114, 2.605]** (零口径漂移, 证 util 忠实)。**②多重检验校正 (B3)**: `probabilistic_sharpe_ratio`(PSR) / `deflated_sharpe_ratio`(DSR, Bailey-LdP 惩罚试验次数 N) / `pbo_cscv`(PBO via CSCV)。DSR 演示: 同样观测 Sharpe 1.31, 若是从 N 个候选搜出, N=1→DSR 0.87 / N=10→0.53 / N=200→0.13 (试验越多, 扣减后显著性越低 = 正是本轮 RETRO/Hybrid 假阳性该被拦下的地方)。PBO 检测器: 纯噪声策略族 PBO=0.14(高=过拟合) vs 含真 alpha 族 0.00(低)。**③reviewer panel (B1)**: `REVIEWER_PANEL_CHECKLIST.md` (115 行) 把'单 codex 审'升级为 **多模型独立审 (codex 抓口径混淆/lookahead + 独立 claude 抓 framing/regime 盲点) + meta-judge 仲裁**, 配 §1 作者自审闸 + §2-3 机器统计闸 (映射到 research_env 各函数) + §5 终判落库。`research_env.py` 内置 7 项解析 self-test 全过 (PSR/DSR 单调性/PBO 噪声vs真alpha/bootstrap/multi_seed/skeptic_report 端到端)。**纯流程基础设施, 非 alpha** (status=built); 一站式入口 `skeptic_report()` 把 §2-3 机器闸打成 should_get_excited 布尔, 但作者自审 + panel 人/模型流程不可被单布尔替代。生产线 V12.31 只读冻结 (R05); 锚 1.31/CI 来自 FIN-001 (R01)。",
+  "metrics": {
+    "replication_reproduces_fin001": true,
+    "util_sharpe_ci95": [
+      0.1143,
+      2.6049
+    ],
+    "fin001_published_ci95": [
+      0.114,
+      2.605
+    ],
+    "util_p_sharpe_gt_0": 0.988,
+    "psr_solo": 0.9486,
+    "dsr_n1": 0.868,
+    "dsr_n10": 0.5289,
+    "dsr_n50": 0.2669,
+    "dsr_n200": 0.1342,
+    "pbo_noise_family": 0.1385,
+    "pbo_real_alpha_family": 0.0,
+    "checklist_lines": 115,
+    "selftest_passed": true
+  },
+  "artifacts": {
+    "util": "research/research_env.py",
+    "reviewer_checklist": "research/REVIEWER_PANEL_CHECKLIST.md",
+    "demo_runner": "research/backtest/run_dlv003.py",
+    "results": "research/cache/dlv003/dlv003_results.json"
+  },
+  "deliverables": {
+    "B2_replication": [
+      "block_bootstrap_ci",
+      "multi_seed_replicate"
+    ],
+    "B3_multiple_testing": [
+      "probabilistic_sharpe_ratio",
+      "deflated_sharpe_ratio",
+      "expected_max_sharpe",
+      "pbo_cscv"
+    ],
+    "B1_reviewer_panel": "research/REVIEWER_PANEL_CHECKLIST.md",
+    "one_stop": "skeptic_report() -> should_get_excited"
+  },
+  "discipline": "R01 锚 1.31/CI 来自 FIN-001 不在结果上调; R03 基础设施非 alpha (status=built, 中间指标≠ship 不适用); R05 生产只读 (仅 load WFE-001 缓存 book, 0 生产改动); R04 大缓存 research/cache/dlv003/ gitignored。util 复刻 FIN-001 CI 证零口径漂移, 未在任何结果上调门柱。交付物 = '骗不过的 verify harness' 升级, 是 Track C 新探索的前置。"
+}

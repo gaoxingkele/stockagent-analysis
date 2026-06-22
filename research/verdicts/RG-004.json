@@ -1,0 +1,6 @@
+{
+  "id": "RG-004",
+  "status": "skipped",
+  "conclusion": "skipped: 前置 RG-002 判 hypothesis_rejected, 无叠加层 (RG-003 skip) 可送入 walk-forward gate → gate 不评估。负结论(α 在因果动量 regime 下不依赖假设方向, 反而回调买入被奖励)已由 RG-002 干净尸检文档化。据 RG-002 事前注册 precondition 置 skip。",
+  "note": "gate 未运行; 不构成 PASS 也不构成 REJECT, 是 precondition 失败导致的合法 skip (SIGN-R02)。生产线 V12.31 未动。"
+}

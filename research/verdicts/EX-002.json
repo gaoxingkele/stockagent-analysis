@@ -1,0 +1,165 @@
+{
+  "id": "EX-002",
+  "status": "built",
+  "conclusion": "V12.31 picks 风格 = **小盘/高PE成长** (市值百分位 32%/PE 66%/波动 49%/换手 50% 在全市场; 波动换手≈市场中位非高波高换手), vs 基金持仓市值百分位 90% (基金显著更大盘)。行业 over-weight: 机械基件(+3.9pp), 百货(+2.0pp), 铜(+2.0pp); under-weight: 生物制药(-0.9pp), 中成药(-1.1pp)。book Sharpe 对照 (20241008~20260611): V12.31 +2.78 / hs300 +0.46 / CSI1000 +0.81 / 基金共识篮 +0.64 (真历史季报, ann_date 因果)。regime: book vs hs300 各 regime 超额见表 (R11)。与基金的差异**主导来自风格/universe 暴露** (我们小盘高PE成长, 基金大盘质量, 市值百分位 32% vs 90%) → 增量在**风格 tilt / 风险管理** (BT-002 已示动量月相对最弱 = 小盘成长在动量行情吃亏), 非单纯选股重标; 但 V12.31 book 绝对 Sharpe 受 lookahead 注水, 真实选股 α 须 EX-003 去 lookahead 定。符合 responsePlaybook['风格差']: 重要发现 = 风格暴露 driven。 【绝对量级非可交易声明】V12.31 book 含 r20 池共模 lookahead + 集中 (同 BT-001/002); 基金篮含 fund-selection survivorship (7 基金今日存在) 但持仓真历史季报 (比纯静态篮诚实)。",
+  "metrics": {
+    "picks_mv_pctile_in_market": 0.3245,
+    "picks_vol_pctile_in_market": 0.4941,
+    "picks_turnover_pctile_in_market": 0.5015,
+    "picks_pe_pctile_in_market": 0.6557,
+    "fund_holdings_mv_pctile_in_market": 0.9027,
+    "fund_holds_larger_cap": true,
+    "v1231_book_net_sharpe": 2.779,
+    "hs300_sharpe": 0.459,
+    "csi1000_sharpe": 0.807,
+    "fund_basket_sharpe": 0.636,
+    "fund_basket_ann_return": 0.1636,
+    "picks_small_cap": true,
+    "picks_high_vol": false,
+    "picks_high_turnover": false,
+    "style_profile": {
+      "log_total_mv": {
+        "pick_med_mean": 12.9575,
+        "mkt_med_mean": 13.2992,
+        "pick_pctile_mean": 0.3245
+      },
+      "vol20": {
+        "pick_med_mean": 0.4066,
+        "mkt_med_mean": 0.3985,
+        "pick_pctile_mean": 0.4941
+      },
+      "turnover_rate": {
+        "pick_med_mean": 2.8187,
+        "mkt_med_mean": 2.7537,
+        "pick_pctile_mean": 0.5015
+      },
+      "pe_ttm": {
+        "pick_med_mean": 193.7963,
+        "mkt_med_mean": 41.5443,
+        "pick_pctile_mean": 0.6557
+      },
+      "pb": {
+        "pick_med_mean": 3.1678,
+        "mkt_med_mean": 2.7632,
+        "pick_pctile_mean": 0.5094
+      }
+    }
+  },
+  "industry_tilt": {
+    "over_weight": [
+      [
+        "机械基件",
+        6.36,
+        2.51,
+        3.85
+      ],
+      [
+        "百货",
+        2.62,
+        0.65,
+        1.98
+      ],
+      [
+        "铜",
+        2.31,
+        0.34,
+        1.97
+      ],
+      [
+        "小金属",
+        3.09,
+        1.26,
+        1.84
+      ],
+      [
+        "摩托车",
+        1.6,
+        0.23,
+        1.37
+      ],
+      [
+        "半导体",
+        4.72,
+        3.58,
+        1.14
+      ]
+    ],
+    "under_weight": [
+      [
+        "生物制药",
+        0.56,
+        1.43,
+        -0.87
+      ],
+      [
+        "中成药",
+        0.13,
+        1.18,
+        -1.05
+      ],
+      [
+        "电气设备",
+        4.73,
+        6.31,
+        -1.57
+      ],
+      [
+        "软件服务",
+        3.34,
+        4.93,
+        -1.6
+      ],
+      [
+        "汽车配件",
+        2.21,
+        4.92,
+        -2.7
+      ],
+      [
+        "医疗保健",
+        0.6,
+        3.33,
+        -2.73
+      ]
+    ]
+  },
+  "regime_table": {
+    "mixed": {
+      "n_months": 2,
+      "book_vs_hs300_pp": 9.625,
+      "book_vs_fund_pp": 10.832,
+      "fund_ret_pp": 0.04
+    },
+    "momentum": {
+      "n_months": 9,
+      "book_vs_hs300_pp": 4.441,
+      "book_vs_fund_pp": 2.116,
+      "fund_ret_pp": 3.284
+    },
+    "reversal": {
+      "n_months": 9,
+      "book_vs_hs300_pp": 6.232,
+      "book_vs_fund_pp": 7.23,
+      "fund_ret_pp": 0.072
+    }
+  },
+  "cost_model": {
+    "commission": 0.00025,
+    "stamp_sell": 0.0005,
+    "transfer": 1e-05,
+    "slippage": 0.001,
+    "enabled": true,
+    "buy_rate": 0.00126,
+    "sell_rate": 0.00176
+  },
+  "artifacts": [
+    "research/backtest/run_ex002.py",
+    "research/cache/ex002/ex002_results.json",
+    "research/cache/ex002/ex002_style_profile.parquet",
+    "research/cache/ex002/ex002_fund_basket.parquet",
+    "research/cache/ex002/ex002_monthly_regime.parquet",
+    "research/cache/ex002/fund_portfolio_hist.parquet",
+    "research/cache/ex002/daily_basic/*.parquet"
+  ],
+  "note": "对照法/基准/基金篮构造冻结 (R01, DESIGN §7); 复用 BT-002 baseline book + 指数缓存; ST 源头排除 (R06); regime 分层必带 (R11); daily_basic per-date checkpoint (R08); 基金共识篮用真历史季报 ann_date 因果 (非静态快照外推, 标注 fund-selection survivorship); 描述性风格画像+对照=合法完成 (R02); 中间指标≠ship (R03); 绝对量级含 lookahead 非可交易声明; 大缓存 gitignored 无 features 写入 (R04); 生产线只读未碰 (R05)。"
+}

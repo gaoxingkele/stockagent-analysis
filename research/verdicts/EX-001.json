@@ -1,0 +1,150 @@
+{
+  "id": "EX-001",
+  "status": "built",
+  "conclusion": "对同一批 V12.31 picks (20 cohort, 20241008~20260611) 套预注册出场网格 (受控 Δ, 入场逐位一致)。baseline (固定 20d 持有): 年化 +90.8% 净Sharpe +2.40 maxDD -16.1%。受控 Δ vs baseline: TP-only ΔSharpe +1.358 (Δ年化 -13.31pp, ΔmaxDD +5.64pp); SL-8 ΔSharpe -0.071 / SL-12 ΔSharpe +0.249; TP+SL-8 ΔSharpe -0.187 / TP+SL-12 ΔSharpe +0.766。先验验证: 分批止盈帮 Sharpe=True, 回撤止损伤 Sharpe=False (两档 SL 均负)。最优 arm=TP_only。止盈帮, 止损未明显伤 → TP 候选, SL 中性。【绝对量级非可交易声明】含 r20 池共模 lookahead + 集中 + cohort 等权聚合 (同 BT-001/002); 出场层无 walk-forward, 仅受控描述性对照, ship 由 EX-003 r20 triple-barrier 重标 walk-forward 定。",
+  "metrics": {
+    "n_cohorts": 20,
+    "baseline_ann_return": 0.9077,
+    "baseline_net_sharpe": 2.4,
+    "baseline_max_drawdown": -0.1614,
+    "deltas_vs_baseline": {
+      "TP_only": {
+        "d_sharpe": 1.358,
+        "d_ann_return_pp": -13.31,
+        "d_maxdd_pp": 5.64
+      },
+      "SL_8": {
+        "d_sharpe": -0.071,
+        "d_ann_return_pp": -73.37,
+        "d_maxdd_pp": 12.57
+      },
+      "SL_12": {
+        "d_sharpe": 0.249,
+        "d_ann_return_pp": -51.53,
+        "d_maxdd_pp": 5.78
+      },
+      "TP_SL_8": {
+        "d_sharpe": -0.187,
+        "d_ann_return_pp": -76.82,
+        "d_maxdd_pp": 12.86
+      },
+      "TP_SL_12": {
+        "d_sharpe": 0.766,
+        "d_ann_return_pp": -53.93,
+        "d_maxdd_pp": 10.56
+      }
+    },
+    "summary_intraday": {
+      "baseline": {
+        "n_days": 405,
+        "total_return": 1.8165,
+        "ann_return": 0.9077,
+        "sharpe": 2.4,
+        "max_drawdown": -0.1614
+      },
+      "TP_only": {
+        "n_days": 406,
+        "total_return": 1.5138,
+        "ann_return": 0.7746,
+        "sharpe": 3.7577,
+        "max_drawdown": -0.105
+      },
+      "SL_8": {
+        "n_days": 406,
+        "total_return": 0.2941,
+        "ann_return": 0.174,
+        "sharpe": 2.3291,
+        "max_drawdown": -0.0357
+      },
+      "SL_12": {
+        "n_days": 406,
+        "total_return": 0.7023,
+        "ann_return": 0.3924,
+        "sharpe": 2.649,
+        "max_drawdown": -0.1036
+      },
+      "TP_SL_8": {
+        "n_days": 406,
+        "total_return": 0.2335,
+        "ann_return": 0.1395,
+        "sharpe": 2.2126,
+        "max_drawdown": -0.0328
+      },
+      "TP_SL_12": {
+        "n_days": 406,
+        "total_return": 0.6555,
+        "ann_return": 0.3684,
+        "sharpe": 3.1661,
+        "max_drawdown": -0.0559
+      }
+    },
+    "summary_close_based": {
+      "TP_only": {
+        "n_days": 406,
+        "total_return": 1.3742,
+        "ann_return": 0.7126,
+        "sharpe": 3.1859,
+        "max_drawdown": -0.1245
+      },
+      "SL_8": {
+        "n_days": 406,
+        "total_return": 0.9574,
+        "ann_return": 0.5188,
+        "sharpe": 3.1082,
+        "max_drawdown": -0.0831
+      },
+      "TP_SL_8": {
+        "n_days": 406,
+        "total_return": 0.8774,
+        "ann_return": 0.4798,
+        "sharpe": 3.8188,
+        "max_drawdown": -0.05
+      }
+    },
+    "tp_helps_sharpe": true,
+    "sl_hurts_sharpe": false,
+    "best_arm": "TP_only"
+  },
+  "regime_delta_vs_baseline": {
+    "TP_only": {
+      "mixed": -4.4,
+      "momentum": 0.156,
+      "reversal": -0.437
+    },
+    "SL_8": {
+      "mixed": -11.654,
+      "momentum": -2.159,
+      "reversal": -3.738
+    },
+    "SL_12": {
+      "mixed": -7.972,
+      "momentum": -0.766,
+      "reversal": -3.591
+    },
+    "TP_SL_8": {
+      "mixed": -11.477,
+      "momentum": -2.387,
+      "reversal": -3.617
+    },
+    "TP_SL_12": {
+      "mixed": -7.6,
+      "momentum": -1.017,
+      "reversal": -3.355
+    }
+  },
+  "cost_model": {
+    "commission": 0.00025,
+    "stamp_sell": 0.0005,
+    "transfer": 1e-05,
+    "slippage": 0.001,
+    "enabled": true,
+    "buy_rate": 0.00126,
+    "sell_rate": 0.00176
+  },
+  "artifacts": [
+    "research/backtest/run_ex001.py",
+    "research/cache/ex001/ex001_results.json",
+    "research/cache/ex001/ex001_nav_*.parquet"
+  ],
+  "note": "出场网格冻结于 prd.preRegisteredGate.exit_grid (R01, 不搜不调); 入场=BT-002 同 picks 共模相消 (R03); ST 源头排除 (R06); regime 分层必带 (R11); 描述性受控对照=合法完成 (R02); 中间指标≠ship (R03); 大缓存 gitignored; 生产线只读未碰 (R05)。intraday 主口径 + close-based 保守界。"
+}

@@ -1,0 +1,20 @@
+{
+  "id": "T-004",
+  "status": "built",
+  "conclusion": "3 尺度 pump 模型 (s3/s5/s10) 落 research/models/ + regime/run_len 门控产出动态窗口 ratio_dyn (1,913,175 行/5034 股); 门控切换比例 58% (choppy 偏 s3 / trend 偏 s10); 推理路径样本窗口全跑通, 生产模型未触碰。IC/切换分布仅描述非 gate, ship 由 T-005 walk-forward 定。",
+  "artifacts": [
+    "research/models/pump_scale_3/",
+    "research/models/pump_scale_5/",
+    "research/models/pump_scale_10/",
+    "research/features/dynamic_ratio.parquet",
+    "research/cache/t004_scale_ratios.parquet",
+    "research/cache/t004_results.json"
+  ],
+  "scale_selected_dist": {
+    "s3": 0.4197,
+    "s5": 0.4159,
+    "s10": 0.1644
+  },
+  "frac_dynamic_vs_s5": 0.5841,
+  "note": "依 T-002 window_dynamic_needed 解除条件门; 门控用 T-001/T-002 实证规则非拟合; 中间指标非 gate (SIGN-R03)。"
+}

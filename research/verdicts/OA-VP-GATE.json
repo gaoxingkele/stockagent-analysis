@@ -1,0 +1,81 @@
+{
+  "id": "OA-VP-GATE",
+  "status": "REJECT",
+  "candidate": "on_minus_in_20",
+  "delta_alpha_pp": -0.702,
+  "delta_ex_outlier": -0.7574,
+  "baseline_v1231": {
+    "alpha_mean": 3.7456276407916023,
+    "alpha_std": 2.590092267440177,
+    "sharpe_mean": 3.996196213927655,
+    "worst_month": -0.2024000964551521,
+    "pos_alpha_ratio": 0.9473684210526315,
+    "n_months": 19
+  },
+  "candidate_agg": {
+    "alpha_mean": 3.043582874905271,
+    "alpha_std": 2.7716853151511898,
+    "sharpe_mean": 2.940228968409436,
+    "worst_month": -1.8603701802356698,
+    "pos_alpha_ratio": 0.8421052631578947,
+    "n_months": 19
+  },
+  "regime_delta": {
+    "mixed": -1.089,
+    "momentum": -0.584,
+    "reversal": -0.707
+  },
+  "gate_conditions": {
+    "c1_delta>=+0.30pp": false,
+    "c2_sharpe>=base": false,
+    "c3_worst>=base": false,
+    "c4_posratio>=base": false,
+    "c5_ex_outlier>0": false,
+    "c6_regime_not_hurt": false,
+    "c7_skeptic": false
+  },
+  "skeptic_report": {
+    "bootstrap_delta": {
+      "p_sharpe_gt_0": 0.0,
+      "sharpe_ci95": [
+        -4.1987,
+        -1.8735
+      ],
+      "point_sharpe": -2.7562
+    },
+    "bootstrap_pass": false,
+    "pbo": {
+      "pbo": 0.8,
+      "n_combinations": 20
+    },
+    "pbo_pass": false,
+    "dsr": {
+      "dsr": 0.9823,
+      "sr0_expected_max_per_obs": 0.470146,
+      "observed_sr_per_obs": 1.098098,
+      "n_trials": 72,
+      "n_obs": 19,
+      "passes": true
+    },
+    "dsr_pass": true,
+    "dsr_note": "sr_variance 用3臂Sharpe方差代理(偏小→DSR偏乐观); n_trials=manifest×3 多重检验基数",
+    "c7_pass": false
+  },
+  "n_trials_dsr": 72,
+  "n_months": 19,
+  "window": [
+    "202410",
+    "202604"
+  ],
+  "conclusion": "OA-VP-GATE: 候选 on_minus_in_20 接 V12.31 池排序, 19月 walk-forward Δα=-0.702pp/月 → REJECT. gate={'c1_delta>=+0.30pp': False, 'c2_sharpe>=base': False, 'c3_worst>=base': False, 'c4_posratio>=base': False, 'c5_ex_outlier>0': False, 'c6_regime_not_hurt': False, 'c7_skeptic': False}. SIGN-R16: 选择层泄漏 caveat, PASS须独立OOS复核。 负/真小=合法完成(R02)。",
+  "guardrails": [
+    "SIGN-R01 gate冻结",
+    "SIGN-R02 负/真小=合法完成",
+    "SIGN-R03 只认walk-forward α",
+    "SIGN-R05 生产线冻结",
+    "SIGN-R06 ST源头排除",
+    "SIGN-R11 分regime",
+    "SIGN-R15 DSR n_trials含DoF",
+    "SIGN-R16 选择层泄漏caveat"
+  ]
+}

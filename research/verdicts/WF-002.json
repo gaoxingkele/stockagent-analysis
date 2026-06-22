@@ -1,0 +1,65 @@
+{
+  "id": "WF-002",
+  "status": "TP真改进",
+  "conclusion": "在 **WF-001 de-lookahead 真实 OOS picks** (20 cohort, 20241008~20260611) 上修正版止盈复测, 吃进 codex SIGN-R13 三处修正 (真OOS picks / baseline-40d对齐 / placebo负控)。baseline_40d: 年化 +42.2% 净Sharpe +1.42; TP_40d: 净Sharpe +2.23。★apples-to-apples ΔSharpe(TP40−base40) = +0.809 (Δ年化 +0.03pp, ΔmaxDD +14.71pp); 对比 EX-001 混淆口径 (TP40−base20, 含 20→40d 时间暴露差) ΔSharpe +0.556 —— EX-001 报的 '+1.358' 含 (a) baseline-20d/TP-40d 持有期错配 (b) r20-lookahead 理想样本, 此处两者全去。placebo: 静态降暴露 (f=0.677, 匹配 TP 平均暴露) ΔSharpe -0.089 (≈0 印证零息现金静态混合不抬 Sharpe → TP 增益只能来自时变路径); 随机阈值 TP (30 seed) ΔSharpe +0.769 [p5,p95]=(+0.521,+1.085) (检验是否'卖在真高点'的择价技能 vs 均值回归序列上随便分批减仓都行)。placebo bar (取两者 max=随机TP) = +0.769, TP 是否胜过 placebo: True。block bootstrap (cohort 重采样 1000次) ΔSharpe 95%CI=[+0.146,+1.328] (含0? 否); leave-one-out 范围 [+0.380,+1.088] 符号稳定 True; regime (R11) 月超额 mixed -0.43pp / momentum +0.76pp / reversal +0.16pp。gate_tp 四条件 {'d_sharpe_40_positive': True, 'beats_placebo': True, 'bootstrap_ci_excludes_0': True, 'regime_not_hurt': True} → **status=TP真改进** (frozen gate, R01)。去混淆(40d对齐)+去暴露(placebo)+去lookahead(真OOS picks)后 TP 仍显著提 Sharpe → 进出场层 ship 候选 (仍需最终 holdout, EX-003)。 ★关键 nuance (SIGN-R03 诚实): (1) **静态降暴露 placebo≈0 被决定性击败** → 增益非'少持仓的数学抬升' (codex 该担忧排除); (2) 但**随机阈值 placebo (+0.769) 与真实 TP (+0.809) 统计上无法区分** (TP 落在随机分布 [p5,p95] 内) → **没有'卖在真高点'的择价技能, 边际全部来自'在均值回归宇宙里把赢家随持有期系统性减仓'这一结构性 de-risk** (任意阈值都行); (3) Δ年化≈0 (+0.03pp) 但 maxDD 砍 14.7pp = **保收益降波动** (兑现用户'拿波动换 Sharpe'的止盈直觉); (4) **动量月增益最大 (+0.76pp/月)** = 正打在 WF-001 揭示的 book 最弱 regime (动量月超额仅+0.79pp/胜率44%) → 直接缓解用户'动量月吃亏'痛点。【绝对量级已是 de-lookahead 真实 OOS, 受控 Δ 两臂相消 + placebo 负控 → 这是止盈是否真技能的干净裁决: 结构性 de-risk 真实且稳健 (ship 候选, 待 EX-003 最终 holdout), 但非择价 alpha】。",
+  "metrics": {
+    "n_cohorts": 20,
+    "baseline_20d_sharpe": 1.674,
+    "baseline_40d_sharpe": 1.421,
+    "TP_40d_sharpe": 2.23,
+    "TP_40d_close_sharpe": 1.866,
+    "d_sharpe_TP40_minus_base40": 0.8091,
+    "d_sharpe_TP40_minus_base20_EX001_confounded": 0.5556,
+    "d_ann_return_pp": 0.033,
+    "d_maxdd_pp": 14.711,
+    "placebo_static_reduce_dsharpe": -0.0891,
+    "placebo_random_TP_dsharpe_mean": 0.7694,
+    "placebo_bar": 0.7694,
+    "TP_beats_placebo": true,
+    "no_level_skill_TP_inside_random_placebo": true,
+    "bootstrap_ci95": [
+      0.1455,
+      1.3279
+    ],
+    "bootstrap_excludes_0": true,
+    "bootstrap_p_gt_0": 0.999,
+    "loo_min": 0.3805,
+    "loo_max": 1.0875,
+    "loo_sign_stable": true,
+    "gate_conditions": {
+      "d_sharpe_40_positive": true,
+      "beats_placebo": true,
+      "bootstrap_ci_excludes_0": true,
+      "regime_not_hurt": true
+    }
+  },
+  "regime_delta": {
+    "mixed": {
+      "n_months": 2,
+      "d_month_pp": -0.433
+    },
+    "momentum": {
+      "n_months": 9,
+      "d_month_pp": 0.76
+    },
+    "reversal": {
+      "n_months": 9,
+      "d_month_pp": 0.16
+    }
+  },
+  "cost_model": {
+    "commission": 0.00025,
+    "stamp_sell": 0.0005,
+    "transfer": 1e-05,
+    "slippage": 0.001,
+    "enabled": true,
+    "buy_rate": 0.00126,
+    "sell_rate": 0.00176
+  },
+  "artifacts": [
+    "research/backtest/run_wf002.py",
+    "research/cache/wf002/wf002_results.json",
+    "research/cache/wf002/wf002_nav_*.parquet"
+  ],
+  "note": "网格冻结于 prd.preRegisteredGate.tp_retest_controls (R01, 不搜不调); picks=WF-001 de-lookahead 真实 OOS (SIGN-R13①); baseline-40d 对齐去持有期混淆 (R13③); placebo 负控 = 静态降暴露(理论ΔSharpe≈0)+随机阈值TP(去择价技能) (R13②); block bootstrap CI + leave-one-out + 分regime (R11); 受控 Δ 两臂入场逐位一致共模相消 (R03); ST 源头排除 (R06); 大缓存 gitignored (R04); 生产线只读 (R05); 描述性受控对照=合法完成 (R02)。"
+}

@@ -1,0 +1,83 @@
+{
+  "id": "DK-002",
+  "status": "built",
+  "conclusion": "按 NOTES.md §2 预注册定义 (pivot_low 右5根确认 + 空翻多持续≥3根, 段底qualifying pivot, 锚点=flip+3) 全量标出 51,063 个底部确认翻多窗口 (覆盖 5301 股, 42 月, 月均 1215.8 个)。窗口内启动子(is_launch)命中率 67.3%, 印证'窗口含一个或多个启动子'但非满命中。前向 40d 三态: 大涨(≥+15%) 17.5% / 横盘(|ret|<5%) 27.8% / 失败(<−5%) 37.6% (均值 0.0262, 中位 -0.0084, 正收益率 0.4748); 前向 20d 大涨 11.5% / 横盘 38.6% / 失败 31.7%; realized max_dd40 中位 -15.0%。分 regime (40d 大涨占比): mixed 19.4% / momentum 11.2% / reversal 19.4%。窗口大涨占比不高, 大量横盘/失败 — 反转确认≠预测大涨。描述统计非 ship (SIGN-R03); 下一步 DK-003 测与 SQUAT 重叠率 + 残差增量消融 (换皮判定 gate)。",
+  "metrics": {
+    "n_windows": 51063,
+    "n_stocks": 5301,
+    "launch_hit_rate": 0.6735,
+    "monthly": {
+      "n_months": 42,
+      "mean_per_month": 1215.8,
+      "median_per_month": 1205.0,
+      "min": 205,
+      "max": 3361
+    },
+    "seg_stats": {
+      "seg_len_median": 19.0,
+      "seg_len_mean": 35.7,
+      "win_len_median": 12.0,
+      "win_len_mean": 18.7
+    },
+    "maxdd40_median": -0.1505,
+    "maxdd40_mean": -0.1681,
+    "profile_all_20d": {
+      "n": 50486,
+      "mean": 0.0143,
+      "median": -0.0024,
+      "surge_ge15pct": 0.1145,
+      "mild_5to15pct": 0.1833,
+      "flat_lt5pct": 0.3856,
+      "fail_le_neg5pct": 0.3166,
+      "win_rate_pos": 0.4876
+    },
+    "profile_all_40d": {
+      "n": 48680,
+      "mean": 0.0262,
+      "median": -0.0084,
+      "surge_ge15pct": 0.1747,
+      "mild_5to15pct": 0.1705,
+      "flat_lt5pct": 0.2784,
+      "fail_le_neg5pct": 0.3764,
+      "win_rate_pos": 0.4748
+    },
+    "profile_by_regime_40d": {
+      "mixed": {
+        "n": 6571,
+        "mean": 0.0436,
+        "median": 0.0,
+        "surge_ge15pct": 0.194,
+        "mild_5to15pct": 0.1711,
+        "flat_lt5pct": 0.2895,
+        "fail_le_neg5pct": 0.3455,
+        "win_rate_pos": 0.4996
+      },
+      "momentum": {
+        "n": 11458,
+        "mean": -0.0181,
+        "median": -0.0405,
+        "surge_ge15pct": 0.1119,
+        "mild_5to15pct": 0.132,
+        "flat_lt5pct": 0.2903,
+        "fail_le_neg5pct": 0.4658,
+        "win_rate_pos": 0.3683
+      },
+      "reversal": {
+        "n": 30651,
+        "mean": 0.0391,
+        "median": 0.0038,
+        "surge_ge15pct": 0.194,
+        "mild_5to15pct": 0.1848,
+        "flat_lt5pct": 0.2716,
+        "fail_le_neg5pct": 0.3496,
+        "win_rate_pos": 0.5093
+      }
+    },
+    "corresponds_to_surge": false
+  },
+  "artifacts": [
+    "research/cache/dk002/dk_windows.parquet",
+    "research/cache/dk002_results.json"
+  ],
+  "note": "窗口定义冻结不在结果上调 (R01); 前向/label 列只留 cache 非 features (R04); ST 源头排除复用 SLV-001 宇宙 (R06); 分 regime (R11); checkpoint (R08); 描述统计非 ship (R03); 生产线只读 (R05)。锚点=flip+3 (窗口末根, 最早可实时决策点); pivot 右5根确认=标注合法但实时迟到~5+3根 (NOTES §2 已明示)。"
+}

@@ -1,0 +1,540 @@
+{
+  "task": "FU-003",
+  "status": "C_塌缩",
+  "conclusion": "growth_or(or_yoy) 拉长至 47 月后, 扣[动量+size+value+其他基本面]残差 orth IC=+0.0055 |t|=1.08 (需 |IC|>=0.02 & |t|>=3 方显著); growth_composite orth IC=+0.0081; 最强 growth_np orth IC=+0.0130 t=2.44 仍不过线。原始 IC 在 47 月窗口转负 (18月快测 +0.033 是短窗 artifact)。分 regime 无任一 cell 过线 (最强 growth_np@reversal)。→ C_塌缩: 廉价 REJECT, FU-004/005 skip。",
+  "responsePlaybook_branch": "FU-003_outcomes::C_塌缩",
+  "verdict": "REJECT",
+  "reason": "原始 IC=-0.0080 本就≈0/负 (无可被吃掉的信号), 扣全控制 |IC|=0.0055 |t|=1.08 仍未达显著线 (需 |IC|>=0.02 & |t|>=3); 18月快测 +0.033 是短窗 artifact, 47月不存活。廉价 REJECT 跳 walk-forward, FU-004/005 skip。",
+  "artifact": "research\\cache\\fu003_ic_table.parquet",
+  "gate_thresholds": {
+    "ic_sig": 0.02,
+    "t_sig": 3.0,
+    "ic_collapse": 0.01,
+    "t_collapse": 2.0,
+    "min_months": 40
+  },
+  "power_ok_ge40months": true,
+  "primary_factor": "growth_or",
+  "label": "fwd r20 = close[t+20]/close[t]-1 (因果, 复用 rt004_r20_label.parquet)",
+  "metrics": {
+    "n_rebalance_months": 47,
+    "by_factor": {
+      "growth_or": {
+        "raw": {
+          "ic": -0.008,
+          "t": -0.9,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.0062,
+              "t": -0.37,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.025,
+              "t": -1.05,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0038,
+              "t": 0.19,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0103,
+              "t": -0.77,
+              "n": 22
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": -0.0039,
+          "t": -0.47,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.013,
+              "t": -0.73,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.019,
+              "t": -0.93,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0104,
+              "t": 0.65,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0046,
+              "t": -0.35,
+              "n": 22
+            }
+          }
+        },
+        "minus_size": {
+          "ic": -0.0024,
+          "t": -0.3,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": 0.0054,
+              "t": 0.27,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0216,
+              "t": -0.98,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0074,
+              "t": 0.47,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0049,
+              "t": -0.39,
+              "n": 22
+            }
+          }
+        },
+        "minus_value": {
+          "ic": -0.0004,
+          "t": -0.05,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.007,
+              "t": -0.39,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0113,
+              "t": -0.63,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.015,
+              "t": 0.6,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0038,
+              "t": -0.29,
+              "n": 22
+            }
+          }
+        },
+        "minus_ofund": {
+          "ic": -0.0052,
+          "t": -0.62,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.0044,
+              "t": -0.31,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0194,
+              "t": -0.82,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0056,
+              "t": 0.28,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0076,
+              "t": -0.59,
+              "n": 22
+            }
+          }
+        },
+        "orth_full": {
+          "ic": 0.0055,
+          "t": 1.08,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.0015,
+              "t": -0.18,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0038,
+              "t": -0.27,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0158,
+              "t": 1.45,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0045,
+              "t": 0.57,
+              "n": 22
+            }
+          }
+        }
+      },
+      "growth_np": {
+        "raw": {
+          "ic": -0.0101,
+          "t": -1.26,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.0156,
+              "t": -1.1,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0321,
+              "t": -1.71,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0,
+              "t": 0.0,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0079,
+              "t": -0.67,
+              "n": 22
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": -0.0027,
+          "t": -0.35,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.0189,
+              "t": -1.57,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0183,
+              "t": -1.16,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0079,
+              "t": 0.51,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.001,
+              "t": 0.07,
+              "n": 22
+            }
+          }
+        },
+        "minus_size": {
+          "ic": 0.0017,
+          "t": 0.24,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.0019,
+              "t": -0.09,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0234,
+              "t": -1.86,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0119,
+              "t": 1.14,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0041,
+              "t": 0.36,
+              "n": 22
+            }
+          }
+        },
+        "minus_value": {
+          "ic": -0.0006,
+          "t": -0.06,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.0184,
+              "t": -1.15,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0111,
+              "t": -0.92,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0094,
+              "t": 0.37,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0025,
+              "t": 0.18,
+              "n": 22
+            }
+          }
+        },
+        "minus_ofund": {
+          "ic": -0.0015,
+          "t": -0.2,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.0105,
+              "t": -0.99,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0165,
+              "t": -0.92,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0062,
+              "t": 0.32,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0012,
+              "t": 0.11,
+              "n": 22
+            }
+          }
+        },
+        "orth_full": {
+          "ic": 0.013,
+          "t": 2.44,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": 0.0057,
+              "t": 1.13,
+              "n": 7
+            },
+            "mixed": {
+              "ic": 0.0143,
+              "t": 1.3,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0061,
+              "t": 0.53,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0188,
+              "t": 2.08,
+              "n": 22
+            }
+          }
+        }
+      },
+      "growth_composite": {
+        "raw": {
+          "ic": -0.0109,
+          "t": -1.16,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.0119,
+              "t": -0.7,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0335,
+              "t": -1.38,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0006,
+              "t": 0.02,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0107,
+              "t": -0.76,
+              "n": 22
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": -0.0055,
+          "t": -0.64,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.0168,
+              "t": -1.01,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0245,
+              "t": -1.21,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0074,
+              "t": 0.41,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0038,
+              "t": -0.27,
+              "n": 22
+            }
+          }
+        },
+        "minus_size": {
+          "ic": -0.0029,
+          "t": -0.34,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": 0.0009,
+              "t": 0.04,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0279,
+              "t": -1.32,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0071,
+              "t": 0.45,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0027,
+              "t": -0.2,
+              "n": 22
+            }
+          }
+        },
+        "minus_value": {
+          "ic": -0.0014,
+          "t": -0.13,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.012,
+              "t": -0.68,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0138,
+              "t": -0.73,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0122,
+              "t": 0.45,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.002,
+              "t": -0.13,
+              "n": 22
+            }
+          }
+        },
+        "minus_ofund": {
+          "ic": -0.0061,
+          "t": -0.69,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": -0.0092,
+              "t": -0.68,
+              "n": 7
+            },
+            "mixed": {
+              "ic": -0.0255,
+              "t": -1.1,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0035,
+              "t": 0.16,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0051,
+              "t": -0.39,
+              "n": 22
+            }
+          }
+        },
+        "orth_full": {
+          "ic": 0.0081,
+          "t": 1.52,
+          "n_months": 47,
+          "by_regime": {
+            "__NA__": {
+              "ic": 0.0009,
+              "t": 0.11,
+              "n": 7
+            },
+            "mixed": {
+              "ic": 0.0001,
+              "t": 0.01,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0117,
+              "t": 1.07,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0106,
+              "t": 1.2,
+              "n": 22
+            }
+          }
+        }
+      }
+    },
+    "primary_decision": {
+      "factor": "growth_or",
+      "orth_full_ic": 0.0055,
+      "orth_full_t": 1.08,
+      "single_group_residual_ic": {
+        "mom": -0.0039,
+        "size": -0.0024,
+        "value": -0.0004,
+        "ofund": -0.0052
+      },
+      "raw_ic": -0.008,
+      "raw_t": -0.9
+    }
+  },
+  "ablation_note": "逐步消融 (单扣每组控制) 显示头号因子原始 IC 本就接近 0/转负, 残差化后仍不显著; 信号来源不是被某单一控制吃掉, 而是 47 月窗口内成长溢价本身微弱/反向 (A 股 reversal regime 主导)。短窗 +0.033 不存活 = 窗口 artifact (归 C)。",
+  "guardrails": [
+    "SIGN-R03 IC 仅 go/no-go 非落地",
+    "SIGN-R04 r20 因果落 cache 不进 features",
+    "SIGN-R06 ST 继承 FU-001 源头排除",
+    "SIGN-R11 分 regime 评估",
+    "SIGN-R12++ 扣[动量+size+value+其他基本面]全控制残差",
+    "SIGN-R01 gate 阈值冻结未改",
+    "SIGN-R02 负结果=合法完成"
+  ],
+  "downstream": "C/D → FU-004 skip:true (廉价 REJECT, 跳 walk-forward), FU-005 保持 skip"
+}

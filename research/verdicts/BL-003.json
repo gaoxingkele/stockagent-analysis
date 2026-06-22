@@ -1,0 +1,111 @@
+{
+  "id": "BL-003",
+  "status": "REJECT_no_alpha",
+  "conclusion": "squat+base blend walk-forward 裁决=REJECT_no_alpha。19 月 apples-to-apples (两臂仅差 ArmB 注入 BASE, 复用 t005 s5/r20 模型 checkpoint, V12.31 池/cap/成本全一致)。ArmA(SQUAT/V12.31) α=+3.746pp/月 Sh=4.00 最差月-0.202pp 正α月95%; ArmB(squat+base) α=+2.715pp Sh=2.89 最差月-0.086pp 正α月95%; **Δα=-1.031pp/月**, 单月outlier(202507)剔后 Δα -0.871pp 仍正=False。注入容量: 247/380 池日(65%)有 BASE 注入, 共837个, 注入日均3.389个 (BL-001 已记 BASE 入场稀疏+37%天0注入, 202410/202411 整月无 base) → 多数日 ArmB 与 ArmA 逐位一致, 增量天然被注入频率上限封死。分 regime Δα: {\"mixed\": -0.6036, \"momentum\": -0.978, \"reversal\": -1.1534} (regime不伤=False)。gate 未过: ['delta_alpha>0', 'sharpe_not_lower', 'outlier_drop_delta_still_pos', 'regime_not_hurt']。Δα<=0 → BASE 质量在 blend 中未兑现 (被 squat 名额挤占或已被 V7c 池吃掉)。 承接 BL-002 预判 (base_score 排序信号弱+不削尾) — 印证。全因果 base_score 只注入因果列 (R04, label/前向只在 cache); ST 源头排除 (R06); 分 regime (R11); gate 阈值启动冻结未上调 (R01); REJECT 合法完成 (R02); 生产线只读指纹未变 (R05)。",
+  "metrics": {
+    "alpha_delta_pp": -1.031,
+    "sharpe": 2.89,
+    "worst_month": -0.086,
+    "pos_alpha_month_ratio": 0.947,
+    "arm_a": {
+      "alpha_mean": 3.745640622901384,
+      "alpha_median": 3.078655335264752,
+      "sharpe_mean": 3.996209271562795,
+      "worst_month": -0.2024000964551521,
+      "worst_month_id": "202603",
+      "pos_alpha_ratio": 0.9473684210526315,
+      "n_months": 19
+    },
+    "arm_b": {
+      "alpha_mean": 2.714723782600821,
+      "alpha_median": 2.1573089731996467,
+      "sharpe_mean": 2.8929833753089134,
+      "worst_month": -0.0861998128853775,
+      "worst_month_id": "202506",
+      "pos_alpha_ratio": 0.9473684210526315,
+      "n_months": 19
+    },
+    "comparison_table": {
+      "metric": [
+        "alpha_monthly_pp",
+        "sharpe",
+        "worst_month_pp",
+        "pos_alpha_month_ratio"
+      ],
+      "ArmA_SQUAT_only": [
+        3.746,
+        4.0,
+        -0.202,
+        0.947
+      ],
+      "ArmB_squat_base": [
+        2.715,
+        2.89,
+        -0.086,
+        0.947
+      ],
+      "delta": [
+        -1.031,
+        -1.1,
+        0.116,
+        0.0
+      ]
+    },
+    "outlier_drop": {
+      "dropped_month": "202507",
+      "dropped_delta_pp": -3.9147,
+      "delta_after_drop_pp": -0.8707,
+      "still_positive": false
+    },
+    "by_regime": {
+      "mixed": {
+        "n_months": 2,
+        "delta_alpha_pp": -0.6036,
+        "a_alpha_pp": 1.2587,
+        "b_alpha_pp": 0.6551
+      },
+      "momentum": {
+        "n_months": 7,
+        "delta_alpha_pp": -0.978,
+        "a_alpha_pp": 3.8771,
+        "b_alpha_pp": 2.8991
+      },
+      "reversal": {
+        "n_months": 10,
+        "delta_alpha_pp": -1.1534,
+        "a_alpha_pp": 4.151,
+        "b_alpha_pp": 2.9976
+      }
+    },
+    "inject_summary": {
+      "inject_days": 247,
+      "pool_days": 380,
+      "inject_total": 837,
+      "inject_day_frac": 0.65,
+      "inject_per_inject_day": 3.389,
+      "months_with_zero_base": [
+        "202410",
+        "202411"
+      ]
+    }
+  },
+  "gate_conditions": {
+    "delta_alpha>0": false,
+    "worst_month_not_worse": true,
+    "sharpe_not_lower": false,
+    "pos_alpha_ratio_not_lower": true,
+    "outlier_drop_delta_still_pos": false,
+    "regime_not_hurt": false
+  },
+  "playbook_hit": "REJECT_no_alpha",
+  "n_months": 19,
+  "window": [
+    "202410",
+    "202604"
+  ],
+  "artifacts": [
+    "research/cache/bl003_monthly.csv",
+    "research/cache/bl003_results.json"
+  ],
+  "note": "isGate: apples-to-apples 两臂唯一差异=ArmB track A 下60%(Q3-5)注入 base_score 最高 BASE 入场候选; 绝对 α 含共模 r20 池 lookahead, 仅 Δ 量作 gate (SIGN-R03)。REJECT 合法完成 (R02)。"
+}

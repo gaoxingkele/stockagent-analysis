@@ -1,0 +1,291 @@
+{
+  "id": "DK-003",
+  "status": "REJECT_reskin",
+  "conclusion": "重叠: dk_window 跨度含 SQUAT 桶 launch 命中率 28.3%, onset(±5交易日)匹配 SQUAT launch 12.5%, 反向 SQUAT launch 被 dk_window 覆盖 26.4% (Jaccard 0.12)。残差: 主信号 dk_long_fresh 对 r40 raw RankIC -0.04421 → 扣 [past_r5+pyr_velocity_20_60+ADX+RSI] 逐日截面正交化后残差 RankIC -0.00051 (t -0.22); dk_state/rev_strength 残差 IC 见 metrics.ic_table。SQUAT 外窗口 (35098) 前向 40d: 大涨 16.9% / 横盘 30.1% / 失败 35.2% (均值 0.0311) → 不兑现 (横盘/失败为主)。按 prd.preRegisteredGate.gate 判定 **REJECT_reskin**: 残差被 past_r5/pyr_velocity/ADX/RSI 吃掉 → 换皮, 文档化 (同 CB-003)。(gate 冻结禁在结果上调 R01; 残差被标准动量吃掉=换皮; 负结果=合法完成 R02; 中间 IC≠ship R03。)",
+  "metrics": {
+    "overlap": {
+      "n_windows": 51063,
+      "n_squat_launch": 100837,
+      "window_contains_squat_rate": 0.2828,
+      "onset_pm5d_match_squat_rate": 0.1252,
+      "squat_covered_by_window_rate": 0.2638,
+      "jaccard_span": 0.1153
+    },
+    "ic_table": {
+      "dk_long_fresh|fwd_r20": {
+        "raw_ic": -0.04055,
+        "raw_t": -11.77,
+        "resid_ic": 0.00779,
+        "resid_t": 2.81,
+        "n_days": 811,
+        "raw_ic_by_regime": {
+          "mixed": {
+            "mean_ic": -0.02775,
+            "n_days": 134
+          },
+          "reversal": {
+            "mean_ic": -0.04273,
+            "n_days": 451
+          },
+          "momentum": {
+            "mean_ic": -0.04381,
+            "n_days": 226
+          }
+        },
+        "resid_ic_by_regime": {
+          "mixed": {
+            "mean_ic": 0.00759,
+            "n_days": 134
+          },
+          "reversal": {
+            "mean_ic": 0.0084,
+            "n_days": 431
+          },
+          "momentum": {
+            "mean_ic": 0.00676,
+            "n_days": 226
+          }
+        }
+      },
+      "dk_long_fresh|fwd_r40": {
+        "raw_ic": -0.04421,
+        "raw_t": -14.77,
+        "resid_ic": -0.00051,
+        "resid_t": -0.22,
+        "n_days": 791,
+        "raw_ic_by_regime": {
+          "mixed": {
+            "mean_ic": -0.02899,
+            "n_days": 127
+          },
+          "reversal": {
+            "mean_ic": -0.04935,
+            "n_days": 442
+          },
+          "momentum": {
+            "mean_ic": -0.04267,
+            "n_days": 222
+          }
+        },
+        "resid_ic_by_regime": {
+          "mixed": {
+            "mean_ic": -0.00246,
+            "n_days": 127
+          },
+          "reversal": {
+            "mean_ic": -1e-05,
+            "n_days": 422
+          },
+          "momentum": {
+            "mean_ic": -0.00032,
+            "n_days": 222
+          }
+        }
+      },
+      "dk_state|fwd_r20": {
+        "raw_ic": -0.05273,
+        "raw_t": -13.74,
+        "resid_ic": -0.0128,
+        "resid_t": -4.78,
+        "n_days": 811,
+        "raw_ic_by_regime": {
+          "mixed": {
+            "mean_ic": -0.04831,
+            "n_days": 134
+          },
+          "reversal": {
+            "mean_ic": -0.05211,
+            "n_days": 451
+          },
+          "momentum": {
+            "mean_ic": -0.05661,
+            "n_days": 226
+          }
+        },
+        "resid_ic_by_regime": {
+          "mixed": {
+            "mean_ic": -0.01158,
+            "n_days": 134
+          },
+          "reversal": {
+            "mean_ic": -0.01273,
+            "n_days": 431
+          },
+          "momentum": {
+            "mean_ic": -0.01366,
+            "n_days": 226
+          }
+        }
+      },
+      "dk_state|fwd_r40": {
+        "raw_ic": -0.05755,
+        "raw_t": -17.27,
+        "resid_ic": -0.02107,
+        "resid_t": -8.27,
+        "n_days": 791,
+        "raw_ic_by_regime": {
+          "mixed": {
+            "mean_ic": -0.04641,
+            "n_days": 127
+          },
+          "reversal": {
+            "mean_ic": -0.05978,
+            "n_days": 442
+          },
+          "momentum": {
+            "mean_ic": -0.05949,
+            "n_days": 222
+          }
+        },
+        "resid_ic_by_regime": {
+          "mixed": {
+            "mean_ic": -0.01573,
+            "n_days": 127
+          },
+          "reversal": {
+            "mean_ic": -0.02775,
+            "n_days": 422
+          },
+          "momentum": {
+            "mean_ic": -0.01142,
+            "n_days": 222
+          }
+        }
+      },
+      "rev_strength|fwd_r20": {
+        "raw_ic": -0.07876,
+        "raw_t": -17.49,
+        "resid_ic": -0.01793,
+        "resid_t": -5.1,
+        "n_days": 811,
+        "raw_ic_by_regime": {
+          "mixed": {
+            "mean_ic": -0.07635,
+            "n_days": 134
+          },
+          "reversal": {
+            "mean_ic": -0.07094,
+            "n_days": 451
+          },
+          "momentum": {
+            "mean_ic": -0.09579,
+            "n_days": 226
+          }
+        },
+        "resid_ic_by_regime": {
+          "mixed": {
+            "mean_ic": -0.02527,
+            "n_days": 134
+          },
+          "reversal": {
+            "mean_ic": -0.01295,
+            "n_days": 431
+          },
+          "momentum": {
+            "mean_ic": -0.02305,
+            "n_days": 226
+          }
+        }
+      },
+      "rev_strength|fwd_r40": {
+        "raw_ic": -0.08393,
+        "raw_t": -21.39,
+        "resid_ic": -0.02025,
+        "resid_t": -6.54,
+        "n_days": 791,
+        "raw_ic_by_regime": {
+          "mixed": {
+            "mean_ic": -0.07263,
+            "n_days": 127
+          },
+          "reversal": {
+            "mean_ic": -0.07737,
+            "n_days": 442
+          },
+          "momentum": {
+            "mean_ic": -0.10345,
+            "n_days": 222
+          }
+        },
+        "resid_ic_by_regime": {
+          "mixed": {
+            "mean_ic": -0.02355,
+            "n_days": 127
+          },
+          "reversal": {
+            "mean_ic": -0.01938,
+            "n_days": 422
+          },
+          "momentum": {
+            "mean_ic": -0.02002,
+            "n_days": 222
+          }
+        }
+      }
+    },
+    "gate_signal": "dk_long_fresh",
+    "gate_raw_ic_r40": -0.04421,
+    "gate_resid_ic_r40": -0.00051,
+    "gate_resid_t_r40": -0.22,
+    "squat_out_window_profile_40d": {
+      "n": 35098,
+      "mean": 0.0311,
+      "median": -0.0033,
+      "surge_ge15pct": 0.1689,
+      "flat_lt5pct": 0.3013,
+      "fail_le_neg5pct": 0.3516,
+      "win_rate_pos": 0.488
+    },
+    "squat_in_window_profile_40d": {
+      "n": 13582,
+      "mean": 0.0137,
+      "median": -0.0249,
+      "surge_ge15pct": 0.1895,
+      "flat_lt5pct": 0.2193,
+      "fail_le_neg5pct": 0.4405,
+      "win_rate_pos": 0.4409
+    },
+    "squat_out_profile_by_regime_40d": {
+      "mixed": {
+        "n": 4991,
+        "mean": 0.0462,
+        "median": 0.0044,
+        "surge_ge15pct": 0.1855,
+        "flat_lt5pct": 0.3164,
+        "fail_le_neg5pct": 0.3204,
+        "win_rate_pos": 0.5119
+      },
+      "momentum": {
+        "n": 8853,
+        "mean": -0.0209,
+        "median": -0.0395,
+        "surge_ge15pct": 0.1034,
+        "flat_lt5pct": 0.3034,
+        "fail_le_neg5pct": 0.4611,
+        "win_rate_pos": 0.3643
+      },
+      "reversal": {
+        "n": 21254,
+        "mean": 0.0492,
+        "median": 0.0118,
+        "surge_ge15pct": 0.1923,
+        "flat_lt5pct": 0.2969,
+        "fail_le_neg5pct": 0.3133,
+        "win_rate_pos": 0.5339
+      }
+    },
+    "out_realizes": false,
+    "controls": [
+      "past_r5",
+      "pyr_velocity_20_60",
+      "rsi14",
+      "adx14"
+    ]
+  },
+  "playbook_hit": "残差被 past_r5/pyr_velocity/ADX/RSI 吃掉 → 换皮, 文档化 (同 CB-003)",
+  "artifacts": [
+    "research/cache/dk003/feat_panel.parquet",
+    "research/cache/dk003_results.json"
+  ],
+  "note": "逐日截面 RankIC + 正交化残差 (扣 past_r5+pyr_velocity_20_60+ADX+RSI); RSI14/ADX14 Wilder ewm 因果自算; forward 列只留 cache 非 features (R04); ST 源头排除复用 SLV-001 宇宙 (R06); 分 regime (R11); checkpoint (R08); gate 冻结禁在结果上调 (R01); 负结果=合法完成 (R02); 描述/IC 非 ship (R03); 生产线只读 (R05)。"
+}

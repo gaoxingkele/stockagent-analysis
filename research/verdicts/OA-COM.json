@@ -1,0 +1,1117 @@
+{
+  "task": "OA-COM",
+  "status": "built",
+  "verdict": "REJECT",
+  "verdict_override_note": "机械筛查报 PROCEED(存活 com_betavol_60), 但元判断 REJECT: (1) 真正商品供应链渠道因子(com_beta_basket/oil/metal, com_transmit_20/oil) 全 C_塌缩 — raw IC ~0.02-0.03 被 size/industry/动量控制吸收, orth |IC|<0.02 |t|<3, 商品 beta 无独立横截面 alpha (codex #2 预警 mapping noise/horizon错配 应验)。(2) 唯一存活 com_betavol_60 = (ret-beta*basket) 残差波动 = 特异波动率换皮: Spearman(com_betavol_60, ivol_60)=0.917 (rank-IC筛查看秩, 即 OA-VOL 的 ivol_60 同序), Pearson 仅0.20是重尾所致。→ OA-COM 无新正交信号, com_betavol 已由 OA-VOL ivol_60 在 GATE 测, OA-COM-GATE 保持 skip (不重复计波动信号为商品胜利, SIGN-R16 元判断)。",
+  "n_rebalance_months": 47,
+  "power_ok_ge40months": true,
+  "primary_factor": "com_transmit_20",
+  "survivors": [
+    "com_betavol_60"
+  ],
+  "best_factor": "com_betavol_60",
+  "best_orth_ic": -0.0708,
+  "best_orth_t": -5.04,
+  "classifications": {
+    "com_beta_basket_60": {
+      "status": "C_塌缩",
+      "reason": "原始 IC=+0.0234 本就≈0/弱, 扣全控制 |IC|=0.0121 |t|=1.25 未达显著线 (需 |IC|>=0.02 & |t|>=3) → 信号不存在/窗口 artifact。廉价 REJECT。",
+      "orth_ic": 0.0121,
+      "orth_t": 1.25,
+      "raw_ic": 0.0234,
+      "n_months": 47
+    },
+    "com_beta_oil_60": {
+      "status": "C_塌缩",
+      "reason": "原始 IC=+0.0325 本就≈0/弱, 扣全控制 |IC|=0.0183 |t|=2.03 未达显著线 (需 |IC|>=0.02 & |t|>=3) → 信号不存在/窗口 artifact。廉价 REJECT。",
+      "orth_ic": 0.0183,
+      "orth_t": 2.03,
+      "raw_ic": 0.0325,
+      "n_months": 47
+    },
+    "com_beta_metal_60": {
+      "status": "C_塌缩",
+      "reason": "原始 IC=+0.0108 本就≈0/弱, 扣全控制 |IC|=0.0086 |t|=1.02 未达显著线 (需 |IC|>=0.02 & |t|>=3) → 信号不存在/窗口 artifact。廉价 REJECT。",
+      "orth_ic": 0.0086,
+      "orth_t": 1.02,
+      "raw_ic": 0.0108,
+      "n_months": 47
+    },
+    "com_transmit_20": {
+      "status": "C_塌缩",
+      "reason": "原始 IC=-0.0062 本就≈0/弱, 扣全控制 |IC|=0.0067 |t|=0.55 未达显著线 (需 |IC|>=0.02 & |t|>=3) → 信号不存在/窗口 artifact。廉价 REJECT。",
+      "orth_ic": -0.0067,
+      "orth_t": -0.55,
+      "raw_ic": -0.0062,
+      "n_months": 47
+    },
+    "com_transmit_oil_20": {
+      "status": "C_塌缩",
+      "reason": "原始 IC=-0.0079 本就≈0/弱, 扣全控制 |IC|=0.0006 |t|=0.06 未达显著线 (需 |IC|>=0.02 & |t|>=3) → 信号不存在/窗口 artifact。廉价 REJECT。",
+      "orth_ic": -0.0006,
+      "orth_t": -0.06,
+      "raw_ic": -0.0079,
+      "n_months": 47
+    },
+    "com_betavol_60": {
+      "status": "A_显著正交",
+      "reason": "扣全控制后仍 |IC|>=0.02 且 |t|>=3 → 进 walk-forward GATE。",
+      "orth_ic": -0.0708,
+      "orth_t": -5.04,
+      "raw_ic": -0.0858,
+      "n_months": 47
+    }
+  },
+  "by_factor_full": {
+    "com_beta_basket_60": {
+      "raw": {
+        "ic": 0.0234,
+        "t": 1.88,
+        "t_naive": 1.45,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0062,
+            "t": 0.17,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0165,
+            "t": -1.49,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0151,
+            "t": 0.58,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0443,
+            "t": 3.02,
+            "n": 22
+          }
+        }
+      },
+      "minus_mom": {
+        "ic": 0.0256,
+        "t": 2.27,
+        "t_naive": 1.77,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0149,
+            "t": 0.49,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0063,
+            "t": -0.43,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0139,
+            "t": 0.54,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0441,
+            "t": 3.26,
+            "n": 22
+          }
+        }
+      },
+      "minus_size": {
+        "ic": 0.0138,
+        "t": 1.25,
+        "t_naive": 0.89,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0072,
+            "t": 0.21,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0325,
+            "t": -2.34,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.0088,
+            "t": -0.37,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0409,
+            "t": 3.35,
+            "n": 22
+          }
+        }
+      },
+      "minus_value": {
+        "ic": 0.0243,
+        "t": 2.12,
+        "t_naive": 1.76,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0121,
+            "t": 0.41,
+            "n": 7
+          },
+          "mixed": {
+            "ic": 0.0031,
+            "t": 0.26,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0048,
+            "t": 0.22,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0445,
+            "t": 2.89,
+            "n": 22
+          }
+        }
+      },
+      "minus_ofund": {
+        "ic": 0.024,
+        "t": 2.02,
+        "t_naive": 1.54,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0051,
+            "t": 0.15,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0239,
+            "t": -2.13,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0115,
+            "t": 0.44,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0499,
+            "t": 3.92,
+            "n": 22
+          }
+        }
+      },
+      "orth_full": {
+        "ic": 0.0121,
+        "t": 1.25,
+        "t_naive": 0.99,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0234,
+            "t": 0.99,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0171,
+            "t": -1.37,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.0228,
+            "t": -1.24,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0355,
+            "t": 2.77,
+            "n": 22
+          }
+        }
+      }
+    },
+    "com_beta_oil_60": {
+      "raw": {
+        "ic": 0.0325,
+        "t": 2.34,
+        "t_naive": 2.11,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0377,
+            "t": 2.07,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0033,
+            "t": -0.25,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0262,
+            "t": 1.07,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0441,
+            "t": 2.54,
+            "n": 22
+          }
+        }
+      },
+      "minus_mom": {
+        "ic": 0.0318,
+        "t": 2.72,
+        "t_naive": 2.34,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0374,
+            "t": 1.99,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0019,
+            "t": -0.13,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0247,
+            "t": 0.95,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0431,
+            "t": 3.17,
+            "n": 22
+          }
+        }
+      },
+      "minus_size": {
+        "ic": 0.0176,
+        "t": 1.66,
+        "t_naive": 1.2,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0275,
+            "t": 1.68,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.013,
+            "t": -0.83,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0101,
+            "t": 0.56,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.027,
+            "t": 1.72,
+            "n": 22
+          }
+        }
+      },
+      "minus_value": {
+        "ic": 0.0282,
+        "t": 2.22,
+        "t_naive": 2.21,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0309,
+            "t": 2.06,
+            "n": 7
+          },
+          "mixed": {
+            "ic": 0.0016,
+            "t": 0.17,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0189,
+            "t": 0.99,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0397,
+            "t": 2.08,
+            "n": 22
+          }
+        }
+      },
+      "minus_ofund": {
+        "ic": 0.0309,
+        "t": 2.17,
+        "t_naive": 2.09,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0378,
+            "t": 2.35,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0014,
+            "t": -0.11,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0274,
+            "t": 1.12,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0395,
+            "t": 2.09,
+            "n": 22
+          }
+        }
+      },
+      "orth_full": {
+        "ic": 0.0183,
+        "t": 2.03,
+        "t_naive": 1.66,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0281,
+            "t": 2.67,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0067,
+            "t": -0.5,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.0007,
+            "t": -0.05,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0324,
+            "t": 2.2,
+            "n": 22
+          }
+        }
+      }
+    },
+    "com_beta_metal_60": {
+      "raw": {
+        "ic": 0.0108,
+        "t": 0.85,
+        "t_naive": 0.65,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0124,
+            "t": 0.45,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0384,
+            "t": -1.68,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.021,
+            "t": 1.01,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0181,
+            "t": 1.3,
+            "n": 22
+          }
+        }
+      },
+      "minus_mom": {
+        "ic": 0.0158,
+        "t": 1.31,
+        "t_naive": 1.11,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0149,
+            "t": 0.66,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0292,
+            "t": -1.37,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0279,
+            "t": 1.25,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0218,
+            "t": 1.87,
+            "n": 22
+          }
+        }
+      },
+      "minus_size": {
+        "ic": 0.0031,
+        "t": 0.27,
+        "t_naive": 0.2,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0168,
+            "t": 0.68,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0436,
+            "t": -1.98,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.0039,
+            "t": -0.21,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0154,
+            "t": 1.29,
+            "n": 22
+          }
+        }
+      },
+      "minus_value": {
+        "ic": 0.0115,
+        "t": 1.07,
+        "t_naive": 0.83,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0183,
+            "t": 0.83,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0162,
+            "t": -0.8,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0055,
+            "t": 0.32,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0201,
+            "t": 1.44,
+            "n": 22
+          }
+        }
+      },
+      "minus_ofund": {
+        "ic": 0.0091,
+        "t": 0.74,
+        "t_naive": 0.57,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0122,
+            "t": 0.46,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0461,
+            "t": -2.11,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0158,
+            "t": 0.74,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0195,
+            "t": 1.43,
+            "n": 22
+          }
+        }
+      },
+      "orth_full": {
+        "ic": 0.0086,
+        "t": 1.02,
+        "t_naive": 0.74,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0258,
+            "t": 1.74,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0282,
+            "t": -2.0,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.0121,
+            "t": -0.81,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0245,
+            "t": 2.85,
+            "n": 22
+          }
+        }
+      }
+    },
+    "com_transmit_20": {
+      "raw": {
+        "ic": -0.0062,
+        "t": -0.38,
+        "t_naive": -0.38,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": -0.0891,
+            "t": -3.06,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0511,
+            "t": -2.51,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0229,
+            "t": 0.61,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0166,
+            "t": 0.87,
+            "n": 22
+          }
+        }
+      },
+      "minus_mom": {
+        "ic": -0.0068,
+        "t": -0.45,
+        "t_naive": -0.46,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": -0.0796,
+            "t": -4.5,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0438,
+            "t": -1.62,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0033,
+            "t": 0.11,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0209,
+            "t": 1.05,
+            "n": 22
+          }
+        }
+      },
+      "minus_size": {
+        "ic": -0.0115,
+        "t": -0.79,
+        "t_naive": -0.74,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": -0.0901,
+            "t": -3.18,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0671,
+            "t": -3.59,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0105,
+            "t": 0.29,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0166,
+            "t": 0.93,
+            "n": 22
+          }
+        }
+      },
+      "minus_value": {
+        "ic": 0.0001,
+        "t": 0.01,
+        "t_naive": 0.01,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": -0.0619,
+            "t": -3.04,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0194,
+            "t": -0.88,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0146,
+            "t": 0.46,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0173,
+            "t": 0.88,
+            "n": 22
+          }
+        }
+      },
+      "minus_ofund": {
+        "ic": -0.0101,
+        "t": -0.63,
+        "t_naive": -0.63,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": -0.0869,
+            "t": -3.1,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0531,
+            "t": -3.26,
+            "n": 6
+          },
+          "momentum": {
+            "ic": 0.0217,
+            "t": 0.59,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0088,
+            "t": 0.48,
+            "n": 22
+          }
+        }
+      },
+      "orth_full": {
+        "ic": -0.0067,
+        "t": -0.55,
+        "t_naive": -0.55,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": -0.0584,
+            "t": -4.79,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0338,
+            "t": -1.7,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.012,
+            "t": -0.45,
+            "n": 12
+          },
+          "reversal": {
+            "ic": 0.0201,
+            "t": 1.09,
+            "n": 22
+          }
+        }
+      }
+    },
+    "com_transmit_oil_20": {
+      "raw": {
+        "ic": -0.0079,
+        "t": -0.53,
+        "t_naive": -0.49,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0725,
+            "t": 3.19,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0181,
+            "t": -2.22,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.041,
+            "t": -1.5,
+            "n": 12
+          },
+          "reversal": {
+            "ic": -0.0127,
+            "t": -0.8,
+            "n": 22
+          }
+        }
+      },
+      "minus_mom": {
+        "ic": -0.0066,
+        "t": -0.46,
+        "t_naive": -0.46,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0688,
+            "t": 2.57,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0277,
+            "t": -3.42,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.0337,
+            "t": -1.5,
+            "n": 12
+          },
+          "reversal": {
+            "ic": -0.01,
+            "t": -0.72,
+            "n": 22
+          }
+        }
+      },
+      "minus_size": {
+        "ic": -0.0055,
+        "t": -0.37,
+        "t_naive": -0.37,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0845,
+            "t": 3.75,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0114,
+            "t": -0.97,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.0251,
+            "t": -1.13,
+            "n": 12
+          },
+          "reversal": {
+            "ic": -0.0218,
+            "t": -1.63,
+            "n": 22
+          }
+        }
+      },
+      "minus_value": {
+        "ic": -0.0085,
+        "t": -0.73,
+        "t_naive": -0.63,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0366,
+            "t": 3.51,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0186,
+            "t": -2.72,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.0356,
+            "t": -1.74,
+            "n": 12
+          },
+          "reversal": {
+            "ic": -0.0053,
+            "t": -0.32,
+            "n": 22
+          }
+        }
+      },
+      "minus_ofund": {
+        "ic": -0.0119,
+        "t": -0.83,
+        "t_naive": -0.77,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0668,
+            "t": 3.22,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0173,
+            "t": -2.24,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.0433,
+            "t": -1.64,
+            "n": 12
+          },
+          "reversal": {
+            "ic": -0.0184,
+            "t": -1.28,
+            "n": 22
+          }
+        }
+      },
+      "orth_full": {
+        "ic": -0.0006,
+        "t": -0.06,
+        "t_naive": -0.05,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": 0.0456,
+            "t": 3.3,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.0169,
+            "t": -2.15,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.0174,
+            "t": -1.3,
+            "n": 12
+          },
+          "reversal": {
+            "ic": -0.0018,
+            "t": -0.12,
+            "n": 22
+          }
+        }
+      }
+    },
+    "com_betavol_60": {
+      "raw": {
+        "ic": -0.0858,
+        "t": -3.57,
+        "t_naive": -2.89,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": -0.0515,
+            "t": -2.36,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.1746,
+            "t": -2.36,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.0906,
+            "t": -1.83,
+            "n": 12
+          },
+          "reversal": {
+            "ic": -0.0698,
+            "t": -1.83,
+            "n": 22
+          }
+        }
+      },
+      "minus_mom": {
+        "ic": -0.0674,
+        "t": -3.0,
+        "t_naive": -2.6,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": -0.0416,
+            "t": -1.99,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.14,
+            "t": -2.08,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.057,
+            "t": -1.24,
+            "n": 12
+          },
+          "reversal": {
+            "ic": -0.0615,
+            "t": -1.89,
+            "n": 22
+          }
+        }
+      },
+      "minus_size": {
+        "ic": -0.1015,
+        "t": -4.7,
+        "t_naive": -3.75,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": -0.0576,
+            "t": -2.6,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.1813,
+            "t": -2.31,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.1055,
+            "t": -2.74,
+            "n": 12
+          },
+          "reversal": {
+            "ic": -0.0917,
+            "t": -2.59,
+            "n": 22
+          }
+        }
+      },
+      "minus_value": {
+        "ic": -0.066,
+        "t": -3.81,
+        "t_naive": -3.11,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": -0.0522,
+            "t": -3.42,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.1239,
+            "t": -2.67,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.0467,
+            "t": -1.39,
+            "n": 12
+          },
+          "reversal": {
+            "ic": -0.0652,
+            "t": -2.25,
+            "n": 22
+          }
+        }
+      },
+      "minus_ofund": {
+        "ic": -0.0828,
+        "t": -3.56,
+        "t_naive": -2.82,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": -0.0555,
+            "t": -2.56,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.1764,
+            "t": -2.52,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.086,
+            "t": -1.81,
+            "n": 12
+          },
+          "reversal": {
+            "ic": -0.0641,
+            "t": -1.68,
+            "n": 22
+          }
+        }
+      },
+      "orth_full": {
+        "ic": -0.0708,
+        "t": -5.04,
+        "t_naive": -3.89,
+        "n_months": 47,
+        "by_regime": {
+          "__NA__": {
+            "ic": -0.0554,
+            "t": -3.01,
+            "n": 7
+          },
+          "mixed": {
+            "ic": -0.1033,
+            "t": -2.49,
+            "n": 6
+          },
+          "momentum": {
+            "ic": -0.059,
+            "t": -2.03,
+            "n": 12
+          },
+          "reversal": {
+            "ic": -0.0734,
+            "t": -3.4,
+            "n": 22
+          }
+        }
+      }
+    }
+  },
+  "label": "fwd r20 (因果, rt004_r20_label)",
+  "control_set": [
+    "mom_5",
+    "mom_20",
+    "mom_60",
+    "ln_total_mv",
+    "inv_pe",
+    "inv_pb",
+    "roe",
+    "margin"
+  ],
+  "gate_thresholds": {
+    "ic_sig": 0.02,
+    "t_sig": 3.0,
+    "ic_collapse": 0.01,
+    "min_months": 40
+  },
+  "n_trials_campaign_so_far": 24,
+  "conclusion": "OA-COM: 6 候选因子 Phase-1 筛查 (47月). 存活(A/B): ['com_betavol_60']; 最强 com_betavol_60 orth_full IC=-0.0708 t=-5.04 → 族裁决 PROCEED。解除对应 walk-forward GATE。",
+  "guardrails": [
+    "SIGN-R03 IC 仅 go/no-go",
+    "SIGN-R04 候选 backward 自查通过",
+    "SIGN-R06 ST 源头排除 (面板继承)",
+    "SIGN-R11 分 regime",
+    "SIGN-R12++ 扣全控制残差+逐步消融",
+    "SIGN-R15 manifest 记 n_trials",
+    "SIGN-R16 廉价闸先杀",
+    "SIGN-R01 gate 阈值冻结"
+  ],
+  "artifact": "research\\cache\\oa_com_ic_table.parquet"
+}

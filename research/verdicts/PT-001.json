@@ -1,0 +1,147 @@
+{
+  "id": "PT-001",
+  "title": "生成今日 V12.31-clean picks + append-only 落库 (启动 paper-trade)",
+  "status": "built",
+  "conclusion": "启动前向 paper-trade: 用 **当期 PIT-clean r20** (剔 holder_pct + embargo cut=预测日−21 交易日, 非生产 in-sample 模型) + 生产 v3c pump (s5 ratio 排序) 给最新可用交易日 **20260611** (数据 as-of 20260611; 本地价表/特征到 0611, Tushare 0615 未刷, responsePlaybook 数据滞后回退) 打分, 口径逐字同 V12.31-clean (V7c 池 → ratio_s5 排序 → 双轨 70/20/10 → 行业 cap4 → close-based → ST 源头排除 R06), 产 **14 持仓 / 9 行业 / 总 alloc 0.900**。经 paper_trade_harness.log_picks_for_date **append-only 落库** (source=v12.31-clean-live, existing 拒覆盖红线 SIGN-R01/R02), 落库状态 written, 读回确认 14 行 (log 总计 382 日)。前向 paper-trade 第一笔真实记录就位, 后续每交易日续落, 满 20/40d 用 harness realize_book 对锚 FIN-001 净 Sharpe 1.31±CI[0.11,2.60] (分 regime R11)。生产线 v12_scoring/v12_dual_track 只读冻结 (R05, 本任务用 PIT-clean 变体, 0 生产改动)。",
+  "metrics": {
+    "target_date": "20260611",
+    "data_asof": "20260611",
+    "n_picks": 14,
+    "n_industries": 9,
+    "total_alloc": 0.9,
+    "log_status": "written",
+    "n_rows_readback": 14,
+    "n_logged_days_total": 382,
+    "r20_embargo_cut": "20260513",
+    "r20_train_window": [
+      "20240501",
+      "20260513"
+    ],
+    "r20_n_features": 246,
+    "r20_dropped_leak": "holder_pct",
+    "source": "v12.31-clean-live"
+  },
+  "picks": [
+    {
+      "ts_code": "688020.SH",
+      "name": "方邦股份",
+      "industry": "元器件",
+      "ratio_s5": 4.5615,
+      "r20_pred_clean": 7.2904,
+      "alloc_pct": 0.1
+    },
+    {
+      "ts_code": "688106.SH",
+      "name": "金宏气体",
+      "industry": "化工原料",
+      "ratio_s5": 3.9208,
+      "r20_pred_clean": 8.2148,
+      "alloc_pct": 0.1
+    },
+    {
+      "ts_code": "300606.SZ",
+      "name": "金太阳",
+      "industry": "机械基件",
+      "ratio_s5": 3.7232,
+      "r20_pred_clean": 8.315,
+      "alloc_pct": 0.1
+    },
+    {
+      "ts_code": "301180.SZ",
+      "name": "万祥科技",
+      "industry": "元器件",
+      "ratio_s5": 3.2378,
+      "r20_pred_clean": 6.9538,
+      "alloc_pct": 0.1
+    },
+    {
+      "ts_code": "002213.SZ",
+      "name": "大为股份",
+      "industry": "半导体",
+      "ratio_s5": 3.0241,
+      "r20_pred_clean": 5.8642,
+      "alloc_pct": 0.1
+    },
+    {
+      "ts_code": "688387.SH",
+      "name": "信科移动-U",
+      "industry": "通信设备",
+      "ratio_s5": 2.9417,
+      "r20_pred_clean": 8.176,
+      "alloc_pct": 0.1
+    },
+    {
+      "ts_code": "300762.SZ",
+      "name": "上海瀚讯",
+      "industry": "通信设备",
+      "ratio_s5": 2.8816,
+      "r20_pred_clean": 6.4142,
+      "alloc_pct": 0.1
+    },
+    {
+      "ts_code": "002357.SZ",
+      "name": "富临运业",
+      "industry": "公共交通",
+      "ratio_s5": 2.806,
+      "r20_pred_clean": 6.5791,
+      "alloc_pct": 0.02857
+    },
+    {
+      "ts_code": "600490.SH",
+      "name": "鹏欣资源",
+      "industry": "铜",
+      "ratio_s5": 2.7114,
+      "r20_pred_clean": 6.8234,
+      "alloc_pct": 0.02857
+    },
+    {
+      "ts_code": "688523.SH",
+      "name": "航天环宇",
+      "industry": "航空",
+      "ratio_s5": 2.7053,
+      "r20_pred_clean": 5.8863,
+      "alloc_pct": 0.02857
+    },
+    {
+      "ts_code": "300696.SZ",
+      "name": "爱乐达",
+      "industry": "航空",
+      "ratio_s5": 2.6945,
+      "r20_pred_clean": 6.3516,
+      "alloc_pct": 0.02857
+    },
+    {
+      "ts_code": "300581.SZ",
+      "name": "晨曦航空",
+      "industry": "航空",
+      "ratio_s5": 2.648,
+      "r20_pred_clean": 5.9924,
+      "alloc_pct": 0.02857
+    },
+    {
+      "ts_code": "600844.SH",
+      "name": "金煤科技",
+      "industry": "化工原料",
+      "ratio_s5": 2.6295,
+      "r20_pred_clean": 6.3334,
+      "alloc_pct": 0.02857
+    },
+    {
+      "ts_code": "605287.SH",
+      "name": "德才股份",
+      "industry": "装修装饰",
+      "ratio_s5": 2.6223,
+      "r20_pred_clean": 6.2673,
+      "alloc_pct": 0.02857
+    }
+  ],
+  "artifacts": {
+    "generator": "research/backtest/pt001_gen_today.py",
+    "results": "research/cache/pt001/pt001_results.json",
+    "r20_model": "research/cache/pt001/r20_model/r20_clean_20260611.txt",
+    "picks_log": "research/cache/paper_trade/picks/20260611.parquet (append-only)",
+    "log_jsonl": "research/cache/paper_trade/log.jsonl",
+    "anchor": "FIN-001 净 Sharpe 1.31 ± CI[0.11,2.60] (V12.31_BASELINE.md §3)"
+  },
+  "discipline": "R01/R02 落库 append-only existing 拒覆盖 (前向数据不回改/不回流调参); R04 全因果无泄漏 (r20 embargo cut=预测日−21 交易日, forward 日 pump label 尚不存在; 大缓存 gitignored); R05 生产线只读冻结 (PIT-clean 变体, 0 生产改动); R06 ST 源头排除; R08 r20 模型 checkpoint; 运维落库非研究 gate, status=built (preRegisteredGate.frozen=true)。"
+}

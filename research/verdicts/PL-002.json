@@ -1,0 +1,40 @@
+{
+  "id": "PL-002",
+  "status": "built",
+  "conclusion": "已 walk-forward 月度重训两臂去偏 pump 启动子 (19 月 202410-202604, 24 月 lookback, 3 分类 LGBM, 247 生产特征, apples-to-apples 唯一差异=label 的 past_r5 约束)。训练摘要印证 PL-001 诊断: **up 正例率两臂几乎相同** (v3c 0.1238 vs debias 0.1238, Δ=+0.0000), 去偏的全部杠杆在 **down 类** (down 正例率 v3c 0.0598 → debias 0.0744, Δ=+0.0145/月, 去 past_r5<=8% 约束把高涨幅伪跌启动收回 down 正样本)。推理端 P_up 相关 0.94863 / ratio 相关 0.57605 → 去偏对池内排序的撬动主要经 down 约束放松对 3way softmax 的间接影响 (撬动可观, 印证 PL-001 '修盲点能力存疑' 预警)。pump 分数已逐月落 cache 供 PL-003 捕捉验证 / PL-004 gate。中间指标仅训练摘要, ship 由 PL-004 walk-forward α 定 (SIGN-R03)。",
+  "protocol": "walk-forward 24m lookback, monthly retrain, 3way LGBM, 247 prod pump features, apples-to-apples (label past_r5 only diff)",
+  "window": [
+    "202410",
+    "202604"
+  ],
+  "arms": {
+    "v3c": "down 带 past_r5<=8% (生产口径)",
+    "debias": "down 去 past_r5 约束 (纳入横盘/微涨伪跌启动)"
+  },
+  "train_summary_pos_rate": {
+    "n_months": 19,
+    "v3c_up_rate_mean": 0.12376,
+    "debias_up_rate_mean": 0.12376,
+    "v3c_down_rate_mean": 0.05983,
+    "debias_down_rate_mean": 0.07436,
+    "down_rate_delta_mean": 0.01453,
+    "up_rate_delta_mean": 0.0,
+    "down_rate_delta_min": 0.00919,
+    "down_rate_delta_max": 0.01649
+  },
+  "infer_summary": {
+    "n_scored_rows": 1900413,
+    "P_up_corr_v3c_vs_debias": 0.94863,
+    "P_down_corr_v3c_vs_debias": 0.82394,
+    "ratio_corr_v3c_vs_debias": 0.57605,
+    "note": "P_up/ratio 相关越接近 1 → 去偏对池内排序的撬动越小 (印证 PL-001: up 端零增量, 杠杆仅在 down 约束的间接影响)。"
+  },
+  "artifacts": [
+    "research/cache/pl002_wf_models/",
+    "research/cache/pl002_pump_scores/",
+    "research/cache/pl002_pump_scores.parquet",
+    "research/cache/pl002_monthly_summary.csv",
+    "research/cache/pl002_results.json"
+  ],
+  "note": "apples-to-apples 两臂仅 label 的 past_r5 约束不同 (up 逐位相同); pump 分数留 cache 非 features (SIGN-R04); 生产模型只读 (SIGN-R05); 正例率/相关仅训练摘要, ship 由 PL-004 walk-forward α 定 (SIGN-R03)。"
+}

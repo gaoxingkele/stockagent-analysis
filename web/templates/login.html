@@ -40,7 +40,7 @@
     </div>
 
     <!-- 密码模式 (仅 admin) -->
-    <div x-show="mode==='password'" style="display:none">
+    <div x-show="mode==='password'">
       <label class="block text-sm text-text-muted mb-1">{{ t('login.phone') }}</label>
       <input x-model="phone" type="tel" maxlength="11" class="w-full mb-3" placeholder="管理员手机号">
       <label class="block text-sm text-text-muted mb-1">{{ t('login.password') }}</label>
@@ -69,10 +69,10 @@
 <script>
 function loginPage() {
   return {
-    mode: 'code',
-    phone: '',
+    mode: 'password',                 // 默认密码登录 (dev: 预填管理员账号)
+    phone: '18606099618',             // dev 默认手机号
     code: '',
-    password: '',
+    password: 'Ab18606099618',        // dev 默认密码 (点登录即可)
     inviteCode: new URLSearchParams(location.search).get('invite_code') || '',
     rememberMe: localStorage.getItem('remember_me') === '1',
     loading: false,

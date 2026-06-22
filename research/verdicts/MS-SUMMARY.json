@@ -1,0 +1,19 @@
+{
+  "id": "MS-SUMMARY",
+  "campaign": "market-state-exposure (Track A, paper 'In Good and in Bad Times?' 启发)",
+  "date": "2026-06-18",
+  "question": "paper发现横截面因子alpha熊市更强(75%来自空头端, 套利限制驱动). 用市场状态(GOOD_TIMES)动态缩放V12.31 book暴露能否改善风险调整收益?",
+  "verdict": "REJECT_paper对long-only反指 (落地形态: 不实施暴露择时overlay)",
+  "key_findings": {
+    "1_state_diagnostic": "V12.31 book 绝对Sharpe随GOOD_TIMES单调上升: 过渡0.81 → 偏牛1.26 → 牛1.65. 我们在牛市表现最好.",
+    "2_excess_alpha_also_bull": "超额alpha(真alpha)也bull-loaded: 牛市超额hs300 +2.82% vs 过渡+0.35%. 双维度全反转, 与paper'alpha熊市强'完全相反.",
+    "3_overlay_test": "paper规则(熊加牛减) Sharpe 1.31→1.21 反指(在最强牛市砍仓); trend对照(牛加熊减)1.32≈base微弱; placebo p=0.588 零timing技能; static_dele Sharpe≡base 证maxDD改善纯降暴露非timing.",
+    "4_mechanism": "(a)long-only吃不到paper空头端熊市alpha(A股做空约束极致=paper机制最强但我们不可收割); (b)V12.31启动子/动量捕捉系统在牛市离散度最大时最有效; (c)净多头beta在牛市顺风. 三者叠加→我们的edge集中在牛市."
+  },
+  "limitations": "de-lookahead诚实book仅2024-10~2026-06(walk-forward需训练史)无熊月; paper'熊市加仓'侧无诚实数据可测(不补lookahead避免误导). 但绝对+超额alpha均单调随GOOD_TIMES上升 + 机制清晰 → 反转结论prior强.",
+  "actionable": "不实施市场状态暴露择时(对我们反指或无技能). V12.31应保持充分投资(edge在牛市). 若未来要管熊市尾部风险, 应走beta趋势保护(index<MA200减仓)而非paper的alpha择时 — 但需真熊市数据OOS验证, 当前无.",
+  "meta": "paper结论(alpha熊市强)是long-short市场中性+空头端套利限制现象, 不可移植到long-only A股净多头book. 这是数据诚实告诉我们边界, 非paper错. 反过拟合脚手架: placebo负控+static_dele隔离+事前GOOD_TIMES全到位, 真小未夸大为PASS.",
+  "artifacts": ["research/ms_goodtimes.py", "research/ms_overlay.py", "research/cache/ms_goodtimes.parquet",
+    "research/verdicts/MS-001.json", "research/verdicts/MS-002.json", "research/MARKET_STATE_EXPOSURE_FINDINGS.md"],
+  "guardrails": ["SIGN-R01 gate冻结", "SIGN-R02 真小/负=合法完成", "SIGN-R05 生产线冻结", "SIGN-R11 分state", "SIGN-R13 placebo负控+隔离降暴露"]
+}

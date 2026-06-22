@@ -1,0 +1,110 @@
+{
+  "task": "CL-003",
+  "status": "built",
+  "classification": "regime_overlay",
+  "conclusion": "CL 阶段收尾定性 = **regime_overlay** (动量态条件 overlay, 非稳健 cross-sectional alpha)。CL-001 已按冻结 gate **死于消融** (full 残差 IC +0.0198 NW_t +1.77 未过, 非重叠 t +0.68); CL-003 三路分解一致指向 overlay/非概念特异: ① regime 分解 (残差 IC 层, CL-002 无 book ΔSharpe 故不在 book 层): momentum IC +0.0393 t +5.41 / reversal +0.0111 t +0.70 / mixed +0.0151 t +0.98 → **仅动量 regime 显著** = overlay 签名; ② 概念特异性: 概念桶 full 残差 IC +0.0198 vs PE×市值分位桶 full 残差 IC +0.0205 (gap -0.0007, PE/mv NW_t +1.63不过闸) → 概念桶≈PE/市值桶, **非概念特异** = 残差被泛 PE/市值横截面结构解释, 非概念内 alpha; ③ placebo: real IC +0.0198 vs 随机 within-concept re-rank null (K=200) mean +0.0037 sd 0.0002 p95 +0.0041 → z +67.87 单尾 p 0.000 (real 落 null 第 100% 分位)**显著胜 null**。综合: 残差的微弱正 IC **恰且仅在动量 regime 显著** (momentum t+5.41), 这正是 V12.31 实盘被血洗的动量态 (SIGN-R11 / [[project_v3c_momentum_regime_mismatch_0603]]); 即便胜过随机 null, 它也不是可在全 regime 兑现的 cross-section alpha, 而是**动量择时 overlay** (RG-002 已证动量 overlay tricky, 需滞后 regime detection 才能用)。叠加 CL-002 book gate 前提不成立 (skip), within-concept 相对动量 re-rank 终判 = **不落地**: RETRO-003 +0.0286 名义过闸约 1/3 被全因子吃 (CL-001), 余下是动量 regime overlay (CL-003) → 19+ 否后首个正向**未能成为可交易 alpha**。漏掉概念动量赢家是 hindsight + 我们均值回归身份的必然代价 (RETRO-002), 不可在不引入动量 regime 择时的前提下交易修。生产线 V12.31 只读冻结。",
+  "metrics": {
+    "gate_ref": {
+      "GATE_IC": 0.01,
+      "GATE_T": 2.0,
+      "target": "ret_20",
+      "primary": "mom_comp",
+      "controls_full": [
+        "past_r5",
+        "pyr_velocity_20_60",
+        "log_mv",
+        "pe_ttm",
+        "adx",
+        "rsi_14",
+        "ma20_slope",
+        "ratio_s5",
+        "pred_r20"
+      ],
+      "note": "CL-002 因 CL-001 死于消融 skip → 无 book ΔSharpe, regime 分解在残差 IC 层"
+    },
+    "regime_decomp_residual_ic": {
+      "momentum": {
+        "mean_ic": 0.0392879700091642,
+        "nw_t": 5.414491757263612,
+        "n_dates": 48
+      },
+      "reversal": {
+        "mean_ic": 0.011068317182027257,
+        "nw_t": 0.701224997130488,
+        "n_dates": 75
+      },
+      "mixed": {
+        "mean_ic": 0.01509156804335145,
+        "nw_t": 0.9832779845938737,
+        "n_dates": 58
+      }
+    },
+    "regime_significant_positive": [
+      "momentum"
+    ],
+    "momentum_regime_only_significant": true,
+    "pe_mv_bucket_cross": {
+      "concept_bucket_full_ic": 0.01984120052821166,
+      "pe_mv_bucket_full_ic": 0.0205362953032366,
+      "pe_mv_nw_t": 1.6284757789135793,
+      "gap_concept_minus_pemv": -0.0006950947750249369,
+      "concept_specific": false,
+      "pe_mv_passes_gate": false,
+      "meta": {
+        "stock_rows": 682265,
+        "avg_buckets_per_day": 25,
+        "n_pe_q": 5,
+        "n_mv_q": 5
+      },
+      "full_pemv_block": {
+        "mean_ic": 0.0205362953032366,
+        "nw_t": 1.6284757789135793,
+        "n_dates": 181,
+        "mean_ic_nonoverlap": 0.010645661753232403,
+        "t_nonoverlap": 0.5647714874329589,
+        "n_nonoverlap": 10,
+        "raw_within_bucket_ic": -0.05361637696632291
+      }
+    },
+    "placebo": {
+      "real_mean_ic": 0.01984120052821166,
+      "n_real_dates": 181,
+      "placebo_K": 200,
+      "placebo_mean": 0.003714148880347756,
+      "placebo_sd": 0.00023762957869319818,
+      "placebo_min": 0.0031252264533028463,
+      "placebo_max": 0.004298835054639069,
+      "placebo_p95": 0.004118512576571851,
+      "z_vs_placebo": 67.86634785346043,
+      "p_value_one_sided": 0.0,
+      "real_percentile_in_null": 1.0
+    },
+    "beats_placebo_p05": true,
+    "vs_retro003_2factor": {
+      "retro003_2factor_ic": 0.0286,
+      "cl001_full_ic": 0.01984120052821166
+    },
+    "coverage": {
+      "total_mv_cov": 0.7238584820561824,
+      "pe_ttm_cov": 0.5451138182216217,
+      "ma20_slope_cov": 0.9976550034715537,
+      "n_pick_concepts": 1886,
+      "member_rows": 34558618
+    }
+  },
+  "caveats": [
+    "CL-002 因 CL-001 死于消融而 skip → 无 book ΔSharpe; CL-003 的 regime 分解在**残差 IC 层** (信号层) 而非 book 层 — 这是 gate 链在 CL-001 即诚实终止的必然结果 (R02), 非降口径。",
+    "残差 IC / placebo 均为 in-sample 描述性定性 (R03), CL-003 只给最终分类, 不翻 CL-001 的 REJECT (R01/R02)。",
+    "PE×市值桶交叉在 PE/市值可得子样本 (= CL-001 full 同口径), 故与概念桶 full IC (+0.0198) apples-to-apples; PE/市值 factor_lab 覆盖到 ~20260126 损最后 ~3 月。",
+    "placebo = 桶内随机置换信号 (保桶内均值=0 / 同 finite mask / 同 within-bucket demean), 仅信号被打乱; null mean 应≈0, 比的是 real 是否落右尾。p 为单尾 (placebo>=real 比例)。",
+    "概念 membership 是 current 快照 (PIT 风险: 对历史轻 lookahead)。",
+    "regime 分解复用 CL-001 缓存 full 块 (逐位同口径), 未重算以省算力 (R08)。"
+  ],
+  "artifacts": [
+    "research/backtest/run_cl003.py",
+    "research/cache/cl003/blocks/*.json",
+    "research/cache/cl003/cl003_results.json",
+    "research/cache/cl001/blocks/regime_full_*.json (复用)"
+  ],
+  "discipline": "R01 候选/控制集/桶定义/gate 冻结未在结果上调 (= CL-001 同候选与控制, 仅换桶维度交叉 + 加随机 null); R02 CL-001 已 REJECT, CL-003 只定性不翻案=合法完成; R03 残差 IC/placebo≠ship; R04 大缓存 gitignored 无 features 写入; R05 复用缓存评分未碰生产; R06 ST 源头排除; R08 block 级 checkpoint; R11 regime 分层为核心定性依据; R12 placebo=随机对照消融, 异类增益须胜 null。"
+}

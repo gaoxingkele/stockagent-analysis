@@ -1,0 +1,79 @@
+{
+  "id": "BL-001",
+  "status": "built",
+  "conclusion": "在严格 BASE 桶 (SLV-001) 上加突破触发 (前一日BASE & close>过去20日箱顶 & vol_ratio>=1.5), 窗口 20230103~20260610 共得 base_entry 3,395 事件 (可标注 3,394)。紧尾 label (前向5d max_gain>=10% & max_dd>=-4%) 正例 445, 正例率 0.13111373011196228。突破筛选把紧尾正例率从严格 BASE 桶无突破基线 0.0628 (口径注: 基线是 is_launch dd≥−5%) 提到 0.13111373011196228 (lift 2.09x, 且本 label dd 更紧 −4%) — 突破触发确实抬升命中率。【诚实核对 — SLV-002 画像是 survivor-conditioned, 勿误读为干净】SLV-002 BASE 高质量画像 (μ+0.151/win0.829/dd_p10−0.075) 仅在 is_launch=1 (赢家) 上算; base_entry 是无条件入场信号, 其前向 20d 画像 μ0.0183/win0.4807/dd_p10-0.14778 明显更差 (含失败突破=假突破秒回), dd_p10 −14.8% 并不薄。即'罕见但干净'是结果端筛选的产物, 无条件突破入场仍有肥左尾 — 正是 BL-002 需在入场内再排序、BL-003 需紧尾 label+紧止损守尾的理由。可立的 edge 是命中率 lift 2.09x, 非 SLV-002 的干净尾。月频: 月均 84.88 事件 (min 1/max 627), 有事件交易日覆盖 0.627, 活跃日均 6.52 个 → blend 多数日有少量可注入候选, 但稀疏。【样本充分性 → BL-002 路由】正例 445 (walk-forward 每折≈23), 门槛 n_pos>=2000 且 每折>=100 → sufficient=False → **v1_rules_only** (样本不足, BL-002 仅走 v1 规则法 (SLV-002 证入场即 edge, 绕开小样本训练陷阱))。诊断非 ship (R03); 入场/label 边界冻结 (R01); 全因果 ST 排除留 cache (R04/R06)。",
+  "metrics": {
+    "window": [
+      "20230103",
+      "20260610"
+    ],
+    "n_events": 3395,
+    "n_labeled": 3394,
+    "n_pos": 445,
+    "pos_rate": 0.13111373011196228,
+    "base_bucket_launch_rate_no_breakout": 0.06281,
+    "lift_vs_base_bucket": 2.09,
+    "monthly_stats": {
+      "n_months_with_event": 40,
+      "events_per_month_mean": 84.88,
+      "events_per_month_median": 37.5,
+      "events_per_month_min": 1,
+      "events_per_month_max": 627,
+      "n_trade_days_with_event": 521,
+      "total_trade_days": 831,
+      "day_coverage": 0.627,
+      "events_per_active_day_mean": 6.52,
+      "events_per_trade_day_mean": 4.09
+    },
+    "entry_forward_profile": {
+      "h5": {
+        "n": 3394,
+        "mean": 0.00761,
+        "median": -0.00295,
+        "win_rate": 0.4573,
+        "p10_left_tail": -0.0532,
+        "realized_dd_median": -0.02577,
+        "realized_dd_p10": -0.07283
+      },
+      "h20": {
+        "n": 3387,
+        "mean": 0.0183,
+        "median": -0.00337,
+        "win_rate": 0.4807,
+        "p10_left_tail": -0.1028,
+        "realized_dd_median": -0.05204,
+        "realized_dd_p10": -0.14778
+      }
+    },
+    "by_regime": {
+      "momentum": {
+        "n": 1015,
+        "pos_rate": 0.1094
+      },
+      "reversal": {
+        "n": 1554,
+        "pos_rate": 0.1036
+      },
+      "mixed": {
+        "n": 825,
+        "pos_rate": 0.2097
+      }
+    },
+    "sample_sufficiency": {
+      "n_pos": 445,
+      "per_fold_pos_mean": 23.4,
+      "thresholds": {
+        "n_pos": 2000,
+        "per_fold_pos": 100,
+        "n_folds": 19
+      },
+      "sufficient_for_training": false,
+      "bl002_route": "v1_rules_only"
+    }
+  },
+  "artifacts": [
+    "research/cache/bl001/base_entry.parquet",
+    "research/cache/bl001_results.json"
+  ],
+  "note": "入场/label 边界本 task 冻结 (R01: BOX_LOOKBACK20/VOL_RATIO1.5/dd-4%); 全因果前向列+label 只留 cache 非 features (R04); ST 源头已排除 (R06); 分 regime (R11); 诊断非 ship (R03); 生产线只读 (R05)。"
+}

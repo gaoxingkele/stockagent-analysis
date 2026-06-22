@@ -1,0 +1,56 @@
+{
+  "id": "QML-4",
+  "status": "REJECT_known_families",
+  "status_mechanical": "PROCEED_phase2",
+  "verdict_override_note": "机械闸报PROCEED(24存活过正交+Bonferroni), 元判断REJECT: 24存活因子全是已walk-forward否决的因子族换皮。最强 tsstd_intraday_60 = OA-VOL的intraday_vol_60(OA-VOL-GATE已REJECT Δα-0.15); tsmean/tsmax/tsmin/tssum_intraday_* + tsmean_overnight_5 = OA-VP隔夜/日内族(OA-VP-GATE已REJECT Δα-0.70); tsmax_ret_60/10 = OA-VOL彩票max族(已否); tssum_ret_60 = 动量(已是FULL_CTRL控制)。最强存活就是OA-VOL-GATE跑过的同一因子→Phase-2已等价完成=REJECT, 不重跑冗余。**AI Scientist教训完美实证: 枯竭价量空间自动搜索精确重新发现我们已证walk-forward失败的因子族, 廉价闸+Bonferroni过(它们是真异象正交于标准控制)但walk-forward vs V12.31已死。搜索轴非杠杆。**",
+  "n_generated": 80,
+  "screen_breakdown": {
+    "A": 20,
+    "B": 4,
+    "C": 48,
+    "D": 8
+  },
+  "survivors": [
+    "div__tssum_ret_60__tsmax_vol_5",
+    "sub__tsstd_intraday_5__tsmean_overnight_20",
+    "tsmean_intraday_60",
+    "tsstd_intraday_60",
+    "sub__tsmin_vol_10__tsmin_amount_10",
+    "tsmax_intraday_10",
+    "tsmin_intraday_20",
+    "tsmax_ret_60",
+    "sub__tssum_intraday_60__tsdelta_intraday_60",
+    "tsmax_ret_10",
+    "mul__tsmin_overnight_60__tsstd_ret_20",
+    "div__tsmin_amount_20__tsmax_overnight_60",
+    "div__tszscore_ret_20__tsmean_vol_60",
+    "tssum_intraday_20",
+    "tsmin_intraday_60",
+    "mul__tsstd_intraday_60__tsmean_overnight_10",
+    "tssum_ret_60",
+    "tsmean_overnight_5",
+    "tsstd_ret_5",
+    "div__tsdelta_overnight_20__tsdelta_vol_10"
+  ],
+  "n_survivors": 24,
+  "best_factor": "tsstd_intraday_60",
+  "best_orth_ic": -0.0694,
+  "best_orth_nw_t": -4.98,
+  "multiple_testing": {
+    "n_trials": 80,
+    "bonferroni_z_crit": 3.421,
+    "best_abs_t": 4.98,
+    "passes": true
+  },
+  "conclusion": "随机符号搜索 80 价量因子, 正交闸(扣FULL_CTRL残差,NW-t): A_显著=20 B_边缘=4 C_塌缩=48 D_reskin=8, 存活(A/B)=24. 最强 tsstd_intraday_60 orth_full IC=-0.0694 NW-t=-4.98. 多重检验: Bonferroni 临界 |z|=3.42(N=80), 最强|t|=4.98 >=临界 → 过多重检验. → PROCEED_phase2. 少数存活且过多重检验 → Phase-2 walk-forward。",
+  "guardrails": [
+    "R01 gate冻结",
+    "R03 IC仅go/no-go",
+    "R04 价量原语backward",
+    "R12++ 扣FULL_CTRL残差",
+    "R15 多重检验Bonferroni(n_trials=N)",
+    "R16 廉价闸先杀",
+    "R05 生产冻结",
+    "AI Scientist: gate>吞吐"
+  ]
+}

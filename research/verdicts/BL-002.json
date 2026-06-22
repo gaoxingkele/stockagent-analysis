@@ -1,0 +1,93 @@
+{
+  "id": "BL-002",
+  "status": "built",
+  "conclusion": "BL-001 已判样本不足 (紧尾正例 445/walk-forward 每折≈23 << 门槛 2000/100) → 落 responsePlaybook.BL-002 '样本不够'分叉: **跳过 v2 LGBM 训练, 仅走 v1 规则法**, 文档化小样本约束。SLV-002 已证严格 BASE 入场本身即 edge (无模型即最高质量画像), v1 绕开 n 小训练陷阱 (反 [[feedback_train_label_over_inference_hack]] 的训练层 hack 诱惑)。【v1 base_score (R01 冻结等权)】= mean 三横截面 pct rank: squeeze 紧度 (−boll_bw_pctile)、突破量能 (vol_ratio)、整理时长 (consol_duration), 等权且**不在 base_label 上拟合权重** (防把 v1 选择器调成隐式 v2 训练 = SIGN-R01/R03)。对 3,395 个 base_entry 候选打分, 落 40 个月度文件 research/cache/bl002/base_score_YYYYMM.parquet 供 BL-003 blend 注入排序。【描述性排序核对 (SIGN-R03 非 ship)】base_score 五分位: Q5(高分) 紧尾正例率 0.1502 vs Q1(低分) 0.1267 → 方向弱且非单调 (Q5 0.1502 最高 > Q1 0.1267, 但中间分位 Q2-Q4 无序, 主要由 comp_vol 驱动 corr=0.0626); 尾部: **尾未被排序变薄** (Q5 dd20_p10 -0.14155 ≈ Q1 -0.14064, 各分位 ~−0.14 持平)。代理边际相关 (vs 紧尾 label): {\"comp_squeeze\": -0.0303, \"comp_vol\": 0.0626, \"comp_dur\": -0.0065} (仅 comp_vol 放量为正向且微弱, squeeze/dur 近零或反向)。诚实判读: v1 等权排序对**命中率**仅微弱抬升 (Q5 略高且非单调), 对 BL-001 揭示的**肥左尾几乎无作用** (各分位 dd20_p10 ~−0.14 持平) → 守尾仍只能靠紧尾 label+紧止损 (BL-003), 不能指望 base_score 排掉假突破。BL-003 注入排序大概率接近'在 base_entry 内弱筛', 增益是否落地完全由 walk-forward Δα 定夺 (SIGN-R03)。月度候选: 40 月, 月均 84.88 候选 (中位 37.5) — 稀疏, BL-003 多数日仅少量可注入。全因果 base_score 只用因果因子 (R04), label/前向列只留 cache 非 features; ST 源头排除 (R06); 分 regime 已落 metrics (R11); 排序核对非 ship (R03); 生产线只读 (R05)。",
+  "metrics": {
+    "route": "v1_rules_only",
+    "v2_skipped": true,
+    "n_candidates": 3395,
+    "n_labeled": 3394,
+    "n_pos": 445,
+    "overall_pos_rate": 0.1311,
+    "frozen_base_score": {
+      "formula": "mean(comp_squeeze, comp_vol, comp_dur), 各为横截面 pct rank, 等权 (R01 冻结, 不在 label 上调权)",
+      "comp_squeeze": "pctrank(-boll_bw_pctile) 越紧越高",
+      "comp_vol": "pctrank(vol_ratio) 放量越大越高",
+      "comp_dur": "pctrank(consol_duration) 整理越久越高"
+    },
+    "score_by_quintile": {
+      "Q1_low": {
+        "n": 679,
+        "pos_rate": 0.1267,
+        "ret20_mean": 0.02152,
+        "dd20_p10": -0.14064
+      },
+      "Q2": {
+        "n": 679,
+        "pos_rate": 0.137,
+        "ret20_mean": 0.01382,
+        "dd20_p10": -0.1678
+      },
+      "Q3": {
+        "n": 678,
+        "pos_rate": 0.1239,
+        "ret20_mean": 0.01264,
+        "dd20_p10": -0.14316
+      },
+      "Q4": {
+        "n": 679,
+        "pos_rate": 0.1178,
+        "ret20_mean": 0.02241,
+        "dd20_p10": -0.14311
+      },
+      "Q5_high": {
+        "n": 679,
+        "pos_rate": 0.1502,
+        "ret20_mean": 0.02105,
+        "dd20_p10": -0.14155
+      }
+    },
+    "q5_vs_q1": {
+      "q5_pos_rate": 0.1502,
+      "q1_pos_rate": 0.1267,
+      "monotone_q5_gt_q1": true,
+      "strictly_monotone": false,
+      "tail_thinned_q5_vs_q1": false,
+      "q5_dd20_p10": -0.14155,
+      "q1_dd20_p10": -0.14064
+    },
+    "proxy_marginal_corr_with_label": {
+      "comp_squeeze": -0.0303,
+      "comp_vol": 0.0626,
+      "comp_dur": -0.0065
+    },
+    "by_regime": {
+      "momentum": {
+        "n": 1015,
+        "q5_pos_rate": 0.152,
+        "q1_pos_rate": 0.0868
+      },
+      "reversal": {
+        "n": 1554,
+        "q5_pos_rate": 0.1118,
+        "q1_pos_rate": 0.1327
+      },
+      "mixed": {
+        "n": 825,
+        "q5_pos_rate": 0.2203,
+        "q1_pos_rate": 0.1687
+      }
+    },
+    "monthly_coverage": {
+      "n_months": 40,
+      "candidates_per_month_mean": 84.88,
+      "candidates_per_month_median": 37.5
+    },
+    "n_monthly_files": 40
+  },
+  "artifacts": [
+    "research/cache/bl002/base_score_YYYYMM.parquet (月度)",
+    "research/cache/bl002_results.json"
+  ],
+  "note": "v1 规则法等权打分 (R01 冻结, 未在 label 上调权); v2 训练按 BL-001 判样本不足跳过 (responsePlaybook.BL-002 '样本不够'分叉); base_score 只用因果因子, label/前向列只留 cache 非 features (R04); ST 源头排除 (R06); 分 regime (R11); 排序核对非 ship, 只有 BL-003 walk-forward 定夺 (R03); 生产线只读 (R05)。"
+}

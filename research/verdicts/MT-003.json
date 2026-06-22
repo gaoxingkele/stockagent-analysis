@@ -1,0 +1,111 @@
+{
+  "id": "MT-003",
+  "status": "residual_signal",
+  "conclusion": "方案C 累积卦+序列特征(逐日翻爻路径积分, 窗20日) Phase-1 升级消融筛查: 最强动态 mhC_* = mhC_move_std (扣 公历月×板块 + 标准动量['mom_5', 'mom_20', 'ma_pos', 'rsi_14'] 后 resid2 IC=+0.0463, t=+10.87); 朴素对照 OOF-IC=+0.0067; 动量因子最强 IC(r20)=-0.0786。判定 residual_signal (阈值 |IC|>=0.01 且 |t|>=3.0)。 Phase-1 阈值上算 residual_signal, 但 诚实预警 (SIGN-R12): 方案C 累积卦=每爻翻动次数的奇偶(parity), 本质是'近N日量化涨跌幅分桶'的周期折叠; 序列标量里 mhC_move_std/mhC_move_drift/mhC_wuxing_net 全由逐日涨跌幅/振幅派生。关键: 动爻 m_t=abs(round(ret*100))%%6 是当日涨跌幅幅度的桶, 故 mhC_move_std='动爻位置的离散度'≈近N日已实现波动率的换皮代理 (与累积动量正交=正是它存活线性动量残差化的原因)。本轮 resid2 最强残差集中在 mhC_move_std (波动率族); 但残差化只扣了 mom_5/mom_20/ma_pos/rsi 四个线性动量/趋势因子, **未含波动率因子**, 也未含 MA堆叠/非线性趋势。故 resid2-IC 极可能是'波动率 + 非线性趋势'这些标准TA量超出线性动量残差化的世俗结果, 而非占卜。给 MT-004 的硬约束: apples-to-apples baseline **必须额外含 已实现波动率 (如 std(ret_20) / ATR) + MA堆叠/非线性趋势对照** (沿用 MT-001 的 MA堆叠约束), 否则会把'波动率/非线性趋势'误归功于卦象 = 自欺。是否真有独立于'同一走势标准技术编码'的增益, 只能由 MT-004 walk-forward 裁决, Phase-1 IC 不作数 (SIGN-R03)。 候选进 MT-004 (最终只认 walk-forward α, SIGN-R03)。",
+  "metrics": {
+    "window_days": 20,
+    "horizon_days": 20,
+    "best_dynamic_feature": "mhC_move_std",
+    "best_dynamic_resid2_ic": 0.046334,
+    "best_dynamic_resid2_t": 10.871348,
+    "best_dynamic_resid2_by_regime": {
+      "momentum": {
+        "ic_mean": 0.069296,
+        "ic_t": 8.521992,
+        "n_dates": 222,
+        "ic_std": 0.121156,
+        "ic_ir": 0.571959
+      },
+      "mixed": {
+        "ic_mean": 0.036903,
+        "ic_t": 3.154816,
+        "n_dates": 132,
+        "ic_std": 0.134393,
+        "ic_ir": 0.274592
+      },
+      "reversal": {
+        "ic_mean": 0.037476,
+        "ic_t": 6.930379,
+        "n_dates": 435,
+        "ic_std": 0.112783,
+        "ic_ir": 0.332286
+      }
+    },
+    "naive_control_oof_ic": 0.006678,
+    "momentum_factor_ic_r20": {
+      "mom_5": {
+        "ic_mean": -0.042667,
+        "ic_t": -9.98313,
+        "n_dates": 1022,
+        "ic_std": 0.136633,
+        "ic_ir": -0.312278
+      },
+      "mom_20": {
+        "ic_mean": -0.078555,
+        "ic_t": -17.328563,
+        "n_dates": 1007,
+        "ic_std": 0.143855,
+        "ic_ir": -0.546069
+      },
+      "ma_pos": {
+        "ic_mean": -0.069101,
+        "ic_t": -15.715338,
+        "n_dates": 1008,
+        "ic_std": 0.139602,
+        "ic_ir": -0.494987
+      },
+      "rsi_14": {
+        "ic_mean": -0.066548,
+        "ic_t": -15.922801,
+        "n_dates": 1013,
+        "ic_std": 0.133021,
+        "ic_ir": -0.500282
+      }
+    },
+    "screen_ic_floor": 0.01,
+    "screen_t_floor": 3.0,
+    "n_dates": 1027,
+    "regime_dist": {
+      "reversal": 0.4468,
+      "momentum": 0.221,
+      "unknown": 0.2001,
+      "mixed": 0.1321
+    }
+  },
+  "ablation": {
+    "controls": [
+      "OOF (cal_month × industry)",
+      "逐日横截面回归扣 mom_5,mom_20,ma_pos,rsi_14"
+    ],
+    "feature_types": {
+      "categorical_OOF": [
+        "mhC_cum_base_gua",
+        "mhC_cum_upper",
+        "mhC_cum_lower",
+        "mhC_cum_changed_gua",
+        "mhC_move_last"
+      ],
+      "continuous_raw_rankIC": [
+        "mhC_cum_yang",
+        "mhC_move_drift",
+        "mhC_move_std",
+        "mhC_wuxing_net",
+        "mhC_wuxing_net_recent"
+      ]
+    },
+    "note": "升级消融: resid2 在 月×板块 基础上额外逐日横截面扣线性动量/趋势成分。若 mhC_* 对 resid2 仍无 IC ⇒ 累积卦/序列特征=动量换皮, 无独立于标准技术指标的信号。",
+    "interpretation_caveat": "诚实预警 (SIGN-R12): 方案C 累积卦=每爻翻动次数的奇偶(parity), 本质是'近N日量化涨跌幅分桶'的周期折叠; 序列标量里 mhC_move_std/mhC_move_drift/mhC_wuxing_net 全由逐日涨跌幅/振幅派生。关键: 动爻 m_t=abs(round(ret*100))%%6 是当日涨跌幅幅度的桶, 故 mhC_move_std='动爻位置的离散度'≈近N日已实现波动率的换皮代理 (与累积动量正交=正是它存活线性动量残差化的原因)。本轮 resid2 最强残差集中在 mhC_move_std (波动率族); 但残差化只扣了 mom_5/mom_20/ma_pos/rsi 四个线性动量/趋势因子, **未含波动率因子**, 也未含 MA堆叠/非线性趋势。故 resid2-IC 极可能是'波动率 + 非线性趋势'这些标准TA量超出线性动量残差化的世俗结果, 而非占卜。给 MT-004 的硬约束: apples-to-apples baseline **必须额外含 已实现波动率 (如 std(ret_20) / ATR) + MA堆叠/非线性趋势对照** (沿用 MT-001 的 MA堆叠约束), 否则会把'波动率/非线性趋势'误归功于卦象 = 自欺。是否真有独立于'同一走势标准技术编码'的增益, 只能由 MT-004 walk-forward 裁决, Phase-1 IC 不作数 (SIGN-R03)。"
+  },
+  "artifacts": [
+    "research\\features\\meihua_traj_C.parquet",
+    "research/cache/mt003_panel.parquet",
+    "research/cache/mt003_results.json"
+  ],
+  "guardrails": [
+    "SIGN-R03 纯描述非gate",
+    "SIGN-R04 r20/动量留cache不进features",
+    "SIGN-R06 ST源头排除",
+    "SIGN-R11 regime分层",
+    "SIGN-R12+ 升级消融(月×板块+动量因子)"
+  ]
+}

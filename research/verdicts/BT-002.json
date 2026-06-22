@@ -1,0 +1,90 @@
+{
+  "id": "BT-002",
+  "status": "built",
+  "conclusion": "V12.31 生产 book (alloc 加权双轨) 扣真实成本+滑点敏感全 history (20241008~20260611, 21 月) 过引擎。基线滑点 0.10%/边: 年化 +140.5% 净Sharpe +2.78 maxDD -22.0% 月换手 1.55 月胜率 85%。滑点 0→0.20% Sharpe 衰减 +0.12 (+2.84→+2.72)。基准: hs300 年化 +6.6% Sharpe +0.46, CSI1000 +18.5%, 动量基准 +12.1% Sharpe +0.51。regime 分解: 动量月 book 超额 hs300 +4.44pp/月 (绝对未跑输 hs300, 胜率 67%); 但动量月是 book **相对最弱** regime (超额 +4.44pp vs 反转 +6.23 / 混合 +9.62), 与用户'动量月吃亏'方向一致。【绝对收益非可交易声明】book 绝对年化由 r20 池模型 (r20_v16_long_nost 单一生产模型跨全测试期) 共模 lookahead + 集中持仓抬高 (同 BT-001 caveat); 故 +140% 量级不可当实盘预期, BT-003 leave-one-out 与 BT-004 残差 gate 才在受控对照下判增量。本 task 可信结论是: (a) 成本/滑点不构成杀手 (换手仅 ~1.5/月, 0→0.20%滑点 Sharpe 仅衰减 0.12); (b) regime 相对结构 (动量月最弱) 不受共模 lookahead 等比抬高影响。 答'该不该真跑': 成本层无杀手 (净正不脆弱), 但绝对 α 须待 BT-003/004 去 lookahead 后定; 用户'动量月吃亏'在 book 层得**部分印证** (动量月是相对最弱 regime, 非绝对跑输 hs300) → 指向 RL-lite 风控/动量暴露管理。",
+  "metrics": {
+    "baseline_slippage": 0.001,
+    "ann_return_by_slip": {
+      "0.0": 1.4504,
+      "0.0005": 1.4279,
+      "0.001": 1.4055,
+      "0.002": 1.3613
+    },
+    "sharpe_by_slip": {
+      "0.0": 2.841,
+      "0.0005": 2.81,
+      "0.001": 2.779,
+      "0.002": 2.717
+    },
+    "maxdd_by_slip": {
+      "0.0": -0.2199,
+      "0.0005": -0.2202,
+      "0.001": -0.2205,
+      "0.002": -0.221
+    },
+    "baseline_ann_return": 1.4055,
+    "baseline_net_sharpe": 2.779,
+    "baseline_max_drawdown": -0.2205,
+    "avg_monthly_turnover": 1.546,
+    "monthly_win_rate": 0.85,
+    "hs300_ann_return": 0.0665,
+    "hs300_sharpe": 0.459,
+    "csi1000_ann_return": 0.1851,
+    "momentum_bench_ann_return": 0.1214,
+    "momentum_bench_sharpe": 0.514,
+    "underperform_hs300_in_momentum_months": false,
+    "underperform_mombench_in_momentum_months": false,
+    "weakest_regime_vs_hs300": "momentum",
+    "momentum_is_relatively_weakest_regime": true
+  },
+  "regime_table": {
+    "mixed": {
+      "n_months": 2,
+      "book_ret_mean_pct": 10.872,
+      "hs300_ret_mean_pct": 1.248,
+      "csi1000_ret_mean_pct": 2.284,
+      "momentum_ret_mean_pct": -0.752,
+      "excess_vs_hs300_mean_pp": 9.625,
+      "excess_vs_momentum_mean_pp": 11.625,
+      "excess_vs_hs300_win_rate": 1.0
+    },
+    "momentum": {
+      "n_months": 9,
+      "book_ret_mean_pct": 5.399,
+      "hs300_ret_mean_pct": 0.958,
+      "csi1000_ret_mean_pct": 1.416,
+      "momentum_ret_mean_pct": -0.896,
+      "excess_vs_hs300_mean_pp": 4.441,
+      "excess_vs_momentum_mean_pp": 6.295,
+      "excess_vs_hs300_win_rate": 0.667
+    },
+    "reversal": {
+      "n_months": 9,
+      "book_ret_mean_pct": 7.302,
+      "hs300_ret_mean_pct": 1.07,
+      "csi1000_ret_mean_pct": 1.617,
+      "momentum_ret_mean_pct": 3.651,
+      "excess_vs_hs300_mean_pp": 6.232,
+      "excess_vs_momentum_mean_pp": 3.651,
+      "excess_vs_hs300_win_rate": 0.889
+    }
+  },
+  "cost_model": {
+    "commission": 0.00025,
+    "stamp_sell": 0.0005,
+    "transfer": 1e-05,
+    "slippage": 0.001,
+    "enabled": true,
+    "buy_rate": 0.00126,
+    "sell_rate": 0.00176
+  },
+  "artifacts": [
+    "research/backtest/run_bt002.py",
+    "research/cache/bt002/bt002_book_baseline.parquet",
+    "research/cache/bt002/bt002_momentum_benchmark.parquet",
+    "research/cache/bt002/bt002_monthly_regime.parquet",
+    "research/cache/bt002/bt002_results.json",
+    "research/cache/bt002/index_benchmarks.parquet"
+  ],
+  "note": "alloc 加权双轨 (非 BT-001 等权 sanity); 成本/滑点档冻结 (R01); ST 源头排除 (R06); regime 分层必带 (R11); 描述性净 P&L 非 ship gate (R02/R03); 大缓存 gitignored; 生产线只读未碰 (R05)。动量基准=past20d top50 等权过同引擎。"
+}

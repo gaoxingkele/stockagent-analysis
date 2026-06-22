@@ -1,0 +1,38 @@
+{
+  "id": "MH-002",
+  "status": "no_residual_signal",
+  "conclusion": "梅花 Phase-1 廉价筛查: 最强动态 mh_* 残差信号 = mh_yang_count (扣 公历月×板块 朴素对照后 残差 IC=-0.0011, t=-2.15); 朴素对照本身 OOF-IC=+0.0073 (t=+1.43)。判定 no_residual_signal (阈值 |IC|>=0.01 且 |t|>=2.0)。 动态卦象残差不足以独立于世俗(板块×月历)来源 ⇒ 廉价收手, MH-003/004 置 skip, MH-005 skipped (SIGN-R12 消融未存活)。",
+  "metrics": {
+    "horizon_days": 20,
+    "best_dynamic_feature": "mh_yang_count",
+    "best_dynamic_residual_ic": -0.001091,
+    "best_dynamic_residual_t": -2.153442,
+    "naive_control_oof_ic": 0.007256,
+    "naive_control_oof_t": 1.428207,
+    "screen_ic_floor": 0.01,
+    "screen_t_floor": 2.0,
+    "n_dates": 1047,
+    "regime_dist": {
+      "reversal": 0.4386,
+      "momentum": 0.2169,
+      "unknown": 0.2148,
+      "mixed": 0.1297
+    }
+  },
+  "ablation": {
+    "naive_control": "OOF (cal_month x industry) target encoding",
+    "note": "横截面 IC 天然差掉当日全市场常数项, 纯公历月季节性不进 IC; 朴素对照通过 月×板块 交互起作用。mhs_* 静态卦=卦象版股票ID, 其 OOF IC 是个股固定效应非占卜。",
+    "best_dynamic_raw_oof_ic": -0.000643
+  },
+  "artifacts": [
+    "research/cache/mh002_results.json",
+    "research/cache/mh002_panel.parquet"
+  ],
+  "guardrails": [
+    "SIGN-R03 纯描述非gate",
+    "SIGN-R04 r20 留cache不进features",
+    "SIGN-R06 ST源头排除继承",
+    "SIGN-R11 regime分层",
+    "SIGN-R12 朴素消融对照"
+  ]
+}

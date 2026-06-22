@@ -1,0 +1,12 @@
+{
+  "id": "LAND-001",
+  "status": "skipped",
+  "conclusion": "skipped: 落地门未解除。GATE-001=REJECT (席位印记接进 V12.31 r20 池 19 月 walk-forward Δα=-0.030pp/月, 未过 +0.30pp 且伤 reversal/mixed regime)。LAND-001 仅在 GATE-001=PASS 时解除 (responsePlaybook GATE 分叉 + prd skipReason)，故保持 skip，不接入 v12_scoring，生产线 V12.31 冻结未动 (SIGN-R05)。",
+  "depends_on": "GATE-001",
+  "gate_status": "REJECT",
+  "guardrails": [
+    "SIGN-R02 REJECT 合法完成不重调",
+    "SIGN-R05 生产线 V12.31 冻结未动",
+    "responsePlaybook GATE REJECT → 生产线不动"
+  ]
+}

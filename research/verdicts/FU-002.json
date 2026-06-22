@@ -1,0 +1,119 @@
+{
+  "task": "FU-002",
+  "status": "built",
+  "conclusion": "成长因子 (growth_or/growth_np/growth_composite, winsor+横截面z+行业中性) + 控制集 (动量mom_5/20/60 + size ln_mv + value inv_pe/pb + 其他基本面 roe/margin) 落盘 268,525 行 × 54 月度网格; growth_composite 覆盖 98.9%; growth_composite vs size 相关 +0.121 / vs value(inv_pe) -0.069 / vs mom_20 +0.030 (逐日横截面 Spearman 均值; FU-003 据此残差化消融)。无 forward 字段 (label 在 FU-003 另接)。",
+  "artifact": "research\\features\\fundamental_factors.parquet",
+  "responsePlaybook_branch": "n/a (构建任务, 无分叉; 相关性结构供 FU-003 R12++ 消融)",
+  "metrics": {
+    "rows": 268525,
+    "n_stocks": 5435,
+    "n_rebalance_dates": 54,
+    "date_range": [
+      "20220128",
+      "20260603"
+    ],
+    "growth_factors": [
+      "growth_or",
+      "growth_np",
+      "growth_composite"
+    ],
+    "growth_raw": [
+      "or_yoy",
+      "netprofit_yoy"
+    ],
+    "controls": [
+      "mom_5",
+      "mom_20",
+      "mom_60",
+      "ln_total_mv",
+      "inv_pe",
+      "inv_pb",
+      "roe",
+      "margin"
+    ],
+    "control_groups": {
+      "momentum": [
+        "mom_5",
+        "mom_20",
+        "mom_60"
+      ],
+      "size": [
+        "ln_total_mv"
+      ],
+      "value": [
+        "inv_pe",
+        "inv_pb"
+      ],
+      "other_fundamental": [
+        "roe",
+        "margin"
+      ]
+    },
+    "factor_construction": "per-date winsorize(1/99) -> cross-sectional z -> industry-neutral (minus industry mean)",
+    "coverage_growth_composite": 0.9894,
+    "coverage_by_mv_bucket": {
+      "small": 0.9877,
+      "mid": 0.9881,
+      "large": 0.9923
+    },
+    "coverage_controls": {
+      "mom_5": 0.9991,
+      "mom_20": 0.9801,
+      "mom_60": 0.9403,
+      "ln_total_mv": 1.0,
+      "inv_pe": 0.8227,
+      "inv_pb": 0.9956,
+      "roe": 0.9963,
+      "margin": 0.9793
+    },
+    "n_no_industry_rows": 3814,
+    "corr_growth_vs_controls_xs_spearman": {
+      "growth_or": {
+        "mom_5": 0.0299,
+        "mom_20": 0.0244,
+        "mom_60": 0.0471,
+        "ln_total_mv": 0.113,
+        "inv_pe": -0.0637,
+        "inv_pb": -0.1371,
+        "roe": 0.2732,
+        "margin": 0.0737,
+        "growth_np": 0.4293,
+        "growth_composite": 0.8692
+      },
+      "growth_np": {
+        "mom_5": 0.0345,
+        "mom_20": 0.03,
+        "mom_60": 0.0675,
+        "ln_total_mv": 0.1,
+        "inv_pe": -0.043,
+        "inv_pb": -0.1028,
+        "roe": 0.3303,
+        "margin": 0.1136,
+        "growth_or": 0.4293,
+        "growth_composite": 0.7538
+      },
+      "growth_composite": {
+        "mom_5": 0.0362,
+        "mom_20": 0.03,
+        "mom_60": 0.0624,
+        "ln_total_mv": 0.1215,
+        "inv_pe": -0.0694,
+        "inv_pb": -0.1373,
+        "roe": 0.352,
+        "margin": 0.0993,
+        "growth_or": 0.8692,
+        "growth_np": 0.7538
+      }
+    },
+    "regime_coverage": 0.7947,
+    "leakage_free": true,
+    "no_forward_fields": true
+  },
+  "guardrails": [
+    "SIGN-R04 PIT 因果 + 无 forward 字段",
+    "SIGN-R06 ST 继承 FU-001 源头排除",
+    "SIGN-R08 动量面板 checkpoint",
+    "SIGN-R11 regime 已 merge 供 FU-003 分层",
+    "SIGN-R12++ 控制集=动量+size+value+其他基本面"
+  ]
+}

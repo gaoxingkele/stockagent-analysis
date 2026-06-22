@@ -1,0 +1,36 @@
+{
+  "id": "DLV-001",
+  "title": "A2 TreeSHAP 可解释层 (逐只票加性归因)",
+  "status": "built",
+  "conclusion": "TreeSHAP 解释层就绪: 用 LightGBM 内置 pred_contrib (无 shap 库) 对 PIT-clean r20 202604 全月 311 只 picks 算逐只票加性归因, 加性自检通过 (max|Σcontrib+base-pred|=5.3e-14<1e-4, base_value=+2.4171)。全期 top3 驱动因子 (|mean SHAP|): cyb_rel_strength(2.802), industry_id(1.413), mkt_ret_20d(0.916)。每 pick 输出 top5 正/负贡献因子表 → 可向 paper-trade/出资人解释'为什么打高分'。纯解释层, 不改选股 (R05 生产冻结)。",
+  "metrics": {
+    "demo_month": "202604",
+    "n_picks_explained": 311,
+    "n_rebalance_days": 21,
+    "n_features": 246,
+    "base_value": 2.4171,
+    "additivity_max_err": 5.3290705182007514e-14,
+    "top3_drivers": [
+      {
+        "feature": "cyb_rel_strength",
+        "mean_abs_shap": 2.802341339373928
+      },
+      {
+        "feature": "industry_id",
+        "mean_abs_shap": 1.4129676333832095
+      },
+      {
+        "feature": "mkt_ret_20d",
+        "mean_abs_shap": 0.9156999985427632
+      }
+    ],
+    "latest_day": "20260430"
+  },
+  "artifacts": {
+    "script": "research/backtest/treeshap_explain.py",
+    "model": "research/cache/dep001/r20_models/202604/classifier.txt",
+    "contribs_csv": "output/treeshap_dep001_202604_contribs.csv",
+    "demo_md": "output/treeshap_dep001_202604_demo.md"
+  },
+  "discipline": "R05 生产只读 (仅 load dep001 缓存模型); R06 ST 源头排除; R04 大缓存 gitignored; 解释层非 alpha (R03 中间指标≠ship 不适用, 无落地宣称)。"
+}

@@ -1,0 +1,70 @@
+{
+  "id": "FIN-003",
+  "status": "REJECT",
+  "conclusion": "FIN-003 triple-barrier V12.32 挑战者 (双屏障 +15%/-8% + 40d backstop, 参数预注册冻结 R01) = WFE-001 embargo r20 walk-forward 的独立挑战者, 唯一改动 = r20 回归 label 换三屏障 label (embargo 收紧到 P_start-41交易日, 因屏障 horizon 40d), TB-score 替代 r20 作池 filter, 池内仍按 ratio_s5 排序, 过同一引擎 (close-based 成本 0.10%/边 + 双轨 + 行业cap + 20d 再平衡)。对齐 407 日受控对照 (vs WFE-001 基线 1.31, 共模成本/集中相消): **TB 净Sharpe +0.72 vs 基线 +1.31 → ΔSharpe -0.59**; maxDD TB -18.7% vs 基线 -15.7%。① block bootstrap ΔSharpe 95% CI=[-1.36,+0.28] P(Δ>0)=10% (不含0? False); ② 剔最利TB单月 202506 后 ΔSharpe -0.85 (TB仍优? False); ③ regime: 动量 Δ-2.11pp / 反转 Δ-1.26pp (不伤? False)。TB-score 对 r20_fresh 截面 IC≈+0.1260 (描述性)。gate_tb 五条件 {'net_sharpe>baseline': False, 'maxDD_not_up': False, 'bootstrap_CI_excludes_0': False, 'single_month_outlier_robust': False, 'regime_not_hurt(mom_up+rev_not_hurt)': False} → **status=REJECT**。triple-barrier 在选股 label 层 <=1.31 基线 或 伤 maxDD/regime → 用户 'triple-barrier' 直觉在**选股层**不兑现 (出场层 WFE-002 也已否止盈); 均值回归选股已近最优, 文档化 (第 20 个被反过拟合脚手架诚实判的假设)。生产线 V12.31 冻结不动。",
+  "metrics": {
+    "sharpe": 0.715,
+    "delta_sharpe_vs_baseline": -0.593,
+    "baseline_sharpe": 1.308,
+    "tb_max_drawdown": -0.1872,
+    "base_max_drawdown": -0.1569,
+    "worst_month": -14.221,
+    "bootstrap_delta_sharpe_ci95": [
+      -1.359,
+      0.284
+    ],
+    "bootstrap_p_delta_gt_0": 0.098,
+    "ci_excludes_0": false,
+    "single_month_outlier_dropped": "202506",
+    "delta_sharpe_ex_outlier": -0.845,
+    "outlier_robust": false,
+    "tb_ann_return": 0.1739,
+    "tb_score_ic_vs_r20fresh": 0.126,
+    "playbook": "REJECT"
+  },
+  "by_regime": {
+    "momentum": {
+      "n_months": 9,
+      "tb_monthly_ret_pct": 0.812,
+      "base_monthly_ret_pct": 2.918,
+      "delta_pp": -2.106
+    },
+    "reversal": {
+      "n_months": 10,
+      "tb_monthly_ret_pct": 1.251,
+      "base_monthly_ret_pct": 2.516,
+      "delta_pp": -1.264
+    },
+    "mixed": {
+      "n_months": 2,
+      "tb_monthly_ret_pct": 4.622,
+      "base_monthly_ret_pct": 0.707,
+      "delta_pp": 3.915
+    }
+  },
+  "gate_conditions": {
+    "net_sharpe>baseline": false,
+    "maxDD_not_up": false,
+    "bootstrap_CI_excludes_0": false,
+    "single_month_outlier_robust": false,
+    "regime_not_hurt(mom_up+rev_not_hurt)": false
+  },
+  "gate_failed": [
+    "net_sharpe>baseline",
+    "maxDD_not_up",
+    "bootstrap_CI_excludes_0",
+    "single_month_outlier_robust",
+    "regime_not_hurt(mom_up+rev_not_hurt)"
+  ],
+  "artifacts": [
+    "research/backtest/fin003_gen_picks.py",
+    "research/backtest/run_fin003.py",
+    "research/cache/fin003/picks_oos_daily.parquet",
+    "research/cache/fin003/tb_label.parquet",
+    "research/cache/fin003/r20_models/",
+    "research/cache/fin003/tb_oos_diagnostics.csv",
+    "research/cache/fin003/fin003_book_oos.parquet",
+    "research/cache/fin003/fin003_results.json"
+  ],
+  "note": "triple-barrier 是独立 V12.32 挑战者 (非 V12.31 基线补丁); 双屏障+15%/-8%/40d backstop 参数预注册冻结不搜 (R01); embargo 41交易日 (屏障 horizon 40d, label 可知; R04); TB-score 替代 r20 作池filter, 池内仍 ratio_s5 排序; 同引擎/成本/双轨/cap/20d再平衡 apples-to-apples vs WFE-001 基线1.31 (FIN-001 口径); ΔSharpe block bootstrap CI + 单月outlier + 分regime (R11) 共判 gate_tb; ST 源头排除 (R06); 描述性受控对照=合法完成 (R02); 中间IC≠ship (R03); 生产线 V12.31 只读冻结 (R05); 大缓存 gitignored (R04)。吃进 codex 第三次 review③ (triple-barrier 独立分支全验证)。"
+}

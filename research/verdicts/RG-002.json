@@ -1,0 +1,77 @@
+{
+  "id": "RG-002",
+  "status": "hypothesis_rejected",
+  "conclusion": "hypothesis_rejected (反向): 干净因果尸检不仅不支持、反而推翻假设 — 条件于 RG-001 因果动量 regime, v3c(低动量/回调档) 前向 α=+0.378pp 显著为**正** (t=4.056, p=5e-05), 反转月 α=+0.250pp。关键机理: 因果动量 regime 平均**之后跟随均值回归** (前向 D9-D0=-1.77pp<0), 即回调买入在因果动量态反被奖励。审计'动量月血洗'未能泛化: 全样本只有 2 个极端动量月 (如 202303 D9-D0+8.2/202602+3.3) 真血洗, 是尾部 episode 非系统 regime 效应。叠加层核心前提(动量态抑制回调)被数据否定, 据事前注册 precondition → RG-003/004 置 skip, RG-005 skip。 诚实限制: 实盘血洗窗 0508-0603 在前向尸检窗外(数据止 20260506)测不到; 2026 动量日已转弱负(均 -0.094pp), 6 月数据到位后值得复检。(Part A t005 walk-forward 动量月 α=+3.88pp 亦未见血洗, 但绝对 α 含共模 r20 lookahead 仅旁证。)",
+  "metrics": {
+    "momentum_v3c_proxy_alpha_pp": 0.3782,
+    "momentum_v3c_proxy_alpha_p": 5e-05,
+    "reversal_v3c_proxy_alpha_pp": 0.25,
+    "momentum_fwd_decile_spread_pp": -1.7739,
+    "reversal_fwd_decile_spread_pp": -1.1713,
+    "hypothesis_conditions": {
+      "momentum_v3c_alpha_<0_sig(p<.05)": false,
+      "reversal_v3c_alpha_>0": true,
+      "momentum_alpha_<_reversal_alpha": false
+    }
+  },
+  "part_a_by_regime": {
+    "mixed": {
+      "n_months": 2,
+      "alpha_mean_pp": 1.259,
+      "alpha_median_pp": 1.259,
+      "pos_alpha_ratio": 1.0,
+      "sharpe_mean": 1.683,
+      "worst_month_pp": 1.132
+    },
+    "momentum": {
+      "n_months": 7,
+      "alpha_mean_pp": 3.877,
+      "alpha_median_pp": 3.183,
+      "pos_alpha_ratio": 0.857,
+      "sharpe_mean": 4.257,
+      "worst_month_pp": -0.202
+    },
+    "reversal": {
+      "n_months": 10,
+      "alpha_mean_pp": 4.168,
+      "alpha_median_pp": 3.218,
+      "pos_alpha_ratio": 1.0,
+      "sharpe_mean": 4.283,
+      "worst_month_pp": 1.556
+    }
+  },
+  "part_b_by_regime": {
+    "mixed": {
+      "n_days": 132,
+      "v3c_proxy_alpha_mean_pp": 0.3602,
+      "v3c_proxy_alpha_t": 1.826,
+      "v3c_proxy_alpha_p": 0.06792,
+      "v3c_proxy_alpha_pos_day_ratio": 0.5,
+      "mom_proxy_alpha_mean_pp": -0.3091,
+      "fwd_decile_spread_mean_pp": -0.7511
+    },
+    "momentum": {
+      "n_days": 222,
+      "v3c_proxy_alpha_mean_pp": 0.3782,
+      "v3c_proxy_alpha_t": 4.056,
+      "v3c_proxy_alpha_p": 5e-05,
+      "v3c_proxy_alpha_pos_day_ratio": 0.622,
+      "mom_proxy_alpha_mean_pp": -0.5583,
+      "fwd_decile_spread_mean_pp": -1.7739
+    },
+    "reversal": {
+      "n_days": 451,
+      "v3c_proxy_alpha_mean_pp": 0.25,
+      "v3c_proxy_alpha_t": 2.895,
+      "v3c_proxy_alpha_p": 0.00379,
+      "v3c_proxy_alpha_pos_day_ratio": 0.53,
+      "mom_proxy_alpha_mean_pp": -0.312,
+      "fwd_decile_spread_mean_pp": -1.1713
+    }
+  },
+  "artifacts": [
+    "research/cache/rg002_daily_decile.parquet",
+    "research/cache/rg002_results.json"
+  ],
+  "note": "主证据=Part B 纯因果动量分位尸检(regime causal, fwd20 仅测量非特征, 无 lookahead); Part A t005 绝对 α 被共模 r20 池 lookahead 抬高仅旁证 (SIGN-R03)。ST 源头排除。"
+}

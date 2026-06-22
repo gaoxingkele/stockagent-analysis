@@ -1,0 +1,10 @@
+{
+  "task": "OA-000",
+  "status": "built",
+  "verdict": "PROCEED",
+  "conclusion": "共享正交筛查工具 research/oa_screen.py 建成并自检通过 (合成: 纯噪声→C_塌缩, 注入正交真信号→A_显著正交, 动量reskin→C). 所有 OA-* 因子族复用其 Phase-1 廉价闸 (扣 FULL_CTRL 残差 IC + 逐步消融 + 分regime + A/B/C/D 分类 + manifest 记 n_trials). 控制面板/标签零额外IO复用 fundamental_factors(54月度) + rt004_r20_label(因果). codex 0618 对抗审计纳入: gate t 改 Newey-West HAC(lag=2) 校正重叠r20 label自相关; DSR n_trials 含 researcher DoF乘子3; selection-on-selection caveat 写入冻结gate。",
+  "artifact": "research/oa_screen.py",
+  "codex_review": "research/cache/codex_oa_review_out.txt — 4点对抗批评全部已处置 (NW-t / DoF多重检验 / 优先级排序report_rc>commodity>news>vol>vp / selection-on-selection caveat)",
+  "codex_prior_ranking": ["OA-RC analyst-revision (最高真正交prior)", "OA-COM commodity-supply-chain", "OA-NEWS (高自由度易过拟合)", "OA-VOL (多为伪装价格行为)", "OA-VP (最低, 最接近已否21价量假设)"],
+  "guardrails": ["SIGN-R01 gate冻结(setup阶段纳入codex后冻结)", "SIGN-R03 IC仅go/no-go", "SIGN-R04 backward自查", "SIGN-R11 分regime", "SIGN-R12++ 扣全控制残差", "SIGN-R15 多重检验含DoF", "SIGN-R16 廉价闸先杀+NW-t+caveat", "SIGN-R05 生产线冻结未动"]
+}

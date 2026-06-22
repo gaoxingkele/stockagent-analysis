@@ -1,0 +1,41 @@
+{
+  "task": "MH-001",
+  "status": "built",
+  "conclusion": "全历史梅花特征落盘 5,302,085 行 × 20 特征 (20220104~20260603); 确定性=True, 零泄漏(仅决策时刻已知量), 体用5类不退化, 组合卦 base 64/64 覆盖, 静态卦 base 57/64.",
+  "artifact": "research\\features\\meihua_features.parquet",
+  "metrics": {
+    "rows": 5302085,
+    "n_stocks": 5435,
+    "n_dates": 1067,
+    "date_range": [
+      "20220104",
+      "20260603"
+    ],
+    "n_feature_cols": 20,
+    "deterministic": true,
+    "leakage_free": true,
+    "mh_relation_dist": {
+      "0": 0.2186,
+      "1": 0.187,
+      "2": 0.1876,
+      "3": 0.2034,
+      "4": 0.2035
+    },
+    "mh_relation_classes": 5,
+    "mh_relation_nondegenerate": true,
+    "mh_base_gua_coverage": "64/64",
+    "mhs_base_gua_coverage": "57/64",
+    "mh_moving_dist": {
+      "1": 884907,
+      "2": 884429,
+      "3": 883410,
+      "4": 883282,
+      "5": 882895,
+      "6": 883162
+    }
+  },
+  "guardrails": [
+    "SIGN-R04 泄漏自查通过",
+    "SIGN-R06 ST 源头排除"
+  ]
+}

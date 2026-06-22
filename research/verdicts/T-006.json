@@ -1,0 +1,8 @@
+{
+  "id": "T-006",
+  "status": "skipped",
+  "conclusion": "skipped: T-005 walk-forward verdict=REJECT (动态窗口 ratio_dyn Δα=-0.357pp/月, 未过事前注册 gate), 落地条件门未解除 → 不接入 v12_scoring, 生产线 V12.31 全程冻结未触碰。条件任务合法完成。",
+  "depends_on": "T-005",
+  "gate_status": "REJECT",
+  "note": "仅当 T-005 verdict=PASS 才落地 (opt-in 默认关); REJECT 则保持 skip。SIGN-R02/R05。"
+}

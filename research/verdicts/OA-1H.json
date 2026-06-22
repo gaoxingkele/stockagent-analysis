@@ -1,0 +1,46 @@
+{
+  "id": "OA-1H",
+  "status": "built",
+  "window": [
+    "20240131",
+    "20260430"
+  ],
+  "n_months": 28,
+  "comparison": {
+    "1h": {
+      "rv_1h_20": {
+        "orth_ic": -0.0441,
+        "orth_t": -3.47,
+        "status": "A_显著正交"
+      },
+      "rv_1h_60": {
+        "orth_ic": -0.0549,
+        "orth_t": -3.56,
+        "status": "A_显著正交"
+      }
+    },
+    "daily": {
+      "ivol_60": {
+        "orth_ic": -0.065,
+        "orth_t": -4.03,
+        "status": "A_显著正交"
+      },
+      "total_vol_60": {
+        "orth_ic": -0.0473,
+        "orth_t": -2.35,
+        "status": "B_边缘"
+      }
+    },
+    "spearman_rv1h60_vs_ivol60": 0.8688,
+    "stronger": "日线"
+  },
+  "conclusion": "1H 日内已实现波动 (rv_1h_60 orth IC=-0.0549) vs 日线 ivol_60 (-0.0650) 在同 28 月 1H 覆盖窗对比: 日线更强 (差<0.005=相当)。Spearman 0.869 高(同序=换皮, 1H无新增信息)。低波动信号在两尺度一致 (符号同负)。SIGN-R03: 仅IC对比, 落地仍以 GATE walk-forward 为准。",
+  "guardrails": [
+    "SIGN-R04 backward",
+    "SIGN-R06 ST排除",
+    "SIGN-R11 分regime(继承screen)",
+    "SIGN-R12++ 扣全控制残差",
+    "SIGN-R16 廉价对比非落地",
+    "SIGN-R05 生产线不碰"
+  ]
+}

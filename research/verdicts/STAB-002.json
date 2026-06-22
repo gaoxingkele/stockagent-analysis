@@ -1,0 +1,60 @@
+{
+  "task": "STAB-002",
+  "status": "skipped",
+  "playbook_hit": "STAB-001 无改进变体 → 深验前提不满足, documented skip (R02)",
+  "conclusion": "STAB-002 是预注册的'最佳低换手变体深验'(换手-成本敏感 0/0.2/0.6/1.0% 双边同 QuantML + 稳定性扰动重排率 vs baseline + 分 regime 净Sharpe), 但 acceptanceCriteria 与 responsePlaybook 明确规定**仅 STAB-001 找到改进变体才跑**, 否则 skip 并文档化。STAB-001 已裁决 **无差异** (status=无差异, playbook=无差异): 4 变体 (baseline/V_stick/V_N30/V_combo) 中**无一过 gate_stab** —— baseline 净Sharpe +0.843 (== DEP-001 0.843 忠实复刻) 扰动Jaccard 0.327 (== DIAG-001 0.327 复刻扰动机制); V_stick 换手仅 1.54→1.50 (-2%, 远不及 gate 的 -20%) Sharpe 不变 (ΔCI[-0.093,+0.131] 含0); V_N30 换手 -0% 且 Sharpe 0.84→0.77 (ΔCI[-0.365,+0.252] 含0); V_combo Sharpe 材料性降 0.57 (ΔCI[-0.515,-0.019] 整段<0)。**没有任何变体同时满足换手↓≥20% + Sharpe 不降 + maxDD 不升 + 稳定代理↑ → best_variant=null, winners=[]**。机制根因 = 换手是**选股池结构性**而非边际: 连续再平衡日持仓 Jaccard ≈0.02 (每 20d 期 ~98% 换名), V7c 池 (r20 top5% × ratio_s5 排序) 本身每期近乎全量重排, 没有可留任的'粘性名', 滞回带罕触发 → 粘性/N30 这类**构建层杠杆触不到根因**, 真换手须改选股层 (horizon/分数平滑 = 改选股逻辑, 超 A1 范围)。**故 STAB-002 不运行** (R01: 不为了凑深验数字而在不存在的'最佳变体'上硬跑成本敏感/regime 网格; R02: documented skip = 合法完成; R03: STAB-001 的换手/Sharpe 是描述性中间指标, 不据此 ship 也不下探深验)。**纪律意义**: A1 Track 在 STAB-001 处即诚实落定'构建层无法降换手 (无差异)', gate 链在此终止, 不下探到一个空集合上的成本-regime p-hack。生产线 V12.31 全程只读冻结 (R05)。",
+  "metrics": {
+    "precondition": {
+      "requires": "STAB-001 找到改进变体 (best_variant != null)",
+      "stab001_status": "无差异",
+      "stab001_best_variant": null,
+      "stab001_winners": [],
+      "satisfied": false
+    },
+    "stab001_no_winner_evidence": {
+      "gate_stab": "月均换手↓>=20% AND 净Sharpe 配对bootstrap ΔvsBaseline CI 不材料性<0 AND maxDD 不升 AND 稳定代理↑",
+      "baseline_net_sharpe": 0.843,
+      "baseline_avg_monthly_turnover": 1.538,
+      "baseline_perturb_jaccard": 0.3265,
+      "baseline_consec_jaccard": 0.0176,
+      "variants_turnover_drop_frac": {
+        "V_stick": 0.025,
+        "V_N30": 0.004,
+        "V_combo": 0.02
+      },
+      "variants_net_sharpe": {
+        "V_stick": 0.842,
+        "V_N30": 0.773,
+        "V_combo": 0.575
+      },
+      "variants_gate_PASS": {
+        "V_stick": false,
+        "V_N30": false,
+        "V_combo": false
+      },
+      "max_turnover_drop_observed": 0.025,
+      "gate_required_turnover_drop": 0.20,
+      "mechanism": "连续再平衡日持仓 Jaccard ~0.02 = 每 20d 期 ~98% 换名; V7c 池每期近乎全量重排, 无可留任粘性名 → 换手是选股池结构性非构建边际"
+    },
+    "frozen_deepval_design_not_run": {
+      "cost_sensitivity_bps_per_side": [0, 0.2, 0.6, 1.0],
+      "stability_metric": "扰动重排率 vs baseline (接 DIAG-001)",
+      "regime_split": "动量/反转/混合分 regime 净Sharpe (R11)",
+      "baseline": "PIT-clean V12.31 (DEP-001, 净Sharpe +0.84) / WFE-001 真实基线 (净Sharpe 1.31)",
+      "not_evaluated_reason": "无最佳变体可深验 (STAB-001 best_variant=null)"
+    }
+  },
+  "caveats": [
+    "本裁决不产生任何成本敏感/稳定性/regime 深验数字: 前提 (STAB-001 找到改进变体) 不满足, 按 acceptanceCriteria 'skip 并文档化', 非'跑了深验但失败'。",
+    "成本档/稳定性/regime 网格均为预注册冻结配置 (R01), 此处仅记录而不在空集合上实例化, 防止反向过拟合到深验口径。",
+    "若未来选股层改进 (horizon/分数平滑, 超 A1 范围) 产出真正降换手的变体, 才按此冻结设计重启 STAB-002, 网格阈值不动。",
+    "STAB-001 终判'构建层无法降换手'是 A1 Track 的真实负发现: 稳定性/换手须改选股层, 非组合构建可修。"
+  ],
+  "artifacts": [
+    "research/verdicts/STAB-001.json (无差异裁决=无改进变体, 本 skip 的依据)",
+    "research/cache/stab001/stab001_results.json (4 变体换手/Sharpe/maxDD/稳定/ΔCI 证据)",
+    "research/backtest/run_stab001.py",
+    "research/backtest/stab001_gen_pool.py"
+  ],
+  "discipline": "R01 深验网格 (成本档/稳定/regime) 冻结未动, 不在不存在的最佳变体上硬跑凑数; R02 documented skip = 合法完成 (前提不满足合法); R03 STAB-001 换手/Sharpe 是描述性中间指标, 不据此 ship 也不下探深验; R05 生产线 V12.31 只读冻结; R11 STAB-001 已按 regime 分层 (regime_table), 深验 regime 拆分前提不成立故不评估。"
+}

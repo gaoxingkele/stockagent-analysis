@@ -1,0 +1,902 @@
+{
+  "id": "CB-003",
+  "status": "no_residual",
+  "conclusion": "蓄势信号 Phase-1 (月末 rebalance 54月): 最强 s_bw_squeeze 扣[动量+市场+现有形态因子(MA斜率/ADX/布林/past_r5/RSI)]残差后 全期 IC=-0.0273 |t|=2.53 (n=49月) 未过显著线 (需 |IC|>=0.02 & |t|>=3.0); s_coil: raw IC=+0.0301 → 扣动量 +0.0163 → 扣形态因子 -0.0194 → 全扣 -0.0107。→ no_residual: 蓄势信号(MA20走平+收敛+缩量)对 r20 的预测力被现有 MA斜率/ADX/布林/past_r5 标准 TA 因子吸收 (≈换皮), 无独立残差 → 廉价 REJECT, 跳过 CB-004 walk-forward (SIGN-R12++ 消融闸)。注: 与 CB-002 盲点真实性不矛盾 — 盲点='系统漏掉这族启动', 本任务='蓄势特征是否提供超越现有因子的增量预测', 二者独立。",
+  "alignment": "月末 rebalance (每月最后交易日全市场横截面, r20 标签近非重叠; vs SEAT-002 事件对齐)",
+  "screen_thresholds": {
+    "ic_sig": 0.02,
+    "t_sig": 3.0,
+    "ic_collapse": 0.01,
+    "min_months": 36,
+    "applies_to": "最强蓄势信号 orth_full(扣动量+市场+现有形态因子) 全期残差 IC"
+  },
+  "label": "fr20 = close[t+20]/close[t]-1 (前向因果 outcome, 仅 cache 不进 features)",
+  "signals": {
+    "tested": [
+      "s_coil",
+      "s_consol",
+      "s_flat",
+      "s_bw_squeeze",
+      "s_amp_squeeze",
+      "s_vol_shrink"
+    ],
+    "primary": "s_coil",
+    "def": "蓄势信号方向已对齐为'越大越蓄势'(s_flat/s_*squeeze/s_vol_shrink=负号), s_coil=四分量月末截面 z 之和, s_consol=CB-001 候选布尔"
+  },
+  "controls": {
+    "mom": [
+      "mom_5",
+      "mom_20",
+      "mom_60"
+    ],
+    "market": [
+      "beta"
+    ],
+    "pattern": [
+      "cs_ma20_slope",
+      "adx_14",
+      "rsi_14",
+      "cs_boll_bw",
+      "cs_past_r5"
+    ],
+    "pattern_note": "现有标准 TA: cs_ma20_slope(MA斜率有符号), adx_14, rsi_14, cs_boll_bw(布林原始带宽), cs_past_r5; 全 backward ≤t",
+    "market_def": "per-stock trailing 60d beta vs 等权市场"
+  },
+  "power_ok_ge36months": true,
+  "best_signal": "s_bw_squeeze",
+  "metrics": {
+    "n_months": 49,
+    "best_orth_full_ic": -0.0273,
+    "best_orth_full_t": -2.53,
+    "by_signal": {
+      "s_coil": {
+        "raw": {
+          "ic": 0.0301,
+          "t": 2.26,
+          "n_months": 52,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.062,
+              "t": 2.02,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0396,
+              "t": 2.03,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0296,
+              "t": 1.16,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0058,
+              "t": 0.24,
+              "n": 12
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": 0.0163,
+          "t": 1.38,
+          "n_months": 49,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.042,
+              "t": 1.61,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0053,
+              "t": 0.4,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0308,
+              "t": 1.34,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0217,
+              "t": -1.36,
+              "n": 9
+            }
+          }
+        },
+        "minus_market": {
+          "ic": 0.0379,
+          "t": 3.19,
+          "n_months": 50,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0626,
+              "t": 2.05,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.045,
+              "t": 2.02,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0421,
+              "t": 2.1,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0056,
+              "t": 0.23,
+              "n": 10
+            }
+          }
+        },
+        "minus_pattern": {
+          "ic": -0.0194,
+          "t": -1.61,
+          "n_months": 51,
+          "by_regime": {
+            "mixed": {
+              "ic": -0.0525,
+              "t": -1.34,
+              "n": 6
+            },
+            "momentum": {
+              "ic": -0.0338,
+              "t": -1.08,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.001,
+              "t": -0.06,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0223,
+              "t": -1.07,
+              "n": 11
+            }
+          }
+        },
+        "orth_full": {
+          "ic": -0.0107,
+          "t": -1.27,
+          "n_months": 49,
+          "by_regime": {
+            "mixed": {
+              "ic": -0.0392,
+              "t": -1.39,
+              "n": 6
+            },
+            "momentum": {
+              "ic": -0.0141,
+              "t": -0.95,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0038,
+              "t": 0.26,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0228,
+              "t": -2.23,
+              "n": 9
+            }
+          }
+        }
+      },
+      "s_consol": {
+        "raw": {
+          "ic": 0.0091,
+          "t": 0.99,
+          "n_months": 50,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0062,
+              "t": 0.25,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0251,
+              "t": 1.16,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0139,
+              "t": 0.97,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0191,
+              "t": -1.27,
+              "n": 10
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": 0.0012,
+          "t": 0.09,
+          "n_months": 49,
+          "by_regime": {
+            "mixed": {
+              "ic": -0.0096,
+              "t": -0.25,
+              "n": 6
+            },
+            "momentum": {
+              "ic": -0.014,
+              "t": -0.61,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0059,
+              "t": 0.36,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.017,
+              "t": 0.37,
+              "n": 9
+            }
+          }
+        },
+        "minus_market": {
+          "ic": 0.0363,
+          "t": 1.72,
+          "n_months": 50,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0056,
+              "t": 0.11,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0428,
+              "t": 0.87,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0486,
+              "t": 1.89,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0199,
+              "t": 0.31,
+              "n": 10
+            }
+          }
+        },
+        "minus_pattern": {
+          "ic": 0.0035,
+          "t": 0.36,
+          "n_months": 50,
+          "by_regime": {
+            "mixed": {
+              "ic": -0.042,
+              "t": -2.52,
+              "n": 6
+            },
+            "momentum": {
+              "ic": -0.0113,
+              "t": -0.85,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0079,
+              "t": 0.55,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0388,
+              "t": 1.3,
+              "n": 10
+            }
+          }
+        },
+        "orth_full": {
+          "ic": 0.0078,
+          "t": 0.75,
+          "n_months": 49,
+          "by_regime": {
+            "mixed": {
+              "ic": -0.0302,
+              "t": -2.17,
+              "n": 6
+            },
+            "momentum": {
+              "ic": -0.0082,
+              "t": -0.55,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0102,
+              "t": 0.7,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0484,
+              "t": 1.34,
+              "n": 9
+            }
+          }
+        }
+      },
+      "s_flat": {
+        "raw": {
+          "ic": 0.0174,
+          "t": 0.94,
+          "n_months": 51,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0887,
+              "t": 3.21,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0557,
+              "t": 1.45,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0138,
+              "t": 0.46,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.056,
+              "t": -1.57,
+              "n": 11
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": -0.0029,
+          "t": -0.19,
+          "n_months": 49,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0759,
+              "t": 3.85,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0112,
+              "t": 0.41,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0037,
+              "t": 0.14,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0906,
+              "t": -3.08,
+              "n": 9
+            }
+          }
+        },
+        "minus_market": {
+          "ic": 0.0227,
+          "t": 1.55,
+          "n_months": 50,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0884,
+              "t": 3.48,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0617,
+              "t": 1.83,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0133,
+              "t": 0.62,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0431,
+              "t": -1.78,
+              "n": 10
+            }
+          }
+        },
+        "minus_pattern": {
+          "ic": -0.0193,
+          "t": -2.09,
+          "n_months": 51,
+          "by_regime": {
+            "mixed": {
+              "ic": -0.0027,
+              "t": -0.11,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0177,
+              "t": 0.86,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0233,
+              "t": -1.78,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0608,
+              "t": -3.93,
+              "n": 11
+            }
+          }
+        },
+        "orth_full": {
+          "ic": -0.0204,
+          "t": -2.57,
+          "n_months": 49,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0027,
+              "t": 0.12,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0044,
+              "t": 0.26,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0226,
+              "t": -2.14,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0637,
+              "t": -4.16,
+              "n": 9
+            }
+          }
+        }
+      },
+      "s_bw_squeeze": {
+        "raw": {
+          "ic": 0.0158,
+          "t": 1.2,
+          "n_months": 50,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0411,
+              "t": 1.92,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0015,
+              "t": 0.06,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0189,
+              "t": 0.78,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0109,
+              "t": 0.42,
+              "n": 10
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": 0.0109,
+          "t": 0.92,
+          "n_months": 49,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0167,
+              "t": 0.78,
+              "n": 6
+            },
+            "momentum": {
+              "ic": -0.0106,
+              "t": -0.56,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0225,
+              "t": 0.99,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0074,
+              "t": 0.42,
+              "n": 9
+            }
+          }
+        },
+        "minus_market": {
+          "ic": 0.0247,
+          "t": 2.24,
+          "n_months": 50,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0434,
+              "t": 2.27,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.009,
+              "t": 0.46,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0319,
+              "t": 1.58,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0164,
+              "t": 0.77,
+              "n": 10
+            }
+          }
+        },
+        "minus_pattern": {
+          "ic": -0.0365,
+          "t": -2.16,
+          "n_months": 50,
+          "by_regime": {
+            "mixed": {
+              "ic": -0.078,
+              "t": -1.65,
+              "n": 6
+            },
+            "momentum": {
+              "ic": -0.0606,
+              "t": -1.41,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0238,
+              "t": -1.04,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0105,
+              "t": -0.29,
+              "n": 10
+            }
+          }
+        },
+        "orth_full": {
+          "ic": -0.0273,
+          "t": -2.53,
+          "n_months": 49,
+          "by_regime": {
+            "mixed": {
+              "ic": -0.0695,
+              "t": -1.86,
+              "n": 6
+            },
+            "momentum": {
+              "ic": -0.0342,
+              "t": -1.65,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0191,
+              "t": -1.11,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0099,
+              "t": -0.57,
+              "n": 9
+            }
+          }
+        }
+      },
+      "s_amp_squeeze": {
+        "raw": {
+          "ic": 0.0247,
+          "t": 1.88,
+          "n_months": 50,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0549,
+              "t": 2.1,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0176,
+              "t": 0.64,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0244,
+              "t": 1.1,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0157,
+              "t": 0.57,
+              "n": 10
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": 0.017,
+          "t": 1.51,
+          "n_months": 49,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0324,
+              "t": 1.41,
+              "n": 6
+            },
+            "momentum": {
+              "ic": -0.0047,
+              "t": -0.21,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.027,
+              "t": 1.38,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0111,
+              "t": 0.55,
+              "n": 9
+            }
+          }
+        },
+        "minus_market": {
+          "ic": 0.0317,
+          "t": 2.89,
+          "n_months": 50,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0579,
+              "t": 2.39,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0212,
+              "t": 0.92,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0363,
+              "t": 1.96,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0185,
+              "t": 0.87,
+              "n": 10
+            }
+          }
+        },
+        "minus_pattern": {
+          "ic": -0.0215,
+          "t": -1.47,
+          "n_months": 50,
+          "by_regime": {
+            "mixed": {
+              "ic": -0.0535,
+              "t": -1.11,
+              "n": 6
+            },
+            "momentum": {
+              "ic": -0.0446,
+              "t": -1.16,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0051,
+              "t": -0.29,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0108,
+              "t": -0.33,
+              "n": 10
+            }
+          }
+        },
+        "orth_full": {
+          "ic": -0.0123,
+          "t": -1.26,
+          "n_months": 49,
+          "by_regime": {
+            "mixed": {
+              "ic": -0.0401,
+              "t": -0.99,
+              "n": 6
+            },
+            "momentum": {
+              "ic": -0.0219,
+              "t": -1.06,
+              "n": 12
+            },
+            "reversal": {
+              "ic": -0.0008,
+              "t": -0.06,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0091,
+              "t": -0.57,
+              "n": 9
+            }
+          }
+        }
+      },
+      "s_vol_shrink": {
+        "raw": {
+          "ic": 0.0296,
+          "t": 3.08,
+          "n_months": 52,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0062,
+              "t": 0.24,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0565,
+              "t": 3.42,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0186,
+              "t": 1.1,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0347,
+              "t": 1.95,
+              "n": 12
+            }
+          }
+        },
+        "minus_mom": {
+          "ic": 0.0133,
+          "t": 1.42,
+          "n_months": 49,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.007,
+              "t": 0.24,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0314,
+              "t": 1.68,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0142,
+              "t": 0.95,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0086,
+              "t": -0.45,
+              "n": 9
+            }
+          }
+        },
+        "minus_market": {
+          "ic": 0.0327,
+          "t": 3.48,
+          "n_months": 50,
+          "by_regime": {
+            "mixed": {
+              "ic": 0.0095,
+              "t": 0.31,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0542,
+              "t": 2.84,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0308,
+              "t": 2.12,
+              "n": 22
+            },
+            "unknown": {
+              "ic": 0.0251,
+              "t": 1.31,
+              "n": 10
+            }
+          }
+        },
+        "minus_pattern": {
+          "ic": 0.0061,
+          "t": 0.84,
+          "n_months": 51,
+          "by_regime": {
+            "mixed": {
+              "ic": -0.0124,
+              "t": -0.76,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0065,
+              "t": 0.4,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0145,
+              "t": 1.29,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.001,
+              "t": -0.06,
+              "n": 11
+            }
+          }
+        },
+        "orth_full": {
+          "ic": 0.0132,
+          "t": 1.89,
+          "n_months": 49,
+          "by_regime": {
+            "mixed": {
+              "ic": -0.0028,
+              "t": -0.17,
+              "n": 6
+            },
+            "momentum": {
+              "ic": 0.0184,
+              "t": 2.04,
+              "n": 12
+            },
+            "reversal": {
+              "ic": 0.0243,
+              "t": 2.05,
+              "n": 22
+            },
+            "unknown": {
+              "ic": -0.0102,
+              "t": -0.59,
+              "n": 9
+            }
+          }
+        }
+      }
+    },
+    "primary_ablation": {
+      "signal": "s_coil",
+      "raw_ic": 0.0301,
+      "raw_t": 2.26,
+      "minus_mom_ic": 0.0163,
+      "minus_market_ic": 0.0379,
+      "minus_pattern_ic": -0.0194,
+      "orth_full_ic": -0.0107,
+      "orth_full_t": -1.27
+    }
+  },
+  "ablation_note": "逐步消融 (raw → 单扣动量 → 单扣市场 → 单扣现有形态因子 → 全扣) 定位蓄势信号来源: 若 raw 有 IC 但单扣 PATTERN(MA斜率/ADX/布林/past_r5/RSI) 即塌 = 蓄势信号本质是现有标准 TA 形态因子的非线性换皮, 非独立增量。横截面 rank-IC 天然差掉当日全市场常数项。",
+  "artifacts": [
+    "research\\cache\\cb003\\ic_table.parquet",
+    "research\\cache\\cb003\\controls_monthend.parquet"
+  ],
+  "guardrails": [
+    "SIGN-R01 阈值冻结未改",
+    "SIGN-R02 负结果=合法完成",
+    "SIGN-R03 IC 仅 go/no-go 非落地",
+    "SIGN-R04 fr20 仅 outcome 不进 features",
+    "SIGN-R06 ST 源头排除",
+    "SIGN-R08 控制面板 checkpoint",
+    "SIGN-R11 分 regime 评估",
+    "SIGN-R12++ 扣[动量+市场+现有形态因子]消融"
+  ],
+  "downstream": "no_residual → 蓄势信号≈现有形态因子换皮, 廉价 REJECT; CB-004 skip:true (playbook CB-003 分叉, SIGN-R03 中间指标不落地)。"
+}

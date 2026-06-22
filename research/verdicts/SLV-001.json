@@ -1,0 +1,72 @@
+{
+  "id": "SLV-001",
+  "status": "built",
+  "conclusion": "路由器建成并按冻结边界给 4,190,298 个 stock-day 分桶 (窗口 20230103~20260604, 整体启动率 0.1220)。三表关键数: 占天数 SQUAT 15.9% / BASE 1.9% / MOMENTUM 4.5% / NONE 77.7%; 桶内启动率 SQUAT 0.1515(lift 1.241) / BASE 0.0628(lift 0.515) / MOMENTUM 0.2063(lift 1.69) / NONE 0.1125。杠铃复现 (PL-001: 两端启动率高): SQUAT/MOMENTUM lift 均>1; 中间 BASE 横盘桶 lift 0.515 (占天数仅 1.9% 但桶内启动率 0.0628) = '独漏中间横盘'机会量化。分 regime 复核见 metrics。 描述统计非 ship, MOMENTUM 是否建由 SLV-003 分散性闸定 (SIGN-R03)。",
+  "metrics": {
+    "window": [
+      "20230103",
+      "20260604"
+    ],
+    "n_stock_days": 4190298,
+    "n_launches": 511388,
+    "overall_launch_rate": 0.12204,
+    "table_a_share_of_days": {
+      "SQUAT": 0.15885,
+      "BASE": 0.01895,
+      "MOMENTUM": 0.04503,
+      "NONE": 0.77653,
+      "NA": 0.00064
+    },
+    "table_b_share_of_launches": {
+      "SQUAT": 0.19718,
+      "BASE": 0.00975,
+      "MOMENTUM": 0.07612,
+      "NONE": 0.71603,
+      "NA": 0.00092
+    },
+    "table_c_launch_rate": {
+      "SQUAT": 0.15149,
+      "BASE": 0.06281,
+      "MOMENTUM": 0.2063,
+      "NONE": 0.11253,
+      "NA": 0.1749
+    },
+    "lift_vs_overall": {
+      "SQUAT": 1.241,
+      "BASE": 0.515,
+      "MOMENTUM": 1.69,
+      "NONE": 0.922,
+      "NA": 1.433
+    },
+    "barbell_confirmed": true,
+    "by_regime_launch_rate": {
+      "momentum": {
+        "SQUAT": 0.14381,
+        "BASE": 0.06134,
+        "MOMENTUM": 0.1981,
+        "NONE": 0.10487,
+        "NA": 0.13235
+      },
+      "reversal": {
+        "SQUAT": 0.14383,
+        "BASE": 0.04877,
+        "MOMENTUM": 0.19751,
+        "NONE": 0.10647,
+        "NA": 0.16897
+      },
+      "mixed": {
+        "SQUAT": 0.20152,
+        "BASE": 0.09181,
+        "MOMENTUM": 0.24697,
+        "NONE": 0.14575,
+        "NA": 0.277
+      }
+    }
+  },
+  "artifacts": [
+    "research/cache/slv001/router_panel.parquet",
+    "research/cache/slv001/factor_panel.parquet",
+    "research/cache/slv001_results.json"
+  ],
+  "note": "边界冻结逐字落实 (SIGN-R01); 全因果 ST 源头排除 (R04/R06); 大缓存写 cache 非 features; 分 regime (R11); 中间统计非 ship 决策 (R03)。"
+}

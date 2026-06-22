@@ -1,0 +1,51 @@
+{
+  "id": "FC-1",
+  "status": "PROCEED_FC2",
+  "survivors": [
+    "crowding_delta"
+  ],
+  "n_rebalance_months": 31,
+  "classifications": {
+    "crowding_level": {
+      "status": "C_塌缩",
+      "reason": "原始 IC=-0.0115 本就≈0/弱, 扣全控制 |IC|=0.0060 |t|=0.38 未达显著线 (需 |IC|>=0.02 & |t|>=3) → 信号不存在/窗口 artifact。廉价 REJECT。",
+      "orth_ic": -0.006,
+      "orth_t": -0.38,
+      "raw_ic": -0.0115,
+      "n_months": 31
+    },
+    "crowding_weight": {
+      "status": "C_塌缩",
+      "reason": "原始 IC=-0.0166 本就≈0/弱, 扣全控制 |IC|=0.0054 |t|=0.34 未达显著线 (需 |IC|>=0.02 & |t|>=3) → 信号不存在/窗口 artifact。廉价 REJECT。",
+      "orth_ic": -0.0054,
+      "orth_t": -0.34,
+      "raw_ic": -0.0166,
+      "n_months": 31
+    },
+    "crowding_delta": {
+      "status": "B_边缘",
+      "reason": "扣全控制 |IC|>=0.02 但 |t|∈[2,3), 低功率 → 进 walk-forward 标低功率。",
+      "orth_ic": 0.0211,
+      "orth_t": 2.12,
+      "raw_ic": -0.0161,
+      "n_months": 17
+    }
+  },
+  "conclusion": "PIT基金抱团度(31调仓日, 宽基500避幸存者): 存活(A/B)=['crowding_delta']; crowding_level orth IC=-0.0060 t=-0.38, crowding_delta orth IC=+0.0211 t=2.12. → PROCEED_FC2. 存活→FC-2池walk-forward。",
+  "honest_flags": [
+    "季度低频+stale(ann_date间无更新)",
+    "抱团多与动量同期(基金后进已涨票)=可能动量镜像",
+    "宽基500随机避按收益选的幸存者偏差",
+    "PIT ann_date对齐零前视(R04)",
+    "持有股横截面(未持有不入), 测'抱团多vs少'是否预测"
+  ],
+  "guardrails": [
+    "R01 gate冻结",
+    "R03 IC仅go/no-go",
+    "R04 PIT ann_date零前视",
+    "R12++ 扣FULL_CTRL残差",
+    "R11 分regime",
+    "R16 廉价闸",
+    "R05 生产冻结"
+  ]
+}

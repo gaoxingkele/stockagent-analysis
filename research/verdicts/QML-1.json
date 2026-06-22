@@ -1,0 +1,32 @@
+{
+  "test_months": 19,
+  "baseline_regression": {},
+  "by_objective": {
+    "regression": {
+      "mean_rankic": 0.1145,
+      "delta_vs_base": 0.0,
+      "delta_nw_t": 0.0
+    },
+    "lambdarank": {
+      "mean_rankic": 0.0744,
+      "delta_vs_base": -0.04,
+      "delta_nw_t": -3.66
+    },
+    "rank_xendcg": {
+      "mean_rankic": 0.08,
+      "delta_vs_base": -0.0345,
+      "delta_nw_t": -2.68
+    }
+  },
+  "status": "REJECT_cheap",
+  "survivors": [],
+  "best_ranker": "rank_xendcg",
+  "conclusion": "walk-forward 19月 OOS RankIC: regression(base)=+0.1145, lambdarank=+0.0744(Δ-0.0400 NW-t-3.66), rank_xendcg=+0.0800(Δ-0.0345 NW-t-2.68). 排序目标未显著超回归(NW-t<2) → 廉价REJECT: 目标函数不漏信号, V12.31 r20 用回归+IC早停已足。",
+  "guardrails": [
+    "SIGN-R01 gate冻结",
+    "SIGN-R03 walk-forward OOS RankIC",
+    "SIGN-R16 廉价闸先行+NW-t",
+    "apples同特征同超参唯一差异objective",
+    "SIGN-R05 生产线冻结"
+  ]
+}

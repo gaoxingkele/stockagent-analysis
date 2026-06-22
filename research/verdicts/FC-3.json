@@ -1,0 +1,31 @@
+{
+  "id": "FC-3",
+  "status": "REJECT",
+  "agg": {
+    "base": {
+      "sharpe": 3.99620223061367,
+      "alpha": 3.7456346455359326,
+      "worst": -2.2610641056429235
+    },
+    "exclc": {
+      "sharpe": 3.851034625277081,
+      "alpha": 3.6576581300493713,
+      "worst": -2.1043801194034435
+    },
+    "exclr": {
+      "sharpe": 3.9413558469420638,
+      "alpha": 3.709821444061188,
+      "worst": -2.3435705580712383
+    }
+  },
+  "excl_crowd_vs_random_sharpe": -0.09,
+  "n_months": 19,
+  "conclusion": "拥挤风控(排≥p90拥挤股) 19月: base Sharpe=4.00 | excl_crowd=3.85 | excl_random(placebo)=3.94. 拥挤排除vs随机排除Δsharpe=-0.09 → REJECT. 拥挤排除≈随机排除(crowding_level FC-1已证零IC), 无风控技能纯去暴露; 且我们小盘回调池本就少持极端拥挤龙头 → 拥挤风控对V12.31基本no-op。",
+  "guardrails": [
+    "R01冻结",
+    "R02负=合法完成",
+    "R04 PIT",
+    "R05生产冻结",
+    "R13随机排除placebo负控"
+  ]
+}

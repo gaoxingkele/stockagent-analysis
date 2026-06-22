@@ -1,0 +1,62 @@
+{
+  "id": "FC-2",
+  "status": "REJECT",
+  "delta_alpha_pp": -0.2235,
+  "delta_ex_outlier": -0.2666,
+  "base": {
+    "alpha": 3.7456346455359326,
+    "sharpe": 3.99620223061367,
+    "worst": -0.2024000964551521,
+    "posr": 0.9473684210526315
+  },
+  "cand": {
+    "alpha": 3.5220891548631443,
+    "sharpe": 3.816704543232143,
+    "worst": 0.10258602817892251,
+    "posr": 1.0
+  },
+  "regime_delta": {
+    "mixed": -0.614,
+    "momentum": -0.116,
+    "reversal": -0.221
+  },
+  "gate_conditions": {
+    "c1_delta>=0.30": false,
+    "c2_sharpe>=base": false,
+    "c3_worst>=base": true,
+    "c4_posr>=base": true,
+    "c5_ex_outlier>0": false,
+    "c6_regime_not_hurt": false,
+    "c7_bootstrap": false
+  },
+  "pool_crowd_coverage": 0.266,
+  "bootstrap": {
+    "point_sharpe": -1.6283,
+    "n_obs": 19,
+    "n_cohorts": 10,
+    "n_boot": 2000,
+    "sharpe_ci95": [
+      -3.3229,
+      -0.2116
+    ],
+    "sharpe_median": -1.6427,
+    "sharpe_se": 0.794,
+    "p_sharpe_gt_0": 0.013,
+    "p_sharpe_gt_1": 0.002,
+    "ann_return_ci95": [
+      NaN,
+      NaN
+    ]
+  },
+  "n_months": 19,
+  "conclusion": "crowding_delta入V7c回调池排序, 19月walk-forward(数据限202410+低功率) Δα=-0.224pp/月 (剔outlier-0.267, regime{'mixed': -0.614, 'momentum': -0.116, 'reversal': -0.221}, bootstrap_pass=False); 池内机构持有覆盖均值27% → REJECT. 机构抱团∩回调增量未过门槛: V7c池(小盘回调)与机构抱团(大盘龙头)重叠仅27%, 风格正交+抱团流信号弱(FC-1仅B). 不落地。",
+  "guardrails": [
+    "R01冻结",
+    "R02负/真小=合法完成",
+    "R03 walk-forward α",
+    "R04 PIT ann_date",
+    "R05生产冻结",
+    "R11分regime",
+    "R13 bootstrap"
+  ]
+}

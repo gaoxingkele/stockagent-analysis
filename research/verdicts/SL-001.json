@@ -1,0 +1,82 @@
+{
+  "id": "SL-001",
+  "status": "built",
+  "conclusion": "r5 龙虎榜席位事件 sleeve 回测引擎已建 (D 龙虎榜→D+1 开盘建仓→D+1+5 开盘平仓, 三臂 apples: M=等权全龙虎榜 / A=席位战绩(sf_edge_r5)top10 / B=同集动量top10; 主测 cost=30bps round-trip)。817 entry 日 (20230104~20260525), 全龙虎榜候选 23,978 (席位可信 98.9%); 毛收益/笔 M=-1.824% A=-1.426% B=-2.466%, 净收益/笔 A=-1.726% (cost 吃 0.30pp), Arm_A−Arm_B 净/笔 +1.040pp; 年化换手≈50.4轮→成本拖累≈15.12%/yr。中间描述统计 ≠ 落地 (SIGN-R03), 净 α walk-forward 裁决在 SL-003。",
+  "artifact": "research\\cache\\sl001_daily_pnl.parquet",
+  "design": {
+    "event_driven": "D 龙虎榜机构净买入(∑net_buy>0)→entry=next(D) 开盘→exit=entry+5 开盘",
+    "arms": {
+      "Arm_M": "当日全部龙虎榜净买入股等权 (基线='无脑买龙虎榜')",
+      "Arm_A": "席位可信候选内按 sf_edge_r5 降序 (sf_winrate_r5 tiebreak) top-10 等权",
+      "Arm_B": "同一席位可信候选内按 mom20 降序 top-10 等权 (动量对照)",
+      "isolation": "Arm_A vs Arm_B 唯一差异=排序键(席位战绩 vs 动量)→净增量=纯席位技能 (SL-003 gate)"
+    },
+    "cost_main": "round-trip 0.30% (佣金+印花税0.05%卖+滑点); net=gross−cost",
+    "causal": "席位战绩 avail<=D 信号 D+1 生效 (SEAT-001); 动量纯过去; 价格 D+1 开盘建/平仓; ST 源头排除",
+    "frozen_constants": {
+      "H_HOLD": 5,
+      "TOP_N": 10,
+      "COST_RT_bps": 30,
+      "MOM_WIN": 20,
+      "SEAT_SORT": "sf_edge_r5"
+    }
+  },
+  "metrics": {
+    "n_entry_days": 817,
+    "date_range": [
+      "20230104",
+      "20260525"
+    ],
+    "n_candidates_full": 23978,
+    "seat_trusted_coverage": 0.9893,
+    "arms": {
+      "M": {
+        "n_event_days": 817,
+        "avg_n_stocks": 29.35,
+        "gross_mean_per_trade_pct": -1.8238,
+        "net_mean_per_trade_pct": -2.1238,
+        "gross_median_pct": -1.9746,
+        "win_rate_basket": 0.3182,
+        "win_rate_stock": 0.363,
+        "gross_std_per_trade_pct": 5.8826,
+        "ann_roundtrips_full_invest": 50.4,
+        "ann_cost_drag_pct": 15.12
+      },
+      "A": {
+        "n_event_days": 812,
+        "avg_n_stocks": 10.0,
+        "gross_mean_per_trade_pct": -1.4257,
+        "net_mean_per_trade_pct": -1.7257,
+        "gross_median_pct": -1.722,
+        "win_rate_basket": 0.3818,
+        "win_rate_stock": 0.372,
+        "gross_std_per_trade_pct": 7.0165,
+        "ann_roundtrips_full_invest": 50.4,
+        "ann_cost_drag_pct": 15.12
+      },
+      "B": {
+        "n_event_days": 812,
+        "avg_n_stocks": 9.99,
+        "gross_mean_per_trade_pct": -2.4662,
+        "net_mean_per_trade_pct": -2.7662,
+        "gross_median_pct": -2.8415,
+        "win_rate_basket": 0.3313,
+        "win_rate_stock": 0.3576,
+        "gross_std_per_trade_pct": 7.9531,
+        "ann_roundtrips_full_invest": 50.4,
+        "ann_cost_drag_pct": 15.12
+      }
+    },
+    "arm_A_minus_B_net_per_trade_pp": 1.0405
+  },
+  "artifacts": [
+    "research\\cache\\sl001_daily_pnl.parquet",
+    "research\\cache\\sl001\\picks.parquet"
+  ],
+  "guardrails": [
+    "SIGN-R04 因果(席位D+1/动量纯过去/价格D+1建平仓)",
+    "SIGN-R06 ST 源头排除",
+    "SIGN-R08 px/cand/picks checkpoint",
+    "SIGN-R03 描述统计≠落地, 裁决在 SL-003 walk-forward"
+  ]
+}

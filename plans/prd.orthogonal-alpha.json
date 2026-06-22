@@ -1,0 +1,222 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/orthogonal-alpha",
+  "northStar": "Track C2 新数据/正交因子系统搜索: 在 V12.31(均值回归价量核, 21假设全否)之外找正交正-alpha。覆盖 用户点名的 波动率/未列入量价/大宗商品供应链/分析师修正(report_rc)/新闻政策 五族 + 1H vs 日线对比。每族走统一三关: (1)build PIT+ST源头排除+泄漏自查+checkpoint → backward特征parquet; (2)Phase-1 廉价正交IC筛查(扣[动量+size+value+roe/margin]残差, ≥40月, 分regime, gate |IC|>=0.02 & |t|>=3)→ A/B进walk-forward, C/D廉价REJECT; (3)仅存活族进 walk-forward GATE(apples-to-apples Δα>=+0.30pp)+ skeptic_report(bootstrap/DSR多重检验/PBO)。核心信念: 正交≠有α(0605), 廉价闸先杀; 多重检验校正必做(搜了N族, best-of-N会蒙到假阳性)。生产线 V12.31 全程只读冻结。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0 (泄漏黑名单 + 生产指纹未变)",
+    "每个非 skip task 产出工件 + research/verdicts/OA-*.json (含 verdict: PROCEED/REJECT/PASS/真小)",
+    "每族 Phase-1 筛查有 A/B/C/D 裁决; 仅 A/B 族进 walk-forward GATE",
+    "walk-forward 存活候选必过 skeptic_report (bootstrap P(SR>0)>=0.95 + DSR>=0.95 含多重检验 + PBO<=0.5)",
+    "生产线指纹未变: v12_scoring.py 与生产模型 hash 与基线一致 (SIGN-R05)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "启动写死(R01); 分regime(R11); 消融扣全控制(R12++); 单月outlier; 多重检验校正(R15); 廉价闸先行(R16)。两阶段: Phase-1 廉价IC筛查省算力, walk-forward 才是 ship 判据(R03)。",
+    "control_set": "FULL_CTRL = [mom_5,mom_20,mom_60, ln_total_mv, inv_pe,inv_pb, roe,margin] (复用 research/features/fundamental_factors.parquet, 54月度调仓日 2022-01~2026-06, 已含 regime/industry)",
+    "label": "前向 r20 = close[t+20]/close[t]-1 (因果, 复用 research/cache/rt004_r20_label.parquet)",
+    "phase1_screen": {
+      "method": "逐月横截面: 把候选因子对 FULL_CTRL 做 OLS 残差化(控制标准化), 残差 rank-IC vs 前向r20; 逐步消融单扣每组定位来源; 月度IC序列 t = Newey-West HAC t (lag=2, 校正重叠r20 label序列自相关, codex 0618 #1; 朴素t仅参考), 需 n>=40 月",
+      "gate": [
+        "A_显著正交: orth_full |IC|>=0.02 且 |t|>=3 → 进 walk-forward GATE",
+        "B_边缘: orth_full |IC|>=0.02 且 |t|∈[2,3) → 进 walk-forward 标低功率",
+        "D_已知因子(reskin): raw |IC|>=0.02 有信号但单扣某组(size/value/mom)即塌<0.01 → 廉价 REJECT",
+        "C_塌缩: 其余(|IC|<0.01 或 |t|<2 或中间带, raw本就≈0/负) → 廉价 REJECT 跳 walk-forward"
+      ],
+      "regime": "分 regime(momentum/reversal/mixed) 报告, 决策不只看全期平均(R11)"
+    },
+    "walk_forward_gate": {
+      "method": "apples-to-apples: 复用 gate001/t005 harness, 两臂唯一差异=池内排序键(baseline=ratio_s5 vs +z_pool(候选)); 复用 t005_wf_models 不重训; 19月 walk-forward; Δα 相消共模 lookahead(SIGN-R03)",
+      "gate": [
+        "c1 Δα(月化, 候选blend臂 − baseline)>=+0.30pp",
+        "c2 Sharpe 不低于 baseline; c3 最差月不低于 baseline; c4 正α月占比不低于 baseline",
+        "c5 剔单月 outlier(Δα最大月)后 Δα 仍 >0",
+        "c6 各 regime(momentum/reversal/mixed) Δα 不为负(不伤)",
+        "c7 skeptic_report(research_env): bootstrap P(Sharpe>0)>=0.95 且 CI下界>0; DSR>=0.95 [n_trials = oa_manifest 已筛因子变体总数 × DoF乘子3 (codex 0618 #2: 含 sign/winsor/lag/中性化/universe/A-B边缘提升/best-survivor选择 等 researcher自由度); 多重检验校正]; PBO<=0.5"
+      ],
+      "verdict": "全过=PASS; 0<Δα<+0.30 且不伤 baseline 且 c5=真小(记候选不强上); 否则 REJECT。负/真小=合法完成(R02), 禁止同段OOS重调(R01/R02)。",
+      "selection_on_selection_caveat": "codex 0618 #4 最大假阳性风险: Phase-1 在全54月(含walk-forward的19月)上选因子 = 因子选择层泄漏; 叠加重叠label膨胀t + 单regime持续 → 幸运regime残差可能蒙过所有冻结gate。守: (a)gate t用NW HAC; (b)c6各regime不为负 + PBO 抓非持续性; (c)PASS候选必须在 verdict 显式标注此caveat, 落地前需独立OOS或前向paper-trade复核, 不凭单次walk-forward直接真钱。"
+    }
+  },
+  "responsePlaybook": {
+    "note": "事前注册分叉(冻结 R02)",
+    "phase1": {
+      "A/B": "进 walk-forward: 解除对应 OA-GATE 子任务 skip",
+      "C/D": "廉价 REJECT, 该族 walk-forward 子任务保持 skip, 写 verdict 记塌缩/reskin 来源"
+    },
+    "walk_forward": {
+      "PASS": "真正交真alpha成立 → 记 LAND 候选(独立评估落地形态, 不动 V12.31)",
+      "真小": "残差真实但增量未过0.30pp门槛 → 记 promising 待优化(载体/blend), 不强上",
+      "REJECT": "干净 REJECT, 文档化塌缩原因(被现有因子吃/稀疏/horizon错配/成本)"
+    }
+  },
+  "features": [
+    {
+      "id": "OA-000",
+      "title": "共享正交筛查工具 oa_screen.py (build→Phase-1 IC→消融→regime 一站式) + campaign manifest",
+      "acceptanceCriteria": [
+        "oa_screen.py: 输入候选因子 parquet(key ts_code,trade_date + 因子列), 自动 merge FULL_CTRL(fundamental_factors) + r20 label(rt004), 逐月残差化算 raw/minus_each/orth_full IC + t + 分regime + 逐因子 A/B/C/D 分类",
+        "复用 fu003 的 std_col/rank_ic/tstat/monthly_ic_series/classify; 落 research/cache/oa_<fam>_ic_table.parquet + research/verdicts/OA-<fam>.json",
+        "campaign manifest research/cache/oa_manifest.json: 累计记录每个测过的因子变体名 → n_trials 供 DSR 多重检验",
+        "self-test 通过 (合成因子: 纯噪声→C, 注入正交信号→A)",
+        "research/verdicts/OA-000.json status=built"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-18",
+      "notes": "research/oa_screen.py 建成+自检过(噪声→C/正交→A/动量reskin→C)。复用 fundamental_factors(54月度控制面板)+rt004_r20_label。codex 0618 对抗审计纳入冻结gate: NW-t / DSR含DoF乘子3 / selection-on-selection caveat。verdict OA-000.json。"
+    },
+    {
+      "id": "OA-VOL",
+      "title": "波动率因子族: 特异波动率/MAX彩票效应/vol-of-vol/已实现偏度峰度/隔夜vs日内vol/低波动异象",
+      "acceptanceCriteria": [
+        "build research/features/oa_vol_factors.parquet (backward, PIT, ST源头排除, checkpoint): 至少 ivol(对市场+size回归残差vol_60), max5_ret(过去20日最大单日pct_chg), volofvol, rskew/rkurt(过去60日已实现偏度峰度), overnight_vol/intraday_vol, beta_60; 全部 backward, 泄漏自查通过",
+        "Phase-1 筛查 via oa_screen: 每因子 raw/orth_full IC + t + 分regime + A/B/C/D",
+        "research/verdicts/OA-VOL.json: 逐因子裁决 + 族级结论(有无 A/B 存活); A/B → 解除 OA-VOL-GATE"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-18",
+      "notes": "build research/oa_vol_factors.py (向量化滚动, 共享面板缓存 5.34M行/5440股/7s). Phase-1: 7/10存活(全负IC=低波动异象). ivol_60 orth IC=-0.0811 t=-6.69(NW)最强A; intraday_vol/total_vol/overnight_vol/max5彩票/volofvol 皆A; rskew B; beta/rkurt/on_in_ratio C. → PROCEED, 解锁 OA-VOL-GATE(候选=-ivol_60). 警告: 仅正交于标准控制, 未正交V12.31(pyr_velocity等). verdict OA-VOL.json."
+    },
+    {
+      "id": "OA-VP",
+      "title": "未列入量价族: Amihud非流动性/换手调整反转/隔夜收益/Kyle-lambda价格冲击/量价相关/资金流持续性",
+      "acceptanceCriteria": [
+        "build research/features/oa_vp_factors.parquet (backward, PIT, ST排除, checkpoint): amihud(|ret|/amount 20日均), turnadj_rev(反转/换手), overnight_ret(隔夜收益累计), kyle_lambda, volret_corr, mf_persist(资金流持续, 若 moneyflow 可用); 泄漏自查",
+        "Phase-1 筛查 via oa_screen + A/B/C/D 逐因子",
+        "research/verdicts/OA-VP.json + A/B 解除 OA-VP-GATE"
+      ],
+      "priority": 3,
+      "passes": true,
+      "completed_at": "2026-06-18",
+      "notes": "build research/oa_vp_factors.py (复用面板). Phase-1: 5/8存活. overnight_ret_20 orth IC=+0.0467 t=8.61(残差后增强=Lou-Polk-Skouras隔夜动量); intraday_ret_20 -0.0484 t=-6.91(日内反转); on_minus_in_20 +0.0483 t=8.04(最干净隔夜-日内分解) 皆A; illiq_trend/volret_corr B; amihud_20=D_已知因子(raw+0.077被size吃=非流动性≈小盘, 消融识破reskin); amihud_60/kyle C. → PROCEED, 解锁 OA-VP-GATE(候选=on_minus_in_20). verdict OA-VP.json."
+    },
+    {
+      "id": "OA-COM",
+      "title": "大宗商品/原材料供应链族: 个股商品暴露beta + 商品动量传导 + 商品波动冲击",
+      "acceptanceCriteria": [
+        "fetch Tushare fut_daily 主力连续(螺纹钢RB/铜CU/原油SC/焦炭J/铝AL等代表商品) → output/tushare_cache/fut_daily_*.parquet (checkpoint, 限频)",
+        "build research/features/oa_com_factors.parquet (backward): 个股对商品收益的滚动 beta(行业映射+回归), 商品60日动量, 商品已实现vol; 全 backward 因果",
+        "Phase-1 筛查 + A/B/C/D; research/verdicts/OA-COM.json + A/B 解除 OA-COM-GATE"
+      ],
+      "priority": 4,
+      "passes": true,
+      "completed_at": "2026-06-18",
+      "notes": "build research/oa_com_factors.py (fut_daily 10商品RB/HC/CU/AL/AU/SC/I/J/M 各1133日, TA无数据; settle收益等权篮子+油+金属). Phase-1 裁决=REJECT(元判断覆写): 真商品渠道 com_beta_basket/oil/metal + com_transmit_20/oil 全 C_塌缩(raw~0.02-0.03被size/industry/动量吸收, 商品beta无独立横截面alpha, 应验codex#2 mapping noise); 唯一'存活' com_betavol_60=残差波动=ivol换皮(Spearman 0.917 vs ivol_60). OA-COM-GATE保持skip(不重复计波动为商品胜利). verdict OA-COM.json."
+    },
+    {
+      "id": "OA-RC",
+      "title": "分析师盈利预测修正族 (report_rc, 理论最强正交; 限频1/小时需过夜增量拉取器)",
+      "acceptanceCriteria": [
+        "过夜增量拉取器 fetch_report_rc.py: 断点续传(已拉日期跳过)+限频sleep, 攒 >=40月面板 → output/tushare_cache/report_rc/*.parquet",
+        "build research/features/oa_rc_factors.parquet (backward, ann_date对齐防泄漏不回填): 修正动量(上调比例-下调比例, 60日), 一致预期EPS变化率, 评级上调比例, 分析师覆盖/分歧度",
+        "Phase-1 筛查 + A/B/C/D; research/verdicts/OA-RC.json + A/B 解除 OA-RC-GATE",
+        "若面板未攒够(拉取未完成): 写 status=building, task 留 passes:false 待续(不阻塞其他族)"
+      ],
+      "priority": 5,
+      "passes": false,
+      "skip": true,
+      "skipReason": "数据不可得: 本 Tushare token 无 report_rc 接口权限 (探测 2026-06-18: '没有接口(report_rc)访问权限'). 分析师修正渠道(codex排#1真正交prior)无替代数据源(forecast业绩预告已0605测死, express快报非修正). 诚实 deferred, 非研究失败; 若日后开通 report_rc 权限再做过夜增量拉取器。",
+      "notes": "codex 0618 排此族为最高真正交 prior, 但数据闸关闭。"
+    },
+    {
+      "id": "OA-NEWS",
+      "title": "新闻/企业消息/行业政策族 (Tushare news/anns + LLM情绪分类; 最高成本)",
+      "acceptanceCriteria": [
+        "fetch Tushare 新闻/公告(news/major_news/anns_d 视权限) → output/tushare_cache/news/*; checkpoint",
+        "build research/features/oa_news_factors.parquet (backward): 新闻密度/异常, 情绪(LLM proxy 分类或词典), 政策事件标记, 公告类型 dummy; 严格因果(公告日对齐, T+1生效)",
+        "Phase-1 筛查 + A/B/C/D; research/verdicts/OA-NEWS.json",
+        "若数据/LLM管线成本过高或权限不足: 写 status=deferred + 原因, task skip(文档化), 不阻塞"
+      ],
+      "priority": 6,
+      "passes": false,
+      "skip": true,
+      "skipReason": "数据不足做横截面因子: 探测 2026-06-18 — news/anns_d 无权限; 仅 major_news 可用但为市场级(title/pub_time/src/url, 无 ts_code 映射), 无法构造个股横截面情绪/事件因子(本campaign筛查是横截面rank-IC)。major_news 至多做市场级 regime sentiment(非选股alpha)。LLM实体抽取映射个股成本极高且噪声大(codex#3 警告高自由度易过拟合)。诚实 deferred。",
+      "notes": "若日后开通 news/anns_d 个股级接口或愿投 LLM 实体抽取管线再做。"
+    },
+    {
+      "id": "OA-VOL-GATE",
+      "title": "波动率族存活因子 walk-forward GATE + skeptic_report (仅 OA-VOL Phase-1 出 A/B 时解除)",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "复用 gate001 harness apples-to-apples 19月 walk-forward; 候选=OA-VOL 最强存活因子 z_pool blend 入池排序",
+        "断言 walk_forward_gate.gate (c1-c7 含 skeptic_report DSR多重检验); 分regime+outlier",
+        "research/verdicts/OA-VOL-GATE.json: status in {PASS,真小,REJECT} + 四项指标对照 + skeptic_report"
+      ],
+      "priority": 7,
+      "passes": true,
+      "completed_at": "2026-06-18",
+      "skip": false,
+      "skipReason": "已解除并评估完毕。",
+      "notes": "research/oa_gate.py 19月walk-forward apples-to-apples. **REJECT**: ivol_60(sign-1)接V12.31池排序 Δα=-0.153pp/月 剔outlier-0.263; c1(≥0.30)✗ c3最差月✗ c5✗ c6 regime不伤✗(动量-0.09/反转-0.26) c7 skeptic✗(bootstrap fail, PBO 0.8=过拟合). 低波动异象IC强(t=-6.69)但对V12.31零增量=已被pyr_velocity波动过滤吃掉. DSR=True无意义(sr_var代理偏小+作用绝对lookahead Sharpe). verdict OA-VOL-GATE.json. SIGN-R02合法完成不重调."
+    },
+    {
+      "id": "OA-VP-GATE",
+      "title": "量价族存活因子 walk-forward GATE + skeptic_report (仅 OA-VP A/B 解除)",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "同 OA-VOL-GATE 协议, 候选=OA-VP 最强存活因子",
+        "research/verdicts/OA-VP-GATE.json: status + 指标对照 + skeptic_report"
+      ],
+      "priority": 8,
+      "passes": true,
+      "completed_at": "2026-06-18",
+      "skip": false,
+      "skipReason": "已解除并评估完毕。",
+      "notes": "同 oa_gate.py 一次跑出. **REJECT**: on_minus_in_20(sign+1) Δα=-0.702pp/月 剔outlier-0.757; gate c1-c6全✗(regime全负 mixed-1.09/动量-0.58/反转-0.71), c7 skeptic✗(PBO 0.8). 隔夜-日内分解IC强(t=8.04, 残差后增强)但对V12.31负增量=隔夜动量已被pump/ratio吃. verdict OA-VP-GATE.json. SIGN-R02."
+    },
+    {
+      "id": "OA-COM-GATE",
+      "title": "大宗商品族存活因子 walk-forward GATE + skeptic_report (仅 OA-COM A/B 解除)",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "同协议, 候选=OA-COM 最强存活因子",
+        "research/verdicts/OA-COM-GATE.json"
+      ],
+      "priority": 9,
+      "passes": false,
+      "skip": true,
+      "skipReason": "条件解除: 仅 OA-COM Phase-1 出 A/B 时打开。"
+    },
+    {
+      "id": "OA-RC-GATE",
+      "title": "分析师修正族存活因子 walk-forward GATE + skeptic_report (仅 OA-RC A/B 解除)",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "同协议, 候选=OA-RC 最强存活因子",
+        "research/verdicts/OA-RC-GATE.json"
+      ],
+      "priority": 10,
+      "passes": false,
+      "skip": true,
+      "skipReason": "条件解除: 仅 OA-RC Phase-1 出 A/B 时打开 (且面板已攒够)。"
+    },
+    {
+      "id": "OA-1H",
+      "title": "1H vs 日线对比验证 (对任一存活因子, 1H尺度重算并对比IC)",
+      "acceptanceCriteria": [
+        "对至少一个 Phase-1 存活(A/B)因子, 在 1H 数据(output/tushare_cache/1h)重算并对比日线 IC; 报告日内尺度是否增强",
+        "research/verdicts/OA-1H.json: 对比表 + 结论",
+        "若无任何因子存活: 写 status=skipped(无存活因子可对比), 文档化"
+      ],
+      "priority": 11,
+      "passes": true,
+      "completed_at": "2026-06-18",
+      "notes": "research/oa_1h_compare.py (1H面板 2.9M行/5249股 缓存; 28月度日 2024-01~2026-04 1H覆盖窗). 1H日内已实现波动 rv_1h_60 orth IC=-0.055 t=-3.56 vs 日线 ivol_60 -0.065 t=-4.03 (同窗): **日线略强, 1H不增强**; Spearman 0.869=基本同序(1H细粒度对波动因子无新信息). 与早先1H动量因子增强不同(那是收益类). verdict OA-1H.json."
+    },
+    {
+      "id": "OA-SUMMARY",
+      "title": "campaign 收尾: 全族裁决汇总 + 多重检验总账 + 元结论",
+      "acceptanceCriteria": [
+        "汇总所有 OA-* verdict → research/verdicts/OA-SUMMARY.json + research/ORTHOGONAL_ALPHA_FINDINGS.md",
+        "报告 n_trials 总数(多重检验基数) + 存活/REJECT 计数 + 是否有真 alpha 落地候选",
+        "更新 plans/progress.md + 写 memory pointer"
+      ],
+      "priority": 12,
+      "passes": true,
+      "completed_at": "2026-06-18",
+      "notes": "research/oa_summary.py → research/verdicts/OA-SUMMARY.json + research/ORTHOGONAL_ALPHA_FINDINGS.md. 净结果=0可落地新alpha. n_trials=24(VOL10+VP8+COM6) DSR基72. Phase-1 PROCEED:VOL/VP; REJECT:COM; deferred:RC/NEWS(数据闸). GATE全REJECT. 元结论: 正交≠有α再印证, 真异象(低波动/隔夜)被V12.31吃, 第22-23否. 唯一未测强候选=report_rc(无权限)."
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "id": "QML-SUMMARY",
+  "campaign": "quantml-models (QuantML-Qlib 48篇方法过我们gate)",
+  "date": "2026-06-19",
+  "question": "23个被否假设全是feature侧, 从未测过'模型class/目标函数/搜索'是否漏信号. QuantML合集是这些轴的菜单. 用户要求Tier1+2+3顺序全做.",
+  "verdict": "全REJECT — 模型/目标/解耦/搜索 四轴均非杠杆",
+  "results": {
+    "QML-1_ranking_objective": "REJECT_cheap: r20 regression OOS RankIC +0.1145 vs lambdarank +0.0744(NW-t-3.66)/rank_xendcg +0.0800(NW-t-2.68). 排序目标显著劣. 文章33'MSE错配'假设证伪(回归+spearman_ic早停已优化排序).",
+    "QML-2_nn_model_class": "REJECT_cheap: LGBM OOS RankIC +0.0953 vs torch MLP +0.0660(Δ-0.0294 NW-t-1.87, MLP 6/19月胜+大崩). GBDT对截面tabular工程特征仍最优. 序列-NN-on-raw未测(CPU昂贵+236特征已编码时序).",
+    "QML-3_alpha_beta_decoupling": "REJECT: beta-中性选股 book walk-forward Δα=-0.381pp/月(14/19月负, 动量-0.715/反转-0.247都伤). 去beta反伤→我们edge与beta耦合(alpha bull-loaded), ABCM/FactorVAE解耦不适用long-only净多头.",
+    "QML-4_factor_mining": "REJECT_known_families: 随机符号搜80因子→24存活过正交闸+Bonferroni, 但全是已walk-forward否决族换皮(最强tsstd_intraday_60=OA-VOL intraday_vol_60已REJECT; intraday/overnight=OA-VP已REJECT). 自动搜索重新发现已死因子族."
+  },
+  "meta_conclusion": "QuantML-Qlib 48篇的方法对我们净结果=0增量。四个轴(目标函数/NN模型class/Alpha-Beta解耦/自动因子搜索)全REJECT, 关掉了'是不是模型不行'这个问题: **不是模型不行, 是数据/信号枯竭**。文中PoC IC(0.023-0.087)正是我们LGBM样本内0.44→真OOS0.18、RETRO+54%反转、Hybrid+54%stratification artifact的同类——过不了walk-forward+多重检验。与23个feature侧被否 + 正交campaign(0618) + 市场状态(0618) 完全一致收敛: 瓶颈是价量空间信号枯竭+样本功率, 增量不在选股(模型/特征/搜索都试尽), 在book/风控/部署 或 真正新数据(微结构/分析师修正, 当前token无权限)。",
+  "what_we_learned": [
+    "GBDT(LGBM)对A股截面tabular是极强基线, 排序目标/NN/解耦/搜索均不超",
+    "我们的r20回归+spearman_ic早停已是该数据上接近最优的建模",
+    "自动因子搜索(GP/RL/LLM)在枯竭价量空间=量产已知因子族换皮, 廉价闸+多重检验是必须的(AI Scientist教训gate>吞吐实证)",
+    "未测且CPU昂贵: 序列-NN-on-raw-OHLCV (先验低, 236特征已含时序)"
+  ],
+  "artifacts": ["research/qml1_ranking_obj.py", "research/qml2_nn_model.py", "research/qml3_alpha_beta.py",
+                "research/qml4_factor_mining.py", "research/QUANTML_MODELS_FINDINGS.md",
+                "research/verdicts/QML-1.json", "research/verdicts/QML-2.json",
+                "research/verdicts/QML-3.json", "research/verdicts/QML-4.json"],
+  "production": "V12.31 全程只读冻结(R05); verify.py 指纹一致",
+  "guardrails": ["R01 gate冻结", "R02 全REJECT=合法完成", "R03 walk-forward才ship", "R05 生产冻结",
+                 "R15 多重检验(Bonferroni/NW-t)", "R16 廉价闸先杀", "AI Scientist gate>吞吐"]
+}

@@ -1,0 +1,283 @@
+{
+  "id": "SLV-002",
+  "status": "built",
+  "conclusion": "对 SLV-001 三桶各自 launch 样本算前向 5/10/20d 收益+realized max_dd 画像 (窗口 20230103~20260604, 511,388 个 launch 样本)。20d 浅→深尾排序(realized_dd_p10): BASE(dd_p10 -0.075) / SQUAT(dd_p10 -0.135) / MOMENTUM(dd_p10 -0.159); 均值高→低: BASE(μ +0.151) / SQUAT(μ +0.140) / MOMENTUM(μ +0.121)。【DESIGN §3 先验被数据反转 — 诚实记录】预期(SQUAT浅尾/BASE肥左尾假突破/MOMENTUM高均值)四项检验全 False({\"SQUAT_shallowest_dd\": false, \"BASE_fattest_left_tail_dd\": false, \"BASE_fattest_left_tail_ret\": false, \"MOMENTUM_highest_mean\": false})。真相相反: (1) **BASE launch 反而质量最高** — 20d 均值 +0.151 居首、胜率 0.829 最高、左尾最薄(p10ret -0.031, dd_p10 -0.075); 它不是'假突破肥左尾'而是'罕见但干净'(呼应 SLV-001: BASE 启动率低 0.063 却挑出了最稳的突破)。(2) **MOMENTUM launch 反而质量最差** — 均值 +0.121 最低、左尾最肥(p10ret -0.113, dd_p10 -0.159)、类Sharpe 最低; 力竭/见顶尾真实且主导, 印证 DESIGN §8 '动量标量 α 可能已 price-in, 价值在 book 对冲非裸 α'。(3) SQUAT 居中。但'为何一个 label 服务不了三桶'结论不变且更强: 桶间 20d 左尾极差 0.08257 / realized dd 极差 0.08391 / 均值极差 0.02975 —— 同贴 v3c 对称 label(max_gain≥10% & max_dd≥−5%)把 dd_p10 −15.9% 的 MOMENTUM(routinely 击穿 −5%)与 dd_p10 −7.5% 的 BASE 一锅烩, 单一 max_dd 假设必然顾此失彼: MOMENTUM 需力竭守卫+移动止损防深尾, BASE 可较松持有(尾最薄), SQUAT 需宽止损容均值回归噪声。这就是按原型拆 sleeve、各配独立风控预算的物理理由 (DESIGN §3/§4)。对后续指向: BASE sleeve 的质量论点比 SLV-001 的'低启动率'担忧所示更强; MOMENTUM 裸 α 最弱 → 其去留更应由 SLV-003 book 分散性闸定夺。描述统计非 ship (R03)。",
+  "metrics": {
+    "window": [
+      "20230103",
+      "20260604"
+    ],
+    "n_launch_samples": 511388,
+    "profile_by_archetype": {
+      "SQUAT": {
+        "h5": {
+          "n": 100837,
+          "mean": 0.12059,
+          "median": 0.10322,
+          "win_rate": 0.9695,
+          "p10_left_tail": 0.03458,
+          "p90_right_tail": 0.22241,
+          "std": 0.08929,
+          "sharpe_like": 1.3505,
+          "realized_dd_mean": -0.01583,
+          "realized_dd_median": -0.01256,
+          "realized_dd_p10": -0.037
+        },
+        "h10": {
+          "n": 99368,
+          "mean": 0.12265,
+          "median": 0.10452,
+          "win_rate": 0.8506,
+          "p10_left_tail": -0.02596,
+          "p90_right_tail": 0.29126,
+          "std": 0.15183,
+          "sharpe_like": 0.8078,
+          "realized_dd_mean": -0.02853,
+          "realized_dd_median": -0.01622,
+          "realized_dd_p10": -0.05883
+        },
+        "h20": {
+          "n": 97772,
+          "mean": 0.13988,
+          "median": 0.11125,
+          "win_rate": 0.7705,
+          "p10_left_tail": -0.07209,
+          "p90_right_tail": 0.37836,
+          "std": 0.21307,
+          "sharpe_like": 0.6565,
+          "realized_dd_mean": -0.04937,
+          "realized_dd_median": -0.02367,
+          "realized_dd_p10": -0.13505
+        }
+      },
+      "BASE": {
+        "h5": {
+          "n": 4987,
+          "mean": 0.1214,
+          "median": 0.10076,
+          "win_rate": 0.9854,
+          "p10_left_tail": 0.04299,
+          "p90_right_tail": 0.21614,
+          "std": 0.09557,
+          "sharpe_like": 1.2703,
+          "realized_dd_mean": -0.01127,
+          "realized_dd_median": -0.00809,
+          "realized_dd_p10": -0.02685
+        },
+        "h10": {
+          "n": 4987,
+          "mean": 0.123,
+          "median": 0.09312,
+          "win_rate": 0.9035,
+          "p10_left_tail": 0.00178,
+          "p90_right_tail": 0.25732,
+          "std": 0.16968,
+          "sharpe_like": 0.7249,
+          "realized_dd_mean": -0.0167,
+          "realized_dd_median": -0.00933,
+          "realized_dd_p10": -0.03748
+        },
+        "h20": {
+          "n": 4979,
+          "mean": 0.15096,
+          "median": 0.10097,
+          "win_rate": 0.8293,
+          "p10_left_tail": -0.03069,
+          "p90_right_tail": 0.35227,
+          "std": 0.25625,
+          "sharpe_like": 0.5891,
+          "realized_dd_mean": -0.02816,
+          "realized_dd_median": -0.01224,
+          "realized_dd_p10": -0.07524
+        }
+      },
+      "MOMENTUM": {
+        "h5": {
+          "n": 38925,
+          "mean": 0.12508,
+          "median": 0.09559,
+          "win_rate": 0.9261,
+          "p10_left_tail": 0.00934,
+          "p90_right_tail": 0.27639,
+          "std": 0.12172,
+          "sharpe_like": 1.0276,
+          "realized_dd_mean": -0.01962,
+          "realized_dd_median": -0.01798,
+          "realized_dd_p10": -0.04098
+        },
+        "h10": {
+          "n": 38813,
+          "mean": 0.11925,
+          "median": 0.0784,
+          "win_rate": 0.7715,
+          "p10_left_tail": -0.05087,
+          "p90_right_tail": 0.33388,
+          "std": 0.18745,
+          "sharpe_like": 0.6362,
+          "realized_dd_mean": -0.03576,
+          "realized_dd_median": -0.02526,
+          "realized_dd_p10": -0.08413
+        },
+        "h20": {
+          "n": 38682,
+          "mean": 0.12121,
+          "median": 0.06315,
+          "win_rate": 0.6619,
+          "p10_left_tail": -0.11326,
+          "p90_right_tail": 0.41181,
+          "std": 0.26119,
+          "sharpe_like": 0.4641,
+          "realized_dd_mean": -0.06307,
+          "realized_dd_median": -0.0374,
+          "realized_dd_p10": -0.15915
+        }
+      },
+      "NONE": {
+        "h5": {
+          "n": 366168,
+          "mean": 0.11542,
+          "median": 0.09644,
+          "win_rate": 0.9605,
+          "p10_left_tail": 0.02686,
+          "p90_right_tail": 0.21817,
+          "std": 0.09852,
+          "sharpe_like": 1.1715,
+          "realized_dd_mean": -0.01485,
+          "realized_dd_median": -0.01163,
+          "realized_dd_p10": -0.0345
+        },
+        "h10": {
+          "n": 364857,
+          "mean": 0.1143,
+          "median": 0.08841,
+          "win_rate": 0.8536,
+          "p10_left_tail": -0.01909,
+          "p90_right_tail": 0.26546,
+          "std": 0.1516,
+          "sharpe_like": 0.754,
+          "realized_dd_mean": -0.02394,
+          "realized_dd_median": -0.01481,
+          "realized_dd_p10": -0.05061
+        },
+        "h20": {
+          "n": 361277,
+          "mean": 0.12631,
+          "median": 0.08699,
+          "win_rate": 0.7538,
+          "p10_left_tail": -0.072,
+          "p90_right_tail": 0.35015,
+          "std": 0.23092,
+          "sharpe_like": 0.547,
+          "realized_dd_mean": -0.043,
+          "realized_dd_median": -0.02119,
+          "realized_dd_p10": -0.11602
+        }
+      }
+    },
+    "expectation_checks": {
+      "SQUAT_shallowest_dd": false,
+      "BASE_fattest_left_tail_dd": false,
+      "BASE_fattest_left_tail_ret": false,
+      "MOMENTUM_highest_mean": false
+    },
+    "cross_bucket_spread_h20": {
+      "left_tail_p10_spread": 0.08257,
+      "realized_dd_p10_spread": 0.08391,
+      "mean_spread": 0.02975
+    },
+    "quality_order_dd_p10_shallow_to_deep": [
+      "BASE",
+      "SQUAT",
+      "MOMENTUM"
+    ],
+    "mean_order_high_to_low": [
+      "BASE",
+      "SQUAT",
+      "MOMENTUM"
+    ],
+    "by_regime_h20": {
+      "momentum": {
+        "SQUAT": {
+          "mean": 0.10922,
+          "p10_left_tail": -0.08549,
+          "realized_dd_p10": -0.13717,
+          "n": 30414
+        },
+        "BASE": {
+          "mean": 0.09045,
+          "p10_left_tail": -0.06714,
+          "realized_dd_p10": -0.12419,
+          "n": 1390
+        },
+        "MOMENTUM": {
+          "mean": 0.08461,
+          "p10_left_tail": -0.13988,
+          "realized_dd_p10": -0.187,
+          "n": 12559
+        },
+        "NONE": {
+          "mean": 0.08237,
+          "p10_left_tail": -0.10524,
+          "realized_dd_p10": -0.1544,
+          "n": 90096
+        }
+      },
+      "reversal": {
+        "SQUAT": {
+          "mean": 0.14244,
+          "p10_left_tail": -0.06643,
+          "realized_dd_p10": -0.12474,
+          "n": 49142
+        },
+        "BASE": {
+          "mean": 0.13035,
+          "p10_left_tail": -0.03368,
+          "realized_dd_p10": -0.07689,
+          "n": 1822
+        },
+        "MOMENTUM": {
+          "mean": 0.12804,
+          "p10_left_tail": -0.09912,
+          "realized_dd_p10": -0.14074,
+          "n": 17964
+        },
+        "NONE": {
+          "mean": 0.12333,
+          "p10_left_tail": -0.06393,
+          "realized_dd_p10": -0.10606,
+          "n": 192342
+        }
+      },
+      "mixed": {
+        "SQUAT": {
+          "mean": 0.18414,
+          "p10_left_tail": -0.06519,
+          "realized_dd_p10": -0.1715,
+          "n": 18216
+        },
+        "BASE": {
+          "mean": 0.21982,
+          "p10_left_tail": 0.00677,
+          "realized_dd_p10": -0.03662,
+          "n": 1767
+        },
+        "MOMENTUM": {
+          "mean": 0.16253,
+          "p10_left_tail": -0.10277,
+          "realized_dd_p10": -0.14901,
+          "n": 8159
+        },
+        "NONE": {
+          "mean": 0.18379,
+          "p10_left_tail": -0.04737,
+          "realized_dd_p10": -0.08787,
+          "n": 78839
+        }
+      }
+    }
+  },
+  "artifacts": [
+    "research/cache/slv002_results.json"
+  ],
+  "note": "复用 SLV-001 factor_panel (OHLC+archetype+is_launch); 全因果前向列只留cache非features (R04); ST 源头已排除 (R06); 分 regime 复核 (R11); 描述统计非 ship 决策 (R03)。"
+}

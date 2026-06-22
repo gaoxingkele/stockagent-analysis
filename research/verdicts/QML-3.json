@@ -1,0 +1,60 @@
+{
+  "id": "QML-3",
+  "status": "REJECT",
+  "delta_alpha_pp": -0.3805,
+  "delta_ex_outlier": -0.47,
+  "base": {
+    "alpha": 3.7456346455359326,
+    "sharpe": 3.99620223061367,
+    "worst": -0.2024000964551521,
+    "posr": 0.9473684210526315
+  },
+  "beta_neutral": {
+    "alpha": 3.3651051600246418,
+    "sharpe": 3.878029834304617,
+    "worst": -0.15376308821260867,
+    "posr": 0.9473684210526315
+  },
+  "regime_delta": {
+    "mixed": 0.123,
+    "momentum": -0.715,
+    "reversal": -0.247
+  },
+  "gate_conditions": {
+    "c1_delta>=0.30": false,
+    "c2_sharpe>=base": false,
+    "c3_worst>=base": true,
+    "c4_posr>=base": true,
+    "c5_ex_outlier>0": false,
+    "c6_regime_not_hurt": false,
+    "c7_bootstrap": false
+  },
+  "bootstrap": {
+    "point_sharpe": -1.6514,
+    "n_obs": 19,
+    "n_cohorts": 10,
+    "n_boot": 2000,
+    "sharpe_ci95": [
+      -3.6474,
+      -0.1407
+    ],
+    "sharpe_median": -1.7929,
+    "sharpe_se": 0.9106,
+    "p_sharpe_gt_0": 0.0165,
+    "p_sharpe_gt_1": 0.0,
+    "ann_return_ci95": [
+      NaN,
+      NaN
+    ]
+  },
+  "n_months": 19,
+  "conclusion": "beta-中性选股 vs 原始 pred_r20 选股, 19月 walk-forward Δα=-0.381pp/月 (剔outlier-0.470, regime{'mixed': 0.123, 'momentum': -0.715, 'reversal': -0.247}, bootstrap_pass=False) → REJECT. 去beta选股未过+0.30pp门槛: 我们edge与beta耦合(alpha bull-loaded), 解耦不增量。",
+  "guardrails": [
+    "R01 gate冻结",
+    "R02 负/真小=合法完成",
+    "R03 walk-forward α",
+    "R05 生产冻结",
+    "R11 分regime",
+    "R13 bootstrap负控"
+  ]
+}

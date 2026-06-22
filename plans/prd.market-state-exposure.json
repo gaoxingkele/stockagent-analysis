@@ -1,0 +1,85 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/market-state-exposure",
+  "northStar": "Track A book层: 测 paper 'In Good and in Bad Times?' 启发的市场状态动态暴露 overlay 是否改善 V12.31 净多头book风险调整收益。paper核心=横截面因子alpha熊市更强(75%来自空头端,套利限制). 但我们long-only(吃不到空头端,paper多头端非对称弱)且净多头(有beta). 故存在张力: paper的alpha择时(熊市加仓) vs 趋势跟随beta择时(牛市加仓). 用事前GOOD_TIMES(MA200+3年趋势,沪深300+中证500)缩放book暴露, de-lookahead真实book(WFE-001 Sharpe1.31)上walk-forward测, 必带随机择时placebo负控(SIGN-R13). 定位=管尾部风险非造alpha. 生产线V12.31冻结(R05).",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "每个非skip task产出工件 + research/verdicts/MS-*.json",
+    "MS-002 overlay 在 de-lookahead WFE-001 book 上评估完毕 (PASS/真小/REJECT)",
+    "必含随机择时 placebo 负控 + static-deleveraged 同均暴露对照 (隔离 timing vs 降暴露)",
+    "生产线指纹未变 (v12_scoring.py + 生产模型 hash 基线一致)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "启动写死(R01); 分regime/state(R11); placebo负控(R13); 定位tail-risk非alpha",
+    "signal": "GOOD_TIMES = mean(MA200_state, UP3y_state) over {沪深300,中证500}, 月末状态赋下月(事前无前瞻), ∈{0熊,0.5过渡,1牛}",
+    "exposure_rule_PRIMARY_paper": "paper的alpha择时(冻结): GOOD_TIMES=0→暴露×1.0, 0.5→×0.7, 1→×0.4 (熊市加仓/牛市减仓); 释放资金=现金0收益; 唯一变体不调第二版",
+    "named_alternative_trend": "趋势跟随beta择时(对照, 反向): 0→×0.4, 0.5→×0.7, 1→×1.0 (牛市加仓/熊市减仓); 报告但非primary裁决(避免选winner的DoF, 若它赢需自己OOS)",
+    "arms": ["base=静态全暴露(WFE-001 book ret原值)", "dynamic_paper=PRIMARY规则", "trend=对照规则", "static_dele=常数均暴露(=mean(m), Sharpe≡base, 隔离降暴露)", "placebo=随机月度暴露排列(N>=500 seed)"],
+    "metrics": "年化Sharpe / 年化收益 / maxDD / 最差月 / 月胜率; 另出 book 按 GOOD_TIMES 分state的Sharpe(诊断: 我们究竟在哪种state赚/亏)",
+    "gate_PASS": "dynamic_paper Sharpe > base 且 placebo p值<0.05(dynamic Sharpe 超>=95%随机择时) 且 maxDD不更差 且 改善不集中单一state. (static_dele Sharpe≡base故任何Sharpe提升必来自timing非降暴露)",
+    "verdict": "全过=PASS; Sharpe略升但placebo不显著 或 仅降maxDD不升Sharpe=真小(tail-risk工具记录不强上); 否则REJECT. 负/真小=合法完成(R02)",
+    "caveat": "①de-lookahead OOS窗(2024-10~2026-06)无熊月(GT全>=0.5), primary规则的'熊市加仓'臂无法在诚实数据测→只测'牛市减仓'侧; 熊市行为用全周期2022-2026 lookahead book作supporting(明确lookahead警告非裁决). ②long-only净多头吃不到paper空头端alpha, 预期弱."
+  },
+  "responsePlaybook": {
+    "PASS": "市场状态暴露择时改善净多头book → MS-003 深挖(状态分桶/暴露曲线/与现金sleeve整合), 独立评估落地形态不动V12.31",
+    "真小": "记 tail-risk overlay 候选(降回撤但不造alpha), 文档化, 不强上",
+    "REJECT_paper反指": "paper的熊市加仓规则在净多头反而伤(beta吃回撤) → 文档化long-only与market-neutral的择时分野; 若trend对照赢则记为单独假设待OOS",
+    "REJECT_无timing": "dynamic≈base 或 placebo不显著 → 无timing技能, 干净REJECT"
+  },
+  "features": [
+    {
+      "id": "MS-001",
+      "title": "GOOD_TIMES 市场状态指标 (paper复刻, 事前无前瞻) + 可行性诊断",
+      "acceptanceCriteria": [
+        "research/ms_goodtimes.py: MA200_state + UP3y_state over 沪深300+中证500, 月末赋下月, GOOD_TIMES∈{0,0.5,1}",
+        "research/cache/ms_goodtimes.parquet + 逐月序列 + OOS窗变化诊断",
+        "research/verdicts/MS-001.json status=built + 可行性结论"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-18",
+      "notes": "research/ms_goodtimes.py. 全样本2022-2026: 11熊/30过渡/13牛 std0.353; OOS窗2024-10~2026-06: 0熊/10过渡/11牛 std0.249(可行但无熊月). verdict MS-001.json."
+    },
+    {
+      "id": "MS-002",
+      "title": "暴露overlay测试 (de-lookahead WFE-001 book, base/dynamic/trend/static_dele/placebo)",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "research/ms_overlay.py: 在 wfe001_book_oos 日级ret上应用5臂, 算 Sharpe/年化/maxDD/最差月/月胜率",
+        "placebo: 随机月度暴露排列 N>=500 seed, 报 dynamic Sharpe 的经验 p值",
+        "book 按 GOOD_TIMES 分state 的 Sharpe 诊断 (定位赚/亏 state)",
+        "断言 preRegisteredGate.gate_PASS; research/verdicts/MS-002.json status in {PASS,真小,REJECT_*}",
+        "supporting: 全周期2022-2026 book(lookahead, 明确警告) 上同overlay 看熊市行为"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-18",
+      "notes": "research/ms_overlay.py. 真小_仅降回撤→实质REJECT(paper对long-only反指). 5臂: dynamic_paper Sharpe1.31→1.21反指(牛市砍仓), trend1.32≈base, placebo p=0.588零技能, static_dele≡base证maxDD改善纯降暴露. **关键: book绝对Sharpe(0.81→1.26→1.65)+超额alpha(过渡+0.35%→牛+2.82%)双双随GOOD_TIMES单调上升=我们alpha bull-loaded, 与paper熊市强完全反转**. 机制: long-only吃不到空头端+启动子牛市最有效+净多头beta. verdict MS-002.json."
+    },
+    {
+      "id": "MS-003",
+      "title": "深挖 (仅 MS-002=PASS/优质发现): 暴露曲线优化/状态分桶/现金sleeve整合",
+      "acceptanceCriteria": [
+        "条件触发: 仅MS-002出优质发现解除; 否则skip文档化",
+        "research/verdicts/MS-003.json"
+      ],
+      "priority": 3,
+      "passes": false,
+      "skip": true,
+      "skipReason": "保持skip: MS-002=真小/REJECT(paper反指), 无PASS优质发现解除深挖。timing变体已穷尽(paper反指/trend微弱/placebo无技能), 无productive深挖线。"
+    },
+    {
+      "id": "MS-SUMMARY",
+      "title": "收尾: 裁决汇总 + 元结论 + memory",
+      "acceptanceCriteria": [
+        "research/verdicts/MS-SUMMARY.json + 更新progress.md + 写memory",
+        "结论: paper alpha择时 vs trend beta择时 在net-long book哪个成立 + tail-risk价值"
+      ],
+      "priority": 4,
+      "passes": true,
+      "completed_at": "2026-06-18",
+      "notes": "verdict MS-SUMMARY.json + research/MARKET_STATE_EXPOSURE_FINDINGS.md + memory + progress. 元结论: paper alpha熊市强=long-short市场中性+空头端套利限制现象, 不可移植long-only A股净多头book(我们alpha bull-loaded)."
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "id": "BT-001",
+  "status": "built",
+  "conclusion": "引擎就绪。engine.py 解析型自检全通过 (买入持有/成本核算 round-trip≈0.30%/涨跌停不可成交/T+1/carryover 换手)。(A) picks 复刻 t005 选股 α: 19 月 corr +1.00 MAE 0.66pp, repl 均值 +4.41 vs t005 +3.75 → 喂引擎的 picks 忠实于 V12.31 baseline 臂。(B) 等权成本关 book 过引擎: 每再平衡期(≈20d)超额均值 +5.45% vs t005 选股 α +3.75% → 同量级, 引擎核算无 bug。book 年化 +126.5% Sharpe +2.79 maxDD -21.3% 月换手 1.52。成本/滑点敏感+基准对照+regime 分解留 BT-002。",
+  "metrics": {
+    "t005_repl_corr": 0.999,
+    "t005_repl_mae_pp": 0.661,
+    "repl_alpha_mean_pp": 4.415,
+    "t005_base_alpha_mean_pp": 3.754,
+    "engine_period_excess_mean_pct": 5.452,
+    "book_ann_return": 1.265,
+    "book_sharpe": 2.789,
+    "book_max_drawdown": -0.2127,
+    "book_avg_monthly_turnover": 1.515,
+    "book_avg_exposure": 0.922
+  },
+  "cost_model": {
+    "commission": 0.00025,
+    "stamp_sell": 0.0005,
+    "transfer": 1e-05,
+    "slippage": 0.001,
+    "enabled": false,
+    "buy_rate": 0.0,
+    "sell_rate": 0.0
+  },
+  "artifacts": [
+    "research/backtest/engine.py",
+    "research/backtest/gen_picks.py",
+    "research/backtest/run_bt001.py",
+    "research/cache/bt001/picks_v1231_daily.parquet",
+    "research/cache/bt001/bt001_book_equal_costoff.parquet",
+    "research/cache/bt001/bt001_market_equal_costoff.parquet",
+    "research/cache/bt001/bt001_results.json"
+  ],
+  "note": "引擎=BT-001 核心交付; 解析自检证核算, t005 复刻证输入忠实, 等权成本关 book 与 t005 选股 α 同量级证无 bug。生产线只读 (SIGN-R05), 大缓存 gitignored, 前向 r20_fresh 仅 cache。"
+}

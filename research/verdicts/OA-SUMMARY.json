@@ -1,0 +1,52 @@
+{
+  "campaign": "orthogonal-alpha (Track C2)",
+  "date": "2026-06-18",
+  "n_trials_screened": 24,
+  "n_trials_dsr_with_dof": 72,
+  "phase1_proceed": [
+    "OA-VOL",
+    "OA-VP"
+  ],
+  "phase1_reject": [
+    "OA-COM"
+  ],
+  "deferred_no_data": [
+    "OA-RC (no report_rc permission)",
+    "OA-NEWS (only market-level major_news)"
+  ],
+  "walk_forward_gate": {
+    "pass": [],
+    "真小": [],
+    "reject": [
+      "OA-VOL-GATE",
+      "OA-VP-GATE"
+    ]
+  },
+  "landable_alpha": false,
+  "meta_conclusion": "正交因子 campaign 净结果 = 无可落地新 alpha。两个真异象 (低波动 ivol_60 IC t=-6.69, 隔夜-日内 on_minus_in_20 IC t=8.04) 过 Phase-1 廉价正交闸 (正交于 mom/size/value/quality), 但接 V12.31 池 19月 walk-forward 双双 REJECT (Δα=-0.15/-0.70pp, PBO 0.8 过拟合) — V12.31 价量均值回归核已捕获 (低波动经 pyr_velocity, 隔夜经 pump/ratio)。商品供应链渠道 Phase-1 塌缩 (beta 被 size/industry 吸收)。分析师修正 (理论最强) + 新闻政策因数据闸关闭 deferred。再次印证 0605 元结论: 正交≠有α; 即时可拉信号的可交易部分=V12.31 已吃。第22-23个被否假设。",
+  "what_would_change_it": [
+    "report_rc 权限开通 → 分析师修正动量 (codex 排第1真正交 prior, 唯一未测的强候选)",
+    "个股级 news/anns_d 权限 或 投 LLM 实体抽取管线 → 新闻/政策横截面因子",
+    "微结构/盘口/Level-2 数据 (本 token 不含) → 真正脱离价量空间的正交信息"
+  ],
+  "artifacts": {
+    "screen_tool": "research/oa_screen.py",
+    "builds": [
+      "research/oa_vol_factors.py",
+      "research/oa_vp_factors.py",
+      "research/oa_com_factors.py",
+      "research/oa_1h_compare.py"
+    ],
+    "gate": "research/oa_gate.py",
+    "verdicts": [
+      "research\\verdicts\\OA-000.json",
+      "research\\verdicts\\OA-1H.json",
+      "research\\verdicts\\OA-COM.json",
+      "research\\verdicts\\OA-VOL-GATE.json",
+      "research\\verdicts\\OA-VOL.json",
+      "research\\verdicts\\OA-VP-GATE.json",
+      "research\\verdicts\\OA-VP.json"
+    ],
+    "codex_review": "research/cache/codex_oa_review_out.txt"
+  }
+}

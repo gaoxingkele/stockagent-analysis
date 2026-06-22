@@ -1,0 +1,33 @@
+{
+  "id": "DIAG-001",
+  "status": "built",
+  "conclusion": "DIAG-001 (纯只读, 复用 dep001/wfe001 已缓存 OOS picks+book+价表, 不重训不改策略): 诊断 WFE-001 (含 holder, Sharpe 1.31) vs DEP-001 (剔 holder, 0.84) 的 0.46 book Sharpe 摆动来源。在 20 个 20交易日再平衡 cohort 上比两臂 V12.31 实际入账持仓 (alloc 加权双轨, 复刻引擎口径)。**overlap/turnover**: 平均持仓 18 只, Jaccard 0.33, 每 cohort 被替换 19.2 只 (占 106%), 共同票权重 Spearman 0.86, 差异权重 57%。**收益差归因 Δ=Σ(w_dep−w_wfe)·ret** (权重相同的票贡献恒 0 → Δ 全部来自 swing 票): 每 cohort 平均 24 只 swing 票, 前3只占 cohort 毛|Δ| 54% (top1 28%); 池化前 10 个单票-cohort 事件占全期毛|Δ| 20%, 前 20 占 32%, 唯一 swing 票 431 只 (HHI 0.008, 有效 ~120 个独立事件)。信号侧累计净Δ(DEP−WFE) -27.97pp 与 book 实际累计净Δ -28.12pp 同号 (归因口径忠实)。**裁决 [全局重排]**: 0.46 book Sharpe 摆动来自**全局重排**: 两臂持仓重叠不高 (平均 Jaccard 0.33, 每 cohort 19.2 只被替换 = 占持仓 106%), 共同票权重 Spearman 0.86, 差异权重 57%; cohort 收益差跨 24 只 swing 票铺开 (前3只仅占毛|Δ| 54%, 池化前10事件 20%) → **模型对小扰动整体敏感** (剔 1 个 0.005% 因子重排了整批入选), 非个别票。部署须降集中/增 N 稳健性 (strategy 层, 另议; 见 responsePlaybook['全局重排'])。 印证 DEP-001 'clean确认' (IC 几乎不变, Sharpe 跌 = picks-path 敏感性而非信号损失) 的具体机制。生产线 V12.31 全程只读冻结 (R05); 本 task 描述性定位非 gate (R03)。",
+  "metrics": {
+    "n_cohorts": 20,
+    "mean_n_holdings": 18.23,
+    "mean_jaccard": 0.3265,
+    "mean_n_replaced": 19.25,
+    "replaced_frac_of_holdings": 1.0562,
+    "mean_weight_spearman_common": 0.8598,
+    "mean_diff_weight_frac": 0.57,
+    "mean_n_swing_per_cohort": 24.1,
+    "mean_topk_swing_share": 0.5447,
+    "mean_top1_swing_share": 0.2833,
+    "pooled_top10_event_share": 0.2038,
+    "pooled_top20_event_share": 0.3152,
+    "n_unique_swing_codes": 431,
+    "hhi_events": 0.0084,
+    "effective_n_events": 119.68,
+    "signal_cum_net_delta_pp": -27.9734,
+    "book_cum_net_delta_pp": -28.1194,
+    "few_stocks_dominant": false,
+    "knife_edge_selection": false,
+    "playbook": "全局重排"
+  },
+  "artifacts": [
+    "research/backtest/run_diag001.py",
+    "research/cache/diag001/diag001_cohort_turnover.parquet",
+    "research/cache/diag001/diag001_results.json"
+  ],
+  "note": "纯只读: 复用 wfe001/dep001 已缓存 OOS picks+book+价表, 不重训不改策略 (R05, 生产指纹未变)。cohort=20交易日再平衡 (复刻引擎 build_dual_alloc_targets 口径)。Δ=Σ(w_dep−w_wfe)·ret 把 cohort 收益差归因到单票 (权重相同票贡献恒0 → Δ 全来自 swing 票)。ST 源头排除 (R06); regime 已标注 (R11); 描述性定位=合法完成 (R02); 中间指标≠ship (R03); 大缓存 research/cache/diag001/ gitignored 无 features 写入 (R04)。codex#5 诊断: 把 0.46 摆动来源讲清, 用于部署稳健性判断, 不改 1.31/0.84 定性。"
+}

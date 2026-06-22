@@ -1,0 +1,95 @@
+{
+  "id": "SLV-003",
+  "status": "REJECT_no_diversification",
+  "conclusion": "MOMENTUM 分散性决策闸 FAIL → REJECT_no_diversification。SQUAT 最差 4 月 [202401(SQ +0.078/MOM +0.134), 202302(SQ +0.097/MOM +0.092), 202307(SQ +0.097/MOM +0.100), 202606(SQ +0.098/MOM +0.133)] 里 MOMENTUM 同月代理收益均值 0.11499 (4/4 月为正), 全样本 corr(SQUAT,MOMENTUM)=0.5931。未过闸原因: corr(SQUAT,MOMENTUM)=0.5931≥0.3 — 月度收益同向, 不提供分散。叠加 SLV-002 (MOMENTUM 裸 α 最弱+力竭尾最肥): MOMENTUM 既无独立 α 又不在深蹲尾部提供 book 分散 → **重要发现: 砍掉 Phase 2 MOMENTUM sleeve, 三 sleeve 缩为 squat+base 双 sleeve**。这印证 SLV-001/002 的累积证据 (MOMENTUM 启动率虽高但风险收益与尾部价值都不支撑独立 sleeve)。廉价描述闸非 ship, 但作为 Phase 0 go/no-go 直接定调 Phase 2 架构 (R03 描述闸合法定决策范围内)。",
+  "playbook_hit": "动量不分散深蹲尾部 → 砍掉 Phase 2 MOMENTUM sleeve, 三 sleeve 缩为 squat+base 双 sleeve, 文档化",
+  "metrics": {
+    "window": [
+      "20230103",
+      "20260604"
+    ],
+    "n_launch_samples": 511388,
+    "n_months_all_buckets": 26,
+    "corr_matrix": {
+      "SQUAT": {
+        "SQUAT": 1.0,
+        "BASE": 0.8204,
+        "MOMENTUM": 0.5931
+      },
+      "BASE": {
+        "SQUAT": 0.8204,
+        "BASE": 1.0,
+        "MOMENTUM": 0.6693
+      },
+      "MOMENTUM": {
+        "SQUAT": 0.5931,
+        "BASE": 0.6693,
+        "MOMENTUM": 1.0
+      }
+    },
+    "corr_squat_momentum": 0.5931,
+    "squat_worst_K_months": [
+      {
+        "month": "202401",
+        "squat_ret5": 0.07755,
+        "momentum_ret5": 0.13423,
+        "base_ret5": 0.08583,
+        "squat_n": 3234,
+        "momentum_n": 154
+      },
+      {
+        "month": "202302",
+        "squat_ret5": 0.09656,
+        "momentum_ret5": 0.09217,
+        "base_ret5": 0.08694,
+        "squat_n": 654,
+        "momentum_n": 432
+      },
+      {
+        "month": "202307",
+        "squat_ret5": 0.09697,
+        "momentum_ret5": 0.10046,
+        "base_ret5": 0.101,
+        "squat_n": 828,
+        "momentum_n": 533
+      },
+      {
+        "month": "202606",
+        "squat_ret5": 0.09814,
+        "momentum_ret5": 0.13308,
+        "base_ret5": null,
+        "squat_n": 1084,
+        "momentum_n": 112
+      }
+    ],
+    "momentum_mean_in_squat_worst": 0.11499,
+    "momentum_n_positive_in_worst": 4,
+    "gate": {
+      "mean_gate": true,
+      "corr_gate": false,
+      "corr_threshold": 0.3,
+      "K": 4
+    },
+    "by_regime": {
+      "momentum": {
+        "n_months": 10,
+        "corr_squat_momentum": 0.0691,
+        "corr_squat_base": 0.1186
+      },
+      "reversal": {
+        "n_months": 14,
+        "corr_squat_momentum": 0.6339,
+        "corr_squat_base": 0.7283
+      },
+      "mixed": {
+        "n_months": 7,
+        "corr_squat_momentum": 0.9759,
+        "corr_squat_base": 0.9524
+      }
+    }
+  },
+  "artifacts": [
+    "research/cache/slv003_results.json"
+  ],
+  "note": "月度 long-only 代理 = 该月该桶全部 launch 等权前向5d收益 (cell>=30); 入场口径冻结复用 SLV-001/002 (次日开盘, 全因果, R01); 前向列只留 cache 非 features (R04); ST 源头已排除 (R06); 分 regime 复核 corr (R11); 廉价描述闸定 Phase 0 go/no-go 非 ship 落地 (R03)。"
+}

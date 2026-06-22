@@ -1,0 +1,54 @@
+{
+  "id": "BT-004",
+  "status": "REJECT_reskin",
+  "conclusion": "单一表示 ctx=(MA20前5日内已上拐)×(MA5上穿MA20金叉), 严格不搜窗口/MA组合 (R01)。事件率 1.483% (28,126 例)。扣 [pump(ratio_s5)+MA20斜率+pyr_velocity+ADX] 后残差对 T+20 RankIC: 非重叠(每20日, headline) **0.00019** t=0.007 (n=19); 全日重叠(参考) -0.00159 t=-0.25。raw(不扣) 非重叠 IC -0.00287 → 扣控制后塌缩。Deflated Sharpe=PSR(SR*=0, 单表示 trials=1): per-period Sharpe -0.1193 PSR 0.3051 (非重叠 n=19, 偏少仅辅助)。Gate (|IC|>=0.01 & |t|>=2 & PSR>=0.95 三闸): IC False / t False / deflation False => **REJECT_reskin**。 ctx 增益被 [MA斜率/pump/pyr/ADX] 吃掉 (印证 DESIGN §5 先验: 事件序列 ≈ 现有 TA 重打包), 不作 meta-label; 生产线冻结 (R05)。",
+  "metrics": {
+    "resid_ic_nonoverlap": 0.00019,
+    "resid_t_nonoverlap": 0.007,
+    "resid_ic_n_periods": 19,
+    "resid_ic_all_days": -0.00159,
+    "resid_t_all_days": -0.25,
+    "raw_ic_nonoverlap": -0.00287,
+    "deflated_sharpe_psr": 0.3051,
+    "spread_sharpe_per_period": -0.1193,
+    "spread_sharpe_annual": -0.424,
+    "ctx_event_rate": 0.014828,
+    "ctx_count": 28126
+  },
+  "resid_ic_by_regime": {
+    "mixed": {
+      "mean_ic": -0.02113,
+      "t": -2.296,
+      "n": 85,
+      "ir": -0.249
+    },
+    "momentum": {
+      "mean_ic": -0.01795,
+      "t": -1.669,
+      "n": 118,
+      "ir": -0.154
+    },
+    "reversal": {
+      "mean_ic": 0.01967,
+      "t": 1.843,
+      "n": 169,
+      "ir": 0.142
+    }
+  },
+  "gate": {
+    "threshold": "|残差IC(非重叠)|>=0.01 & |t|>=2 & PSR>=0.95 (冻结 R01)",
+    "pass_ic": false,
+    "pass_t": false,
+    "pass_deflation": false,
+    "gate_pass": false,
+    "status": "REJECT_reskin"
+  },
+  "pbo_note": "PBO (CSCV) 需在多配置/多策略试验集上度量过拟合; 本测严格单一表示 (不搜窗口/MA组合, trials=1), PBO 退化为 0/不适用。以单表示 Deflated Sharpe=PSR(SR*=0, trials=1) 替代多重检验扣减; 非重叠周期 n=19 偏少, PSR 仅作辅助, gate 主依据残差 IC + 非重叠 t。",
+  "caveat": "单一表示严格冻结 (不搜 K/窗口/MA 组合, 防 López de Prado 组合过拟合); T+20 重叠 → headline 用非重叠每 20 日取样以防 t 膨胀 (全日 t 仅参考); PSR 替代多重检验扣减 (trials=1), PBO 单配置退化不适用; r20_fresh 前向只在 research/cache (R04), ST 源头排除 (R06), 生产线未碰 (R05)。",
+  "artifacts": [
+    "research/backtest/run_bt004.py",
+    "research/cache/bt004/px_feats.parquet",
+    "research/cache/bt004/bt004_results.json"
+  ],
+  "note": "预注册单表示残差 gate (R01 阈值冻结); 中间 IC≠ship (R03), 三闸共判; REJECT_reskin = 合法完成 (R02); regime 分层必带 (R11); checkpoint px_feats (R08); 大缓存 gitignored, 无 features 写入 (R04)。"
+}

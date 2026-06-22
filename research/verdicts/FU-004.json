@@ -1,0 +1,10 @@
+{
+  "task": "FU-004",
+  "status": "skipped",
+  "conclusion": "因 FU-003 verdict=C_塌缩 (头号因子 or_yoy 47月正交 IC=+0.0055 |t|=1.08, 远未达 |IC|>=0.02 & |t|>=3), 触发 responsePlaybook FU-003_outcomes::C 的 precondition skip — 廉价 REJECT, 不进 walk-forward (省 ~算力)。无 go 信号, 不评估 fu004_gate。",
+  "responsePlaybook_branch": "precondition skip (FU-003_outcomes::C → FU-004 skip)",
+  "verdict": "SKIPPED (上游 REJECT)",
+  "skipReason": "FU-003 成长正交信号在功率充足(47月)的扣全控制残差 IC 上塌缩, 不存在可进 walk-forward 的候选臂。",
+  "upstream": "research/verdicts/FU-003.json (status=C_塌缩)",
+  "guardrails": ["SIGN-R02 负结果=合法完成", "SIGN-R03 IC go/no-go 闸省 walk-forward 算力", "SIGN-R01 gate 阈值冻结未改"]
+}

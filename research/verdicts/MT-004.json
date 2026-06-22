@@ -1,0 +1,73 @@
+{
+  "id": "MT-004",
+  "isGate": true,
+  "status": "REJECT",
+  "conclusion": "三组对比 + 决策 gate。Phase-1: A(数字起卦)=no_residual; B(体用趋势, mhB_upper)=residual_signal resid2-IC=+0.0214 t=10.32; C(累积卦序列, mhC_move_std)=residual_signal resid2-IC=+0.0463 t=10.87 — 但二者都只存活线性动量残差化, MT-001/003 把 apples-to-apples 硬约束(须加 已实现波动率 + 多尺度MA堆叠/非线性趋势)甩给本任务。本任务两步定 ship: (1) 升级线性消融 resid3(扣 线性动量 + vol_20/atr_20 + mom_10/60 + 4个多尺度MA堆叠斜率): B/C 残差竟仍线性存活(B resid3-IC=+0.0217 t=14.6 几乎不变; C +0.0463→+0.0300 t=17.5 衰减但仍过闸) → 线性消融不足以定论(离散卦象与vol/趋势是非线性关系, 线性OLS扣不干净), 故按 gate 进 walk-forward。(2) 19月 walk-forward apples-to-apples(两臂GBDT(r20)只差是否含梅花特征, baseline=12个标准TA对同一走势的编码, meihua臂=标准TA+全部mhB_*10+mhC_*10, GBDT可非线性吃标准TA): Δα=+0.308pp/月(刚过+0.30阈), Sharpe -1.64→-1.11(↑), 但 **最差月 -2.875→-3.259pp(变差)** → 事前注册 gate(SIGN-R01 冻结)第3条'最差月不低于baseline'不过 ⇒ REJECT。决定性证据: 全期 Δα=+0.308pp 几乎全部来自单月 202410(该月 Δα=+5.875, 19月Δα总和仅+5.843); **剔除 202410 后平均 Δα=-0.0018pp(实质为零)**, 正Δα月仅 11/19。判定: 梅花轨迹特征相对'标准技术指标对同一走势的非线性编码'无稳健可落地真α(单月outlier撑起的伪增益), 与 SIGN-R12 诚实预警一致(B=MA堆叠换皮/C=波动率换皮, 非占卜)。MT-005 不落地, 保持 skip。",
+  "metrics": {
+    "alpha_delta_pp": 0.308,
+    "sharpe": -1.11,
+    "worst_month": -3.259,
+    "pos_alpha_month_ratio": 0.421,
+    "delta_alpha_excl_202410_pp": -0.0018,
+    "delta_alpha_momentum_pp": 0.003,
+    "delta_alpha_reversal_pp": 0.376,
+    "baseline_alpha_pp": -0.363,
+    "meihua_alpha_pp": -0.056,
+    "baseline_sharpe": -1.64,
+    "baseline_worst_month": -2.875,
+    "n_months": 19,
+    "window": ["202410", "202604"]
+  },
+  "gate_conditions": {
+    "delta_alpha>=+0.30pp": true,
+    "sharpe>=baseline": true,
+    "worst_month>=baseline": false,
+    "delta_alpha_momentum>=0": true,
+    "delta_alpha_reversal>=0": true
+  },
+  "phase1_comparison_BAC": {
+    "A_数字起卦": {"status": "no_residual", "best": "mhA_moving", "resid2_ic": -0.003749, "resid2_t": -2.53},
+    "B_体用趋势": {"status": "residual_signal", "best": "mhB_upper", "resid2_ic": 0.021385, "resid2_t": 10.32},
+    "C_累积卦序列": {"status": "residual_signal", "best": "mhC_move_std", "resid2_ic": 0.046334, "resid2_t": 10.87}
+  },
+  "upgraded_ablation_resid3": {
+    "controls_added_vs_phase1": ["vol_20", "atr_20", "mom_10", "mom_60", "r_c_ma5", "r_ma5_ma10", "r_ma10_ma20", "r_ma20_ma60"],
+    "B_mhB_upper": {"resid2_ic": 0.021493, "resid2_t": 10.41, "resid3_ic": 0.021726, "resid3_t": 14.61, "survives": true},
+    "C_mhC_move_std": {"resid2_ic": 0.046334, "resid2_t": 10.87, "resid3_ic": 0.030028, "resid3_t": 17.53, "survives": true},
+    "note": "线性 resid3 上 B/C 残差仍存活(B不变/C衰减35%但仍过闸)。但 mhB_upper=离散MA堆叠卦, mhC_move_std=|涨跌幅|桶离散度≈波动率, 与 vol/趋势是非线性关系, 线性 OLS 扣不干净 → 线性消融不足以定 ship, 须 walk-forward(让baseline用GBDT非线性吃标准TA)。"
+  },
+  "walk_forward": {
+    "protocol": "19月(202410-202604) walk-forward, 24月lookback+1月gap monthly retrain, GBDT(r20) top 5% long, apples-to-apples(两臂唯一差异=是否含梅花特征)",
+    "single_month_dominance": "全期 Δα 总和 +5.843pp 中 202410 单月贡献 +5.875pp; 剔除 202410 后平均 Δα=-0.0018pp(零)。聚合 Δα=+0.308pp 是单月 outlier 伪增益, 非稳健信号。",
+    "comparison_table": {
+      "metric": ["alpha_monthly_pp", "sharpe", "worst_month_pp", "pos_alpha_month_ratio", "alpha_momentum_pp", "alpha_reversal_pp"],
+      "baseline_standard_TA": [-0.363, -1.64, -2.875, 0.316, 0.045, -0.306],
+      "meihua_arm": [-0.056, -1.11, -3.259, 0.421, 0.048, 0.070],
+      "delta": [0.308, 0.54, -0.384, 0.105, 0.003, 0.376]
+    }
+  },
+  "decision_logic": "事前注册 phase2_gate 要求 Δα>=+0.30pp 且 Sharpe不降 且 最差月不降(+R11 动量/反转月不伤)。5条件中 worst_month>=baseline 不过 ⇒ REJECT(SIGN-R01 不许移门柱)。即便不卡最差月, 单月 202410 撑起全部 Δα(剔除后≈0) 亦不构成可落地真α(SIGN-R02 负结果合法完成; SIGN-R03 只认 walk-forward α)。",
+  "ablation": {
+    "controls": ["cal_month×industry OOF", "线性动量 mom_5/mom_20/ma_pos/rsi_14 (resid2)", "完整标准TA: +vol_20/atr_20/mom_10/mom_60/4×MA堆叠斜率 (resid3)", "walk-forward GBDT 非线性吃标准TA(最终裁决)"],
+    "interpretation": "梅花轨迹三方案(B/A/C)对走势的数论分桶, 在扣除标准技术指标对同一走势的非线性编码后, 无稳健独立于动量/趋势/波动率的可落地信号。B=多尺度MA堆叠换皮, C=已实现波动率换皮, A=动量换皮(SIGN-R12 诚实预警全部兑现)。北极星问题答案: 否, 梅花数论分桶不能超过/补充标准TA对同一走势的编码。"
+  },
+  "artifacts": [
+    "research/mt004_compare_gate.py",
+    "research/mt004_walk_forward.py",
+    "research/cache/mt004_results.json",
+    "research/cache/mt004_wf_results.json",
+    "research/cache/mt004_wf_monthly.csv",
+    "research/cache/mt004_controls.parquet",
+    "research/cache/mt004_panel.parquet",
+    "research/cache/mt004_wf_panel.parquet"
+  ],
+  "guardrails": [
+    "SIGN-R01 gate冻结未移门柱(worst_month不过即REJECT)",
+    "SIGN-R02 负结果=合法完成, 未在同段OOS重调",
+    "SIGN-R03 只认walk-forward α, 中间IC不作数",
+    "SIGN-R05 生产线指纹未变",
+    "SIGN-R06 ST源头排除",
+    "SIGN-R11 按regime分层(动量/反转月Δα)",
+    "SIGN-R12 异类特征消融(线性resid3+walk-forward非线性), 诚实预警兑现"
+  ]
+}

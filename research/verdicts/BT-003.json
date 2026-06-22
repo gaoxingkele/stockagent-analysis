@@ -1,0 +1,133 @@
+{
+  "id": "BT-003",
+  "status": "built",
+  "conclusion": "对 V12.31 研究 book 的 7 个组件逐个 leave-one-out 过引擎 (基线滑点 0.10%, 21 月)。完整基线: 净Sharpe +2.10 年化 +94.0% maxDD -23.6%。正贡献 (去掉伤 book): no_r20_pool, no_pump_up_sort, no_pyr_velocity; 拖后腿 (去掉反而改善 book): no_industry_cap, no_dual_track, no_ind_mom_excl; 中性: no_pump_down。最核心 = no_r20_pool (去掉 ΔSharpe -1.37); 最拖后腿 = no_ind_mom_excl (去掉 ΔSharpe +0.10)。Δ 为受控差分 (共模 lookahead 相消, 归因比绝对量级可信); 生产线冻结, 仅作 future opt-in 候选依据 (SIGN-R02/R05)。",
+  "baseline_metrics": {
+    "net_sharpe": 2.1,
+    "ann_return": 0.9404,
+    "max_drawdown": -0.2359,
+    "avg_monthly_turnover": 1.533,
+    "n_months": 21
+  },
+  "attribution_table": {
+    "no_r20_pool": {
+      "kind": "评分组件",
+      "delta_net_sharpe": -1.373,
+      "delta_ann_return": -0.7493,
+      "delta_max_drawdown": 0.0059,
+      "contribution": "正贡献",
+      "regime_delta_ret_pp": {
+        "mixed": -4.528,
+        "momentum": -4.21,
+        "reversal": -2.555
+      }
+    },
+    "no_pump_up_sort": {
+      "kind": "评分组件",
+      "delta_net_sharpe": -0.159,
+      "delta_ann_return": -0.0959,
+      "delta_max_drawdown": 0.027,
+      "contribution": "正贡献",
+      "regime_delta_ret_pp": {
+        "mixed": -3.342,
+        "momentum": 0.581,
+        "reversal": -0.094
+      }
+    },
+    "no_pump_down": {
+      "kind": "评分组件",
+      "delta_net_sharpe": 0.0,
+      "delta_ann_return": 0.0,
+      "delta_max_drawdown": 0.0,
+      "contribution": "中性",
+      "regime_delta_ret_pp": {
+        "mixed": 0.0,
+        "momentum": 0.0,
+        "reversal": 0.0
+      }
+    },
+    "no_industry_cap": {
+      "kind": "评分组件",
+      "delta_net_sharpe": 0.03,
+      "delta_ann_return": 0.0268,
+      "delta_max_drawdown": 0.0,
+      "contribution": "拖后腿",
+      "regime_delta_ret_pp": {
+        "mixed": 0.417,
+        "momentum": -0.019,
+        "reversal": 0.191
+      }
+    },
+    "no_dual_track": {
+      "kind": "评分组件",
+      "delta_net_sharpe": 0.045,
+      "delta_ann_return": -0.1503,
+      "delta_max_drawdown": 0.0472,
+      "contribution": "拖后腿",
+      "regime_delta_ret_pp": {
+        "mixed": -0.565,
+        "momentum": -0.299,
+        "reversal": -0.418
+      }
+    },
+    "no_pyr_velocity": {
+      "kind": "V7c铁律",
+      "delta_net_sharpe": -0.061,
+      "delta_ann_return": 0.038,
+      "delta_max_drawdown": 0.0008,
+      "contribution": "正贡献",
+      "regime_delta_ret_pp": {
+        "mixed": -0.431,
+        "momentum": 0.831,
+        "reversal": -0.786
+      }
+    },
+    "no_ind_mom_excl": {
+      "kind": "V7c铁律",
+      "delta_net_sharpe": 0.104,
+      "delta_ann_return": 0.0533,
+      "delta_max_drawdown": -0.0,
+      "contribution": "拖后腿",
+      "regime_delta_ret_pp": {
+        "mixed": 1.289,
+        "momentum": 0.045,
+        "reversal": 0.149
+      }
+    }
+  },
+  "ranking": {
+    "biggest_laggard": "no_ind_mom_excl",
+    "biggest_laggard_delta_sharpe": 0.104,
+    "most_core": "no_r20_pool",
+    "most_core_delta_sharpe": -1.373
+  },
+  "positive_contributors": [
+    "no_r20_pool",
+    "no_pump_up_sort",
+    "no_pyr_velocity"
+  ],
+  "laggards": [
+    "no_industry_cap",
+    "no_dual_track",
+    "no_ind_mom_excl"
+  ],
+  "neutral": [
+    "no_pump_down"
+  ],
+  "cost_model": {
+    "commission": 0.00025,
+    "stamp_sell": 0.0005,
+    "transfer": 1e-05,
+    "slippage": 0.001,
+    "enabled": true,
+    "buy_rate": 0.00126,
+    "sell_rate": 0.00176
+  },
+  "caveat": "Δ 是受控 leave-one-out 差分 (各 arm 共享同一 r20 池 lookahead + 同成本 + 同引擎), 共模偏差相消, 故归因 (谁正贡献/谁拖后腿) 比 BT-002 绝对量级更可信; 但绝对 Sharpe 仍含共模 lookahead, 非可交易声明。双静默/非僵尸生产推理铁律不在 t005 研究池 harness, 其 book 归因不在本 task 范围。",
+  "artifacts": [
+    "research/backtest/run_bt003.py",
+    "research/cache/bt003/scored_daily.parquet",
+    "research/cache/bt003/bt003_results.json"
+  ],
+  "note": "leave-one-out 受控差分 (R03 看相对不看绝对); ST 源头排除 (R06); regime 分层必带 (R11); 成本/池参数逐字冻结复刻 t005 build_dual (R01); 复用缓存 s5+r20 模型不重训, 生产只读 (R05); 评分按月 checkpoint (R08); 大缓存 gitignored, 无 features 写入 (R04); 描述性归因非 ship gate (R02)。"
+}

@@ -1,0 +1,187 @@
+{
+  "id": "SL-002",
+  "status": "built",
+  "conclusion": "成本×持有期×容量敏感性已建。Arm_A 各档 net 月度收益/Sharpe/换手见网格 (9 cells: cost[0, 15, 30]bps × H[3, 5, 10])。主测 (H=5/30bps往返): net/笔 -1.726%, 净月度 -1.614%, Sharpe(年) -1.868, 年换手≈50.4轮→成本拖累≈15.12%/yr。持有期越短换手/成本拖累越高 (H=3→84轮); 成本从 0→30bps 单调侵蚀。容量(≤成交额1%/等权): min-binding 中位 0.054 亿元。龙虎榜净买入股 r5 原始收益本就为负 (SL-001), 净月度多为负属预期 — 净 α(Arm_A−等权市场) 与席位技能净增量(Arm_A−Arm_B) walk-forward 裁决在 SL-003 (SIGN-R03)。",
+  "artifact": "research\\cache\\sl002_grid.parquet",
+  "design": {
+    "grid": {
+      "cost_bps_roundtrip": [
+        0,
+        15,
+        30
+      ],
+      "H_hold_days": [
+        3,
+        5,
+        10
+      ],
+      "top_n": 10
+    },
+    "monthly_convention": "事件等权: 当月所有 entry-day Arm_A 篮子 net 收益均值; Sharpe=月序列 mean/std×√12",
+    "turnover": "年化换手=252/H 满仓连续轮次; 成本拖累=换手×cost_rt",
+    "capacity_assumption": "单股建仓 ≤ event_date 成交额 1%; 等权 top-10; 无冲击",
+    "frozen": "复用 SL-001 引擎/常数 (SEAT_SORT/TOP_N/MOM_WIN/RET_CLIP), 仅扫 cost/H (SIGN-R01)"
+  },
+  "metrics": {
+    "grid": [
+      {
+        "H": 3,
+        "cost_bps_roundtrip": 0,
+        "n_event_days": 812,
+        "n_months": 41,
+        "net_mean_per_trade_pct": -0.7399,
+        "net_monthly_mean_pct": -0.6647,
+        "net_monthly_std_pct": 1.9937,
+        "sharpe_ann": -1.155,
+        "pos_month_ratio": 0.2927,
+        "ann_roundtrips_full_invest": 84.0,
+        "ann_cost_drag_pct": 0.0
+      },
+      {
+        "H": 3,
+        "cost_bps_roundtrip": 15,
+        "n_event_days": 812,
+        "n_months": 41,
+        "net_mean_per_trade_pct": -0.8899,
+        "net_monthly_mean_pct": -0.8147,
+        "net_monthly_std_pct": 1.9937,
+        "sharpe_ann": -1.416,
+        "pos_month_ratio": 0.2683,
+        "ann_roundtrips_full_invest": 84.0,
+        "ann_cost_drag_pct": 12.6
+      },
+      {
+        "H": 3,
+        "cost_bps_roundtrip": 30,
+        "n_event_days": 812,
+        "n_months": 41,
+        "net_mean_per_trade_pct": -1.0399,
+        "net_monthly_mean_pct": -0.9647,
+        "net_monthly_std_pct": 1.9937,
+        "sharpe_ann": -1.676,
+        "pos_month_ratio": 0.2439,
+        "ann_roundtrips_full_invest": 84.0,
+        "ann_cost_drag_pct": 25.2
+      },
+      {
+        "H": 5,
+        "cost_bps_roundtrip": 0,
+        "n_event_days": 812,
+        "n_months": 41,
+        "net_mean_per_trade_pct": -1.4257,
+        "net_monthly_mean_pct": -1.3139,
+        "net_monthly_std_pct": 2.9932,
+        "sharpe_ann": -1.521,
+        "pos_month_ratio": 0.2439,
+        "ann_roundtrips_full_invest": 50.4,
+        "ann_cost_drag_pct": 0.0
+      },
+      {
+        "H": 5,
+        "cost_bps_roundtrip": 15,
+        "n_event_days": 812,
+        "n_months": 41,
+        "net_mean_per_trade_pct": -1.5757,
+        "net_monthly_mean_pct": -1.4639,
+        "net_monthly_std_pct": 2.9932,
+        "sharpe_ann": -1.694,
+        "pos_month_ratio": 0.2439,
+        "ann_roundtrips_full_invest": 50.4,
+        "ann_cost_drag_pct": 7.56
+      },
+      {
+        "H": 5,
+        "cost_bps_roundtrip": 30,
+        "n_event_days": 812,
+        "n_months": 41,
+        "net_mean_per_trade_pct": -1.7257,
+        "net_monthly_mean_pct": -1.6139,
+        "net_monthly_std_pct": 2.9932,
+        "sharpe_ann": -1.868,
+        "pos_month_ratio": 0.2195,
+        "ann_roundtrips_full_invest": 50.4,
+        "ann_cost_drag_pct": 15.12
+      },
+      {
+        "H": 10,
+        "cost_bps_roundtrip": 0,
+        "n_event_days": 810,
+        "n_months": 41,
+        "net_mean_per_trade_pct": -2.392,
+        "net_monthly_mean_pct": -2.1622,
+        "net_monthly_std_pct": 5.1012,
+        "sharpe_ann": -1.468,
+        "pos_month_ratio": 0.2439,
+        "ann_roundtrips_full_invest": 25.2,
+        "ann_cost_drag_pct": 0.0
+      },
+      {
+        "H": 10,
+        "cost_bps_roundtrip": 15,
+        "n_event_days": 810,
+        "n_months": 41,
+        "net_mean_per_trade_pct": -2.542,
+        "net_monthly_mean_pct": -2.3122,
+        "net_monthly_std_pct": 5.1012,
+        "sharpe_ann": -1.57,
+        "pos_month_ratio": 0.2439,
+        "ann_roundtrips_full_invest": 25.2,
+        "ann_cost_drag_pct": 3.78
+      },
+      {
+        "H": 10,
+        "cost_bps_roundtrip": 30,
+        "n_event_days": 810,
+        "n_months": 41,
+        "net_mean_per_trade_pct": -2.692,
+        "net_monthly_mean_pct": -2.4622,
+        "net_monthly_std_pct": 5.1012,
+        "sharpe_ann": -1.672,
+        "pos_month_ratio": 0.2439,
+        "ann_roundtrips_full_invest": 25.2,
+        "ann_cost_drag_pct": 7.56
+      }
+    ],
+    "main_cell_H5_30bps": {
+      "H": 5.0,
+      "cost_bps_roundtrip": 30.0,
+      "n_event_days": 812.0,
+      "n_months": 41.0,
+      "net_mean_per_trade_pct": -1.7257,
+      "net_monthly_mean_pct": -1.6139,
+      "net_monthly_std_pct": 2.9932,
+      "sharpe_ann": -1.868,
+      "pos_month_ratio": 0.2195,
+      "ann_roundtrips_full_invest": 50.4,
+      "ann_cost_drag_pct": 15.12
+    },
+    "capacity": {
+      "assumption": "单股建仓 ≤ event_date 成交额 1%; 等权 top-10; 无冲击",
+      "amount_unit": "Tushare daily amount=千元, ×1000=元",
+      "n_event_days_with_amount": 812,
+      "cap_minbind_yiyuan": {
+        "median": 0.054,
+        "p25": 0.023,
+        "p75": 0.131
+      },
+      "cap_sum_yiyuan": {
+        "median": 0.912,
+        "p25": 0.583,
+        "p75": 1.407
+      },
+      "note": "min-binding=等权下可部署资金(受当日最小成交额成分股约束); sum=各成分股各吃 1% 的松上界。短线高换手日内反复进出会进一步压缩有效容量(此为单次建仓静态估算)。"
+    }
+  },
+  "artifacts": [
+    "research\\cache\\sl002_grid.parquet",
+    "research/cache/sl001/picks_H3.parquet",
+    "research/cache/sl001/picks_H5.parquet",
+    "research/cache/sl001/picks_H10.parquet"
+  ],
+  "guardrails": [
+    "SIGN-R03 敏感性描述≠落地, 净α裁决在 SL-003",
+    "SIGN-R01 冻结网格复用引擎常数",
+    "SIGN-R06 ST 源头排除(引擎内)",
+    "SIGN-R08 picks 按 H checkpoint"
+  ]
+}

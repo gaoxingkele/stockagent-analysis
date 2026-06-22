@@ -1,0 +1,110 @@
+{
+  "id": "PL-001",
+  "status": "built",
+  "conclusion": "已构建 v3c / debias 两版 3 分类 label (5,306,437 行, ST 排除, 全因果)。诊断有两个关键发现, 都收紧/修正了北极星假设: (1) past_r5 偏好**不在 up-label** — 生产 v3c 的 up 类本就不限 past_r5, 两版 up 逐位相同 (up 正样本里 past_r5>=0 占 52%, ~CB-002 的 52%), 横盘/微涨启动早已是 up 正样本, 去偏在 UP 类对 past_r5>=0 启动**零增量覆盖**; label 级唯一 past_r5 约束在 DOWN 类 (past_r5<=8% 把 73,537 高涨幅伪跌启动踢成 neutral, 其中 past_r5>=0 占 97%), 去偏即去此 down 约束。(2) **粗粒度'ge0 软降权'不成立** (aggregate confirmed=False): OOS 上模型给 past_r5>=0 的平均 P_up 排名 0.529 反而**高于** lt0 0.472, 与其更高启动率 (0.1409 vs 0.1085) 方向一致。真实模式是 **barbell**: 模型奖励两端 (强超跌 rank 0.595 / 强动量 0.724), 低排平坦中段 (-5%~+5% rank 0.419 但启动率 0.1036) → 盲点更精确地在 **flat-mid 段** 而非全部 ge0。含义: 纯 label 重训 (PL-002) 杠杆仅在 down 约束 (up 零增量), 且模型已正确高排 ge0, 修盲点能力存疑 — 为 PL-004 的 REJECT_捕捉无α 分叉 (偏好=隐性质量过滤) 埋下伏笔。",
+  "label_def": {
+    "up": "fwd5d max_gain>=0.10 & max_dd>=-0.05 (两版相同, 不限 past_r5)",
+    "down_v3c": "fwd5d max_dd<=-0.10 & max_gain<=0.05 & past_r5<=0.08",
+    "down_debias": "fwd5d max_dd<=-0.10 & max_gain<=0.05 (去 past_r5 约束)",
+    "only_diff": "label 的 past_r5 约束 (仅在 down 类)"
+  },
+  "diagnosis": {
+    "A_label_definition": {
+      "up_label_identical_v3c_vs_debias": true,
+      "up_label_past_r5_dependence": "NONE (生产 v3c up 本就不限 past_r5)",
+      "n_up_v3c": 648754,
+      "n_up_debias": 648754,
+      "n_down_v3c": 322989,
+      "n_down_debias": 396526,
+      "n_down_reassigned_v3c_to_neutral": 73537,
+      "share_past_r5_ge0_in_reassigned_down": 0.967,
+      "note": "唯一 label 级 past_r5 约束在 DOWN 类 (past_r5<=8% 把高涨幅伪跌启动踢成 neutral); UP 类两版逐位相同 → 横盘/微涨启动早已是 up 正样本。"
+    },
+    "B_training_distribution": {
+      "share_past_r5_ge0_in_up_positives": 0.5232,
+      "base_type_dist_in_up_positives": {
+        "other": 0.3683,
+        "pullback": 0.2984,
+        "up_drift": 0.2258,
+        "flat_base": 0.1021,
+        "na": 0.0053
+      },
+      "note": "up 正样本里 past_r5>=0 占比; 若 ~CB-002 的 52% 量级 → up-label 已公平含横盘/微涨启动。"
+    },
+    "C_model_softdeprior": {
+      "oos_window": [
+        "20251001",
+        "20260601"
+      ],
+      "n_oos": 785942,
+      "by_past_r5_bucket": [
+        {
+          "bucket": "r5<-5%",
+          "n": 134205,
+          "actual_launch_rate": 0.13313,
+          "mean_P_up": 0.1464,
+          "mean_pup_rank": 0.5946
+        },
+        {
+          "bucket": "-5%~0",
+          "n": 272007,
+          "actual_launch_rate": 0.09541,
+          "mean_P_up": 0.0948,
+          "mean_pup_rank": 0.4076
+        },
+        {
+          "bucket": "0~5%",
+          "n": 248169,
+          "actual_launch_rate": 0.1126,
+          "mean_P_up": 0.09621,
+          "mean_pup_rank": 0.4315
+        },
+        {
+          "bucket": "r5>5%",
+          "n": 131561,
+          "actual_launch_rate": 0.19773,
+          "mean_P_up": 0.16559,
+          "mean_pup_rank": 0.7242
+        }
+      ],
+      "ge0_vs_lt0": {
+        "past_r5_ge0": {
+          "n": 386306,
+          "actual_launch_rate": 0.1409,
+          "mean_P_up": 0.11939,
+          "mean_pup_rank": 0.5289
+        },
+        "past_r5_lt0": {
+          "n": 399636,
+          "actual_launch_rate": 0.10846,
+          "mean_P_up": 0.11253,
+          "mean_pup_rank": 0.4723
+        }
+      },
+      "soft_deprioritization_aggregate_confirmed": false,
+      "barbell_flat_mid_underranked": {
+        "flat_mid_n": 520176,
+        "flat_mid_launch_rate": 0.10361,
+        "flat_mid_mean_pup_rank": 0.419,
+        "extreme_dip_r5_lt_-5pct_rank": 0.5946,
+        "extreme_up_r5_gt_5pct_rank": 0.7242,
+        "note": "barbell: 模型奖励两端 (强超跌 r5<-5% / 强动量 r5>5%), 低排平坦中段; 平坦中段启动率高于其 P_up 排名应得 → 真盲点在 flat-mid 而非全部 ge0。"
+      },
+      "by_regime": {},
+      "note": "aggregate 软降权 = past_r5>=0 实际启动率不低于 <0 但模型平均排名反而更低; 若 False 则 CB-002 的粗粒度'ge0 软降权'不成立, 盲点更精确地在 flat-mid 段。"
+    },
+    "D_coverage_delta": {
+      "n_launch_past_r5_ge0": 339444,
+      "covered_by_v3c_up": 339444,
+      "covered_by_debias_up": 339444,
+      "up_coverage_delta_on_r5ge0": 0,
+      "note": "关键发现: up 覆盖差 = 0 → 去偏 label 在 UP 类对 past_r5>=0 启动零增量 (它们本就是 v3c up 正样本)。label 级去偏只动 DOWN 约束, 故纯 label 重训修盲点的杠杆有限。"
+    }
+  },
+  "artifacts": [
+    "research/cache/pump_debias_label.parquet",
+    "research/cache/pl001_oos_pup.parquet",
+    "research/cache/pl001_results.json"
+  ],
+  "note": "label 留 cache 非 features (SIGN-R04); 生产模型只读 (SIGN-R05); 中间指标仅诊断, ship 由 PL-004 walk-forward 定 (SIGN-R03)。"
+}

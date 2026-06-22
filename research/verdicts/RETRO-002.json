@@ -1,0 +1,295 @@
+{
+  "task": "RETRO-002",
+  "status": "built",
+  "conclusion": "0501+ pick_concepts 内: winner(概念20d max_gain TOP20%)=513503, 其中 missed_winner(未入池)=511169; picks 自身概念 winner 命中率仅 53% (= 多数 picks 不是其概念里涨最猛的 20%)。 realized(hindsight)差异: missed_winner 的 20d max_gain 比 picks 高 +6.8% (天然: winner 按 max_gain 选的, 不可交易)。 ex-ante 可观测差异按 |SMD| 排序前三 = ['pyr_velocity_20_60', 'pump_down_s5', 'ratio_s5']; 其中**非模型分** ex-ante 特征 (动量/市值/换手/RSI/ADX) 最大差异 = mom_20(SMD-0.37), mom_60(SMD-0.28), adx(SMD-0.28)。 模型分 (pred_r20/ratio_s5) picks 远高于 missed_winner = 预期 (picks 正是被这些分选出的); 真问题 (missed_winner 是否有可学的 ex-ante 残差结构) 留 RETRO-003 扣桶 beta + 扣现有因子后判 (此处仅描述)。",
+  "metrics": {
+    "coverage": {
+      "n_pick_dates": 242,
+      "n_full20d_dates": 242,
+      "n_universe_obs": 1251601,
+      "n_pick": 4434,
+      "n_winner": 513503,
+      "n_missed_winner": 511169,
+      "pick_winner_hit_rate": 0.5263870094722598,
+      "missed_winner_base_rate": 0.4084121057749235,
+      "total_mv_coverage": 0.013865441142984066,
+      "winner_q": 0.8
+    },
+    "exante_compare": {
+      "pred_r20": {
+        "pick_mean": 3.185728016916008,
+        "pick_median": 3.2227283000438796,
+        "missed_mean": 2.217562748227935,
+        "missed_median": 1.8516971625021792,
+        "diff_mean": 0.9681652686880726,
+        "smd": 0.166562251407749,
+        "pick_cov": 1.0,
+        "missed_cov": 0.9774399464756275
+      },
+      "ratio_s5": {
+        "pick_mean": 2.7098245838498034,
+        "pick_median": 2.1828908302116066,
+        "missed_mean": 1.9533270753203968,
+        "missed_median": 1.584957869300768,
+        "diff_mean": 0.7564975085294066,
+        "smd": 0.4918115820828027,
+        "pick_cov": 1.0,
+        "missed_cov": 0.9774399464756275
+      },
+      "pump_down_s5": {
+        "pick_mean": 0.04533950124275778,
+        "pick_median": 0.03473511179079678,
+        "missed_mean": 0.08358258814689913,
+        "missed_median": 0.060936478797364926,
+        "diff_mean": -0.03824308690414135,
+        "smd": -0.5526052282487105,
+        "pick_cov": 1.0,
+        "missed_cov": 0.9774399464756275
+      },
+      "pyr_velocity_20_60": {
+        "pick_mean": -0.06324032374388362,
+        "pick_median": -0.056404171831964806,
+        "missed_mean": -0.010209895712495136,
+        "missed_median": -0.005391957028939465,
+        "diff_mean": -0.05303042803138849,
+        "smd": -0.6193570726448563,
+        "pick_cov": 1.0,
+        "missed_cov": 0.9494726792900196
+      },
+      "past_r5": {
+        "pick_mean": -0.0012706846331323879,
+        "pick_median": 0.004202727511146143,
+        "missed_mean": 0.01245345084947672,
+        "missed_median": 0.004830917874396157,
+        "diff_mean": -0.013724135482609107,
+        "smd": -0.20846933802594597,
+        "pick_cov": 0.9990978800180425,
+        "missed_cov": 0.9980769569359644
+      },
+      "mom_20": {
+        "pick_mean": -0.004507150576419809,
+        "pick_median": 0.005970149253731405,
+        "missed_mean": 0.04562737642114343,
+        "missed_median": 0.02276102539984648,
+        "diff_mean": -0.05013452699756324,
+        "smd": -0.36569388634078787,
+        "pick_cov": 0.9993234100135318,
+        "missed_cov": 0.9960737055650871
+      },
+      "mom_60": {
+        "pick_mean": 0.045336311460747666,
+        "pick_median": 0.040796181052056846,
+        "missed_mean": 0.11628387555862583,
+        "missed_median": 0.05689277899343548,
+        "diff_mean": -0.07094756409787817,
+        "smd": -0.2829441405659958,
+        "pick_cov": 0.9950383400992332,
+        "missed_cov": 0.9927656019829059
+      },
+      "rsi_14": {
+        "pick_mean": 50.418775350715244,
+        "pick_median": 51.166910890185044,
+        "missed_mean": 52.75700790874043,
+        "missed_median": 52.30343247397611,
+        "diff_mean": -2.338232558025183,
+        "smd": -0.21924708785887695,
+        "pick_cov": 1.0,
+        "missed_cov": 1.0
+      },
+      "turn_amt_20": {
+        "pick_mean": 0.9697707617175585,
+        "pick_median": 0.8760708776166186,
+        "missed_mean": 1.132429849287048,
+        "missed_median": 0.894859215946537,
+        "diff_mean": -0.16265908756948944,
+        "smd": -0.2259428962325942,
+        "pick_cov": 1.0,
+        "missed_cov": 0.9988203509993759
+      },
+      "adx": {
+        "pick_mean": 23.315603831052133,
+        "pick_median": 21.099435723813137,
+        "missed_mean": 26.183343493490664,
+        "missed_median": 23.80971204681029,
+        "diff_mean": -2.867739662438531,
+        "smd": -0.2766044657311562,
+        "pick_cov": 1.0,
+        "missed_cov": 0.9975996196952476
+      },
+      "total_mv": {
+        "pick_mean": 1990567.1623952382,
+        "pick_median": 649520.1869,
+        "missed_mean": 2862920.5912731104,
+        "missed_median": 1057905.093,
+        "diff_mean": -872353.4288778722,
+        "smd": -0.1737879685340003,
+        "pick_cov": 0.004736129905277402,
+        "missed_cov": 0.013277409232563007
+      }
+    },
+    "realized_compare_hindsight": {
+      "max_gain_20": {
+        "pick_mean": 0.16564865195829725,
+        "pick_median": 0.10737328016668468,
+        "missed_mean": 0.23364516294142118,
+        "missed_median": 0.18324022346368718,
+        "diff_mean": -0.06799651098312393,
+        "smd": -0.36497892990173314,
+        "pick_cov": 1.0,
+        "missed_cov": 1.0
+      },
+      "ret_20": {
+        "pick_mean": 0.06898300076394644,
+        "pick_median": 0.04230266027038798,
+        "missed_mean": 0.10623887394008501,
+        "missed_median": 0.0798845043310874,
+        "diff_mean": -0.03725587317613857,
+        "smd": -0.21658036692407687,
+        "pick_cov": 0.9961659900766802,
+        "missed_cov": 0.9975546247914095
+      }
+    },
+    "exante_smd_ranked": [
+      [
+        "pyr_velocity_20_60",
+        -0.6193570726448563
+      ],
+      [
+        "pump_down_s5",
+        -0.5526052282487105
+      ],
+      [
+        "ratio_s5",
+        0.4918115820828027
+      ],
+      [
+        "mom_20",
+        -0.36569388634078787
+      ],
+      [
+        "mom_60",
+        -0.2829441405659958
+      ],
+      [
+        "adx",
+        -0.2766044657311562
+      ],
+      [
+        "turn_amt_20",
+        -0.2259428962325942
+      ],
+      [
+        "rsi_14",
+        -0.21924708785887695
+      ],
+      [
+        "past_r5",
+        -0.20846933802594597
+      ],
+      [
+        "total_mv",
+        -0.1737879685340003
+      ],
+      [
+        "pred_r20",
+        0.166562251407749
+      ]
+    ],
+    "nonmodel_exante_smd_ranked": [
+      [
+        "mom_20",
+        -0.36569388634078787
+      ],
+      [
+        "mom_60",
+        -0.2829441405659958
+      ],
+      [
+        "adx",
+        -0.2766044657311562
+      ],
+      [
+        "turn_amt_20",
+        -0.2259428962325942
+      ],
+      [
+        "rsi_14",
+        -0.21924708785887695
+      ],
+      [
+        "past_r5",
+        -0.20846933802594597
+      ],
+      [
+        "total_mv",
+        -0.1737879685340003
+      ]
+    ],
+    "by_regime": {
+      "mixed": {
+        "n_pick": 1335,
+        "n_missed": 153840,
+        "max_gain_gap": -0.07279731409735701,
+        "ret20_gap": -0.03805868115314942,
+        "top_exante_smd": {
+          "pyr_velocity_20_60": -0.6193570726448563,
+          "pump_down_s5": -0.5526052282487105,
+          "ratio_s5": 0.4918115820828027
+        }
+      },
+      "momentum": {
+        "n_pick": 1313,
+        "n_missed": 160382,
+        "max_gain_gap": -0.07152046501814333,
+        "ret20_gap": -0.04135013458966978,
+        "top_exante_smd": {
+          "pyr_velocity_20_60": -0.6193570726448563,
+          "pump_down_s5": -0.5526052282487105,
+          "ratio_s5": 0.4918115820828027
+        }
+      },
+      "reversal": {
+        "n_pick": 1786,
+        "n_missed": 196947,
+        "max_gain_gap": -0.06328631690993236,
+        "ret20_gap": -0.03461237234788157,
+        "top_exante_smd": {
+          "pyr_velocity_20_60": -0.6193570726448563,
+          "pump_down_s5": -0.5526052282487105,
+          "ratio_s5": 0.4918115820828027
+        }
+      }
+    }
+  },
+  "ex_ante_vs_hindsight": {
+    "ex_ante_observable": [
+      "pred_r20",
+      "ratio_s5",
+      "pump_down_s5",
+      "pyr_velocity_20_60",
+      "past_r5",
+      "mom_20",
+      "mom_60",
+      "rsi_14",
+      "turn_amt_20",
+      "adx",
+      "total_mv"
+    ],
+    "realized_hindsight_not_tradeable": [
+      "max_gain_20",
+      "ret_20"
+    ],
+    "note": "ex-ante = D 收盘可知 (模型分/动量/市值/换手/RSI/ADX); realized max_gain/ret_20 = 事后实现, winner 正是按 max_gain 选的 → realized 差异是定义性 hindsight, 不可交易 (SLV-002 陷阱)。模型分差异是套套逻辑 (picks 被模型分选出); 真正可能可学的是**非模型 ex-ante 特征**残差 → RETRO-003 gate。"
+  },
+  "caveats": [
+    "winner/missed_winner 是 forward-conditioned (按后续 20d max_gain 定义), '差异'的 realized 部分纯 hindsight 不可交易;",
+    "model-vintage: r20 训练窗 < 20250930, 早月 (202505~09) picks 的 pred_r20 带 in-sample 暴露 (vintage 标注);",
+    "total_mv 来自 factor_lab 覆盖到 ~20260126 (1% 行有值); 其余日市值缺失, 仅作部分参考;",
+    "(date,stock) 含 carryover/多概念聚合, 非独立样本; 描述性回顾非 gate (R03)。"
+  ],
+  "artifacts": [
+    "research/backtest/run_retro002.py",
+    "research/cache/retro002/retro002_universe.parquet"
+  ],
+  "discipline": "R01 winner_def/特征集冻结(描述性); R02 描述性=合法完成; R03 中间指标≠ship; R04 大缓存 gitignored 无 features 写入; R05 复用缓存评分未碰生产; R06 ST 源头排除; R11 regime 分层必带; ex-ante vs hindsight 严格分解 (hindsight 陷阱)。"
+}
