@@ -1,0 +1,81 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/duokongk",
+  "northStar": "用户提议把 TradingView duokongK 多空K线状态机当独立标注维度, 定义'空腿底部确认 + 空翻多变色窗口(≥3根)'作 onset 择时标注, 对应后续大涨(也可能横盘)。核心问: 把 duokongK 全因果状态机在全量 OHLC 面板上跑出匹配序列后, 这个'结构反转确认窗口'相对 V12.31 已有的 SQUAT(past_r5<0 反弹)是否多了信息, 还是又一个被现有 TA(past_r5/pyr_velocity/ADX/RSI)吃掉的换皮? 验证三问: ①窗口前向画像(大涨/横盘/失败占比) ②与 SQUAT 桶重叠率 ③残差增量消融(扣标准动量量后残差 IC + 残差窗口是否真兑现)。预期: 大面积重叠 SQUAT, 残差≈0 → REJECT_reskin(像 CB-003); 但用户窗口定义具体, 给个干净定论。移植规范+窗口定义+gate 见 research/duokongk/NOTES.md。生产线 V12.31 冻结, 本实验纯描述统计+残差消融非建 sleeve。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出 research/verdicts/DK-00x.json (status + conclusion + 关键数字)",
+    "duokongK 移植 faithful 全因果 (hhk/llk 用[1], 状态只依赖历史), 序列覆盖全量面板",
+    "窗口/标注边界预注册冻结于 NOTES.md, 不在结果上调 (R01)",
+    "全因果, ST 源头排除 (R06), 大缓存写 research/cache/ (gitignored), 前向/label 列不写 research/features/ (R04)",
+    "DK-003 残差 gate 已评估 (NEW_INFO / REJECT_reskin / REJECT_no_residual_pay 分型)",
+    "生产线指纹未变: v12_scoring.py hash 与基线一致 (R05)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "廉价描述统计+残差消融, 非 walk-forward 落地 gate (仅 NEW_INFO 才进 Phase 2)。移植规范+窗口定义见 NOTES.md §1/§2。",
+    "port_order": "每根K顺序: (a)首次突破 close>hhk→+1/close<llk→−1 (b)失败翻转 close<slLow(多)/close>slHigh(空) (c)移动止损跟极值; hhk=highest(high,30)[1], llk=lowest(low,30)[1], 全因果",
+    "window_def": "pivot_low: dk_dir=−1 段内 low[t]=min(low[t-5..t+5]) (右5根确认); 窗口: pivot 后 dk_dir −1→+1 且持续≥3根; dk_window=[pivot_idx..flip+3]; pivot 右5根确认=标注合法但实时迟到, 文档明示",
+    "validation": [
+      "画像: dk_window 后 20/40d 前向 大涨(≥+15%)/横盘(|ret|<5%)/失败(<−5%) 占比 + max_dd, 分regime",
+      "重叠: dk_window onset vs SLV-001 SQUAT桶 launch (res research/cache/slv001/router_panel.parquet) 的重叠率",
+      "残差 gate: 因果特征(dk_state/翻多recency/反转确认强度) 前向 IC, 扣[past_r5+pyr_velocity多窗+ADX+RSI] 残差 IC"
+    ],
+    "gate": "NEW_INFO = 残差|IC|≥0.01 且 |t|≥2 且 SQUAT外残差窗口前向显著兑现; REJECT_reskin = 残差被标准动量吃掉(|IC|<0.01); REJECT_no_residual_pay = 残差存在但前向不兑现/全在横盘"
+  },
+  "responsePlaybook": {
+    "note": "事前注册分叉 (冻结 R02)",
+    "DK-003": {
+      "NEW_INFO": "结构反转确认在 SQUAT 之上有真残差且兑现 → 排 Phase 2 walk-forward blend",
+      "REJECT_reskin": "残差被 past_r5/pyr_velocity/ADX 吃掉 → 换皮, 文档化(第N个被否, 同 CB-003)",
+      "REJECT_no_residual_pay": "有残差但不兑现/全横盘 → 窗口识别反转区但预测不了大涨vs横盘(=pump已在做的难题), 文档化"
+    }
+  },
+  "features": [
+    {
+      "id": "DK-001",
+      "title": "duokongK 状态机全因果移植 + 全量面板序列生成",
+      "plan_file": "research/duokongk/NOTES.md",
+      "acceptanceCriteria": [
+        "按 NOTES.md §1 faithful 移植 duokongK 状态机 (klen=30, 单根内顺序 a/b/c, hhk/llk 用[1] 全因果)",
+        "在全量 OHLC 面板 (复用 SLV-001 同宇宙, ST排除) 逐股跑出 dk_dir/dk_flip/bars_since_flip/dist_to_slLow_slHigh 序列",
+        "落 research/cache/dk001/duokongk_panel.parquet (ts_code,trade_date,dk_dir,dk_flip,...; 无 forward 列名)",
+        "因果自检: 抽样核对几只股 dk_dir 翻转点与突破/破位逻辑一致, 无未来泄漏",
+        "verdicts/DK-001.json: status=built, conclusion(覆盖股数/天数, 翻多翻空事件频次, 段长分布), 关键数字"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-14"
+    },
+    {
+      "id": "DK-002",
+      "title": "底部确认翻多窗口定义 + 前向画像 (大涨/横盘/失败)",
+      "plan_file": "research/duokongk/NOTES.md",
+      "acceptanceCriteria": [
+        "按 NOTES.md §2 标 dk_window (pivot_low 右5根确认 + 空翻多持续≥3根); pivot/窗口列只留 cache 非 features",
+        "画像: dk_window 后 20/40d 前向收益分布 + 大涨(≥+15%)/横盘(|ret|<5%)/失败(<−5%) 占比 + realized max_dd; 分 regime",
+        "事件量: 全量 dk_window 数, 月度频次; 与用户'含一个或多个启动子'核对(窗口内 true_launch 命中)",
+        "verdicts/DK-002.json: status=built, conclusion(三态占比+是否对应大涨), 画像表"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-14"
+    },
+    {
+      "id": "DK-003",
+      "title": "与 SQUAT 重叠率 + 残差增量消融 (换皮判定 gate)",
+      "plan_file": "research/duokongk/NOTES.md",
+      "acceptanceCriteria": [
+        "重叠: dk_window onset 与 SLV-001 SQUAT 桶 launch 的重叠率 (Jaccard/命中率)",
+        "残差: 构因果特征(dk_state/翻多recency/反转确认强度), 前向 IC; 扣[past_r5+pyr_velocity多窗+ADX+RSI] 后残差 IC + t值",
+        "SQUAT 外残差窗口(V12.31 未框)前向是否显著兑现 (vs 全在横盘)",
+        "按 preRegisteredGate.gate 判 NEW_INFO / REJECT_reskin / REJECT_no_residual_pay",
+        "verdicts/DK-003.json: status in {NEW_INFO,REJECT_reskin,REJECT_no_residual_pay}, conclusion, metrics(重叠率/raw IC/残差 IC/t/残差窗口兑现), playbook命中"
+      ],
+      "priority": 3,
+      "passes": true,
+      "completed_at": "2026-06-14"
+    }
+  ]
+}

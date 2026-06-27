@@ -35,3 +35,19 @@ add_doubao_provider.py
 .claude/
 Reference/
 logs_*.txt
+
+# research checkpoints (recomputable, large) — directory-level so nested dirs (cb001/, net001/...) are caught too
+research/cache/
+research/features/
+research/models/
+scripts/ralph/runs/
+
+# WorldQuant BRAIN session cache
+research/brain/.wq_session.json
+research/brain/mine_results.json
+research/brain/mine2_results.json
+research/brain/mine3_results.json
+
+.omx/
+research/brain/mineA_results.json
+research/brain/mineB_results.json

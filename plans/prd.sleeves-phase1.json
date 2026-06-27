@@ -1,0 +1,99 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/sleeves",
+  "northStar": "三原型 sleeve 架构 Phase 1: 建 BASE sleeve 并 walk-forward 决定是否落地。Phase 0 反转先验: 严格几何 BASE(squeeze+MA20走平+整理≥15日)启动率低(0.063)但 launch 质量最高(20d 均值+0.151/胜率0.829/dd_p10 −0.075 最薄)=罕见但干净, 解释 pump-debias 矛盾(broad flat-mid 拖低质名字加深尾, 严格 base 才 premium)。月度 ~51 launch/~1285 候选天, 每日 ~2-3 launch/~61 候选 → 可填可排, 但样本仍偏小。核心问: squat+base blend 能否 Δα>0 AND 最差月不比 squat-alone 差(=拿 BASE 质量不付尾)? v1 优先规则法(严格入场+突破确认+质量排序)绕开小样本训练陷阱(SLV-002 证入场本身是 edge), 训练打分作 v2 仅当样本够。生产线 V12.31 冻结, BASE sleeve 仅 opt-in 落地(默认关)。设计见 research/sleeves/DESIGN.md §9。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出 research/verdicts/BL-00x.json (status + conclusion + 关键数字)",
+    "BASE 入场/label 边界预注册冻结于 DESIGN.md/prd, 不在结果上调 (R01)",
+    "全因果, ST 源头排除 (R06), 大缓存写 research/cache/ (gitignored), 不写 research/features/ (R04)",
+    "BL-003 walk-forward gate 已评估 (PASS/真小/REJECT_tail/REJECT_no_alpha 分型)",
+    "生产线指纹未变: v12_scoring.py hash 与基线一致 (R05)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "启动写死(R01); 分regime(R11); 单月outlier; 复用 t005 walk-forward apples-to-apples 口径; v12_scoring 冻结只读",
+    "base_entry": "严格 router (SLV-001 边界: abs(ma20_slope_norm)<0.0015/日 且 boll_bw_pctile(250d)<0.30 且 整理时长≥15日 且 past_r5∈[-0.05,+0.05]) + 突破触发(当日放量收盘站上整理箱体上沿; 量比/换手定义在 BL-001 冻结)",
+    "base_label": "正样本 = 前向5日 max_gain≥10% & 紧 max_dd≥−4% (比 squat 的 −5% 紧, 这是替代被去掉 past_r5 的显式尾控); neutral/down 其余; 全因果 ST排除",
+    "blend_eval": "apples-to-apples 两臂仅是否注入 BASE: ArmA=SQUAT-only(=V12.31 V7c池→ratio→行业cap→TopN), ArmB=squat+base(保留 Q∈{3..5} 名额给 base_score 最高的 BASE 入场候选, 其余 ratio 排序填满至同 N, 同行业cap); v12_scoring 全程只读不改",
+    "gate": [
+      "Δα(ArmB − ArmA) > 0 pp/月 walk-forward (19月, apples-to-apples)",
+      "worst_month(ArmB) 不比 worst_month(ArmA) 差 (核心: 拿质量不付尾; 恶化即 REJECT_tail)",
+      "Sharpe 不降; 正α月占比不降; 单月outlier剔后 Δα 仍>0; 分regime不伤",
+      "BASE 注入频率/容量 must log (多少日真注入了 base, 每日均注入个数) — 不可静默"
+    ]
+  },
+  "responsePlaybook": {
+    "note": "事前注册分叉 (冻结 R02)",
+    "BL-002": {
+      "样本够": "规则法 v1 之上可加训练打分 v2 排序 BASE 入场",
+      "样本不够": "仅规则法 v1 (简单质量排序), 文档化小样本约束, 不强训"
+    },
+    "BL-003": {
+      "PASS": "Δα>0 且最差月不恶化 → BASE sleeve 值得落地 (opt-in 改进生产, 进 BL-004)",
+      "真小": "Δα>0 但增益小/容量限 → 记 blend 候选不强上 (类比 pump-debias 真小)",
+      "REJECT_tail": "Δα>0 但最差月恶化 → 重要发现: 严格 base premium 太罕见/已priced, blend 仍买尾, 与 pump-debias 同病, 文档化",
+      "REJECT_no_alpha": "Δα≤0 → BASE 质量在 blend 中未兑现 (被 squat 名额挤占或已被 V7c 池吃掉), 文档化"
+    }
+  },
+  "features": [
+    {
+      "id": "BL-001",
+      "title": "BASE 入场+突破确认+紧尾 label 设计 + 样本诊断",
+      "plan_file": "research/sleeves/DESIGN.md",
+      "acceptanceCriteria": [
+        "复用 SLV-001 router_panel, 在严格 BASE 桶上加突破触发: 定义箱体(整理段 high/low)+ 放量收盘站上箱顶(量比阈值在此冻结); 落 base_entry 事件",
+        "构建 base_label (前向5d max_gain≥10% & 紧 max_dd≥−4%, 全因果 ST排除), 留 research/cache 非 features",
+        "诊断: base_entry 月度/日度事件数, 正样本率, vs SLV-002 质量画像核对; 评估样本是否够训(决定 BL-002 v1规则/v2训练)",
+        "verdicts/BL-001.json: status=built, conclusion(入场事件量+正例率+样本充分性判断), 关键数字"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-13"
+    },
+    {
+      "id": "BL-002",
+      "title": "BASE sleeve 选择器 (规则法 v1 优先, 训练 v2 可选) — walk-forward 打分",
+      "plan_file": "research/sleeves/DESIGN.md",
+      "acceptanceCriteria": [
+        "v1 规则法: base_entry 候选按简单质量代理排序(SLV-002 证入场本身是 edge, 如 squeeze 紧度/突破量能/整理时长), 每(ts_code,trade_date)产 base_score; 全因果",
+        "若 BL-001 判样本够: v2 在 t005 walk-forward 口径(19月,24m lookback,月度重训)训 BASE 分类器(LGBM, 生产特征), 否则跳 v2 仅留 v1 并文档化",
+        "base_score 落 research/cache/bl002/ (月度), 供 BL-003 blend 注入排序",
+        "verdicts/BL-002.json: status=built, conclusion(v1/v2 选择+理由), 打分摘要(候选量/正例率/v2则AUC)"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-13"
+    },
+    {
+      "id": "BL-003",
+      "title": "squat+base blend walk-forward 决策 gate",
+      "plan_file": "research/sleeves/DESIGN.md",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "apples-to-apples 复用 t005 harness: ArmA=SQUAT-only(=V12.31), ArmB=squat+base(保留 Q∈{3..5} 名额给 base_score 最高 BASE 入场候选, 其余 ratio 填, 同 N/行业cap); v12_scoring 只读",
+        "19月 walk-forward, 断言 preRegisteredGate.gate 全部条件",
+        "BASE 注入频率/容量统计 (注入日占比, 日均注入个数) 写入 verdict",
+        "verdicts/BL-003.json: status in {PASS,真小,REJECT_tail,REJECT_no_alpha} + metrics{alpha_delta_pp,sharpe,worst_month,pos_alpha_month_ratio} + 双臂对照 + 单月outlier + 分regime + playbook命中"
+      ],
+      "priority": 3,
+      "passes": true,
+      "completed_at": "2026-06-13"
+    },
+    {
+      "id": "BL-004",
+      "title": "落地 (仅 BL-003=PASS): BASE sleeve opt-in 改进生产",
+      "plan_file": "research/sleeves/DESIGN.md",
+      "acceptanceCriteria": [
+        "opt-in 开关注入 BASE sleeve, 默认关; 默认生产路径(V12.31 v3c)逐位一致; v12_scoring 改动则更新 baseline_manifest",
+        "verdicts/BL-004.json: status in {landed, skipped}"
+      ],
+      "priority": 4,
+      "passes": false,
+      "skip": true,
+      "skipReason": "条件: 仅 BL-003=PASS 解除; 否则保持 skip。",
+      "notes": "未 PASS 不落地。"
+    }
+  ]
+}

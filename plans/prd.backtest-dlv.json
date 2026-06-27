@@ -1,0 +1,82 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/backtest",
+  "northStar": "Roadmap 剩余交付物 (Track A2/A3 + B + C1, 逐条实现+commit)。A1低换手已否(换手选股池结构性)。剩余都是部署/基础设施/卫生交付物, 非研究gate: DLV-001(A2)TreeSHAP解释层; DLV-002(A3)前向paper-trade落库harness; DLV-003(B)研究环升级(replication默认+PBO/Deflated Sharpe+reviewer panel checklist); DLV-004(C1)r20特征block-ablation剪枝卫生。每条产 verdict=built+摘要。生产线 V12.31 (v12_scoring/v12_dual_track) 只读冻结; PIT-clean r20(剔holder)为部署变体。设计见 research/ROADMAP_2026H2.md。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出 research/verdicts/DLV-00x.json (status=built + conclusion + 产物路径)",
+    "交付物代码落 research/backtest/ 或 scripts/; 复用现有 PIT-clean 模型/引擎, 不改生产文件",
+    "DLV-004 剪枝纯研究侧消融, 不动生产; 全因果 ST排除 (R06), 大缓存gitignored (R04)",
+    "生产线指纹未变: v12_scoring.py / v12_dual_track.py 只读 (R05)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "交付物实现, 非落地gate。DLV-004是卫生消融(低alpha预期, 效应量大概率噪声内)。",
+    "dlv001_treeshap": "research/backtest/treeshap_explain.py: 用 LightGBM booster.predict(pred_contrib=True) 内置TreeSHAP(无需shap库), 对 PIT-clean r20(dep001某月模型)的当月picks算逐只票加性归因, 输出每pick top正/负贡献因子表; demo跑最新月(202604)落 output/",
+    "dlv002_papertrade": "前向paper-trade落库harness: append-only记录每日PIT-clean picks(复用daily_dashboard/v12_scoring但用PIT-clean变体)→满20/40d按冻结口径算实现P&L→对照1.31±CI锚→红线前向数据不回流调参(SIGN-R01/R02); 接 V12.31_BASELINE.md 协议",
+    "dlv003_research_env": "研究环升级util: ①replication默认(多seed+per-cohort bootstrap CI包装函数) ②PBO/Deflated Sharpe模块(给搜索出的候选做多重检验校正) ③reviewer panel checklist文档(codex+claude+meta-judge流程); 落 research/ + 集成进verify或独立util",
+    "dlv004_pruning": "r20 235特征block-ablation: 分块(估值/行为/基本面/市值/市场/形态等)逐块剔除重训(embargo wf)或截面消融, 报各块ΔAUC/Δbook, 找净负块; 卫生用途, 效应量大概率21月噪声内须标注"
+  },
+  "responsePlaybook": {
+    "note": "事前注册 (R02)",
+    "DLV-004": {
+      "找到净负块": "某特征块净负贡献(像QuantML估值因子)→剪枝候选, 但须确认效应超噪声(bootstrap)才纳入V12.32",
+      "全块正/噪声内": "无净负块或效应在噪声内→r20特征集已干净, 剪枝无实质收益, 文档化"
+    }
+  },
+  "features": [
+    {
+      "id": "DLV-001",
+      "title": "A2 TreeSHAP 可解释层 (逐只票加性归因)",
+      "plan_file": "research/ROADMAP_2026H2.md",
+      "acceptanceCriteria": [
+        "按 dlv001_treeshap 实现 research/backtest/treeshap_explain.py (LightGBM pred_contrib 内置 TreeSHAP)",
+        "对 PIT-clean r20 最新月 picks 算逐只票 top 正/负贡献因子, demo 落 output/",
+        "verdicts/DLV-001.json: status=built, conclusion(解释层就绪+样例pick归因), 产物路径"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-16"
+    },
+    {
+      "id": "DLV-002",
+      "title": "A3 前向 paper-trade 落库 harness (PIT-clean)",
+      "plan_file": "research/ROADMAP_2026H2.md",
+      "acceptanceCriteria": [
+        "按 dlv002_papertrade 实现 append-only 每日 PIT-clean picks 落库 + 满horizon算实现P&L + 对照1.31±CI",
+        "红线: 前向数据不回流调参; 接 V12.31_BASELINE.md 协议",
+        "verdicts/DLV-002.json: status=built, conclusion(paper-trade harness就绪+落库格式), 产物路径"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-16"
+    },
+    {
+      "id": "DLV-003",
+      "title": "B 研究环升级 (replication默认+PBO+reviewer panel)",
+      "plan_file": "research/ROADMAP_2026H2.md",
+      "acceptanceCriteria": [
+        "按 dlv003_research_env 实现 replication包装(多seed+bootstrap CI) + PBO/Deflated Sharpe模块 + reviewer panel checklist文档",
+        "落 research/ util, 可被未来候选gate调用",
+        "verdicts/DLV-003.json: status=built, conclusion(研究环升级就绪+三件套), 产物路径"
+      ],
+      "priority": 3,
+      "passes": true,
+      "completed_at": "2026-06-16"
+    },
+    {
+      "id": "DLV-004",
+      "title": "C1 r20 特征 block-ablation 剪枝 (卫生)",
+      "plan_file": "research/ROADMAP_2026H2.md",
+      "acceptanceCriteria": [
+        "按 dlv004_pruning 对 r20 特征分块消融, 报各块Δ, 找净负块",
+        "效应量与21月噪声对照(bootstrap), 标注是否超噪声",
+        "verdicts/DLV-004.json: status in {找到净负块, 全块正/噪声内} + metrics(各块Δ) + playbook命中"
+      ],
+      "priority": 4,
+      "passes": true,
+      "completed_at": "2026-06-16"
+    }
+  ]
+}

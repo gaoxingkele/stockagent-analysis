@@ -1,0 +1,59 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/backtest",
+  "northStar": "Roadmap Track A1: 低换手/稳定化组合构建 (唯一识别出的真实 book 层杠杆, 不依赖新信号)。动机: DIAG-001 证 V12.31 picks 对小扰动重排 106%(选股不稳/隐性高换手); QuantML 论文证高换手吃 alpha(0.6%成本 Sharpe 2.23→1.67)须加换手惩罚; EX-002 风格暴露。在 PIT-clean (DEP-001 剔 holder) OOS r20 分数 + BT 引擎上, 加换手惩罚/持仓粘性/增N降集中的预注册网格, 看能否换手↓+稳定↑同时净 Sharpe 不降。这是治'刀尖选股+成本'两病的对路杠杆。生产线 V12.31 只读冻结; 低换手构建是 book 层可部署改进候选 (过 gate 才纳入 V12.32)。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出 research/verdicts/STAB-00x.json (status + conclusion + 关键数字)",
+    "构建网格预注册冻结, 不搜不在结果上调 (R01); 复用 DEP-001 PIT-clean OOS picks/分数, 不重训不改选股逻辑",
+    "embargo + close-based 成本口径, apples-to-apples vs PIT-clean 基线(DEP-001), ST源头排除 (R06)",
+    "受控 Δ 同分数共模相消; 大缓存 gitignored 不写 features (R04); 生产线指纹未变 (R05)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "A1 book 层构建实验, 唯一改动=组合构建(换手/集中), 选股分数=DEP-001 PIT-clean 不动。",
+    "construction_grid": "baseline=现行双轨 top20/20d再平衡(=PIT-clean 基线); V_stick=持仓粘性(已持有名次跌出 top30 或分数掉过 margin 才卖, 其余留, 滞回带); V_N30=top30 降集中; V_combo=粘性+N30; 全部同 PIT-clean 分数/embargo/close-based/成本/双轨权重口径, 仅构建规则不同",
+    "metrics": "每变体: 月均换手率 / 净Sharpe(close-based+成本) / maxDD / 持仓期期重叠(稳定代理) / 扰动重排率(对 holder-剔除分数的 pick 重叠, 接 DIAG-001)",
+    "gate_stab": "book 改进候选 = 某变体 月均换手 ↓>=20% AND 净Sharpe 配对bootstrap ΔvsBaseline CI 不材料性<0(不显著变差) AND maxDD 不升 AND 稳定代理↑; 满足=纳入 V12.32 候选, 否则记录"
+  },
+  "responsePlaybook": {
+    "note": "事前注册 (R02)",
+    "STAB-001": {
+      "找到改进变体": "某低换手变体 换手↓且Sharpe不降稳定↑ → V12.32 book 候选, 进 STAB-002 深验",
+      "全变体降Sharpe": "低换手以Sharpe为代价 → V12.31 现行换手是必要的, 记录不动",
+      "无差异": "构建变化对21月book无显著影响(噪声主导) → 文档化, 稳定性靠增N不靠粘性"
+    }
+  },
+  "features": [
+    {
+      "id": "STAB-001",
+      "title": "低换手/稳定化构建网格 (换手↓稳定↑Sharpe不降?)",
+      "plan_file": "research/ROADMAP_2026H2.md",
+      "acceptanceCriteria": [
+        "复用 DEP-001 PIT-clean OOS picks/分数 + BT 引擎, 按 construction_grid 跑 baseline/V_stick/V_N30/V_combo",
+        "每变体报 月均换手/净Sharpe/maxDD/持仓重叠稳定/扰动重排率(接DIAG-001), 配对bootstrap ΔSharpe vs baseline CI",
+        "按 gate_stab 判各变体; 选出最佳低换手变体(若有)",
+        "verdicts/STAB-001.json: status in {找到改进变体, 全变体降Sharpe, 无差异} + metrics(各变体换手/Sharpe/maxDD/稳定/ΔCI) + playbook命中"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-16",
+      "verdict": "无差异 — 构建层无法降换手 (churn 结构性). baseline 复刻 DEP-001 Sharpe 0.843 + DIAG-001 扰动Jaccard 0.327 双验证. V_stick 换手仅-2% (连续Jaccard 0.018→0.023, 几乎无可留任名), V_N30 换手-0% Sharpe 0.84→0.77, V_combo Sharpe 材料性降 0.57 (CI[-0.515,-0.019]). 无变体过 gate_stab. 真换手在选股池 (连续Jaccard~0.02=每期~98%换名), 非构建可修."
+    },
+    {
+      "id": "STAB-002",
+      "title": "最佳变体深验 (换手-成本敏感 + 稳定性 + 分regime)",
+      "plan_file": "research/ROADMAP_2026H2.md",
+      "acceptanceCriteria": [
+        "若STAB-001找到改进变体: 对它做换手-成本敏感(0/0.2/0.6/1.0%双边, 同QuantML) + 稳定性(扰动重排率vs baseline) + 分regime净Sharpe",
+        "若STAB-001无改进变体则skip并文档化",
+        "verdicts/STAB-002.json: status=built, conclusion(最佳变体是否真稳健改进+成本下还成立), metrics(各成本档Sharpe/稳定/分regime)"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-16",
+      "verdict": "skipped (前提不满足) — STAB-001 无改进变体 (best_variant=null, 无一过 gate_stab) → 按 acceptanceCriteria '若无改进变体则 skip 并文档化' (R02 documented skip). 不在不存在的最佳变体上硬跑成本敏感/稳定性/regime 深验 (R01). 根因: 换手是选股池结构性 (连续 Jaccard ~0.02 每期~98%换名), 构建层杠杆触不到, 须改选股层 (超 A1 范围). 生产线 V12.31 只读冻结 (R05)."
+    }
+  ]
+}

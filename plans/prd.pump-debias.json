@@ -1,0 +1,105 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/pump-debias",
+  "northStar": "CB-002 确认真盲点: 真启动里 past_r5≥0(横盘/微涨)占 52.2% 且启动率更高(13.15% vs 下蹲 11.19%), 但被 pump 启动子 v3c label 的 past_r5 偏好软降权 52.2% (启动子在下蹲样本上学的, 给横盘股打低分)。修法=label层 retrain: 去掉/放松 pump up label 的 past_r5 偏好, 纳入横盘/微涨启动样本, 让启动子公平对待所有启动前形态。核心问: ① retrain 后能否捕捉那 52% 漏掉的启动? ② 捕捉了能否在 walk-forward 上增 α(还是横盘启动质量低/已priced, 盲点真实但修了不赚=偏好其实是隐性质量过滤)? 生产线 V12.31 冻结。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出工件 + research/verdicts/PL-00x.json (status+结论+命中分支)",
+    "PL-004 walk-forward gate 已评估 (PASS/真小/REJECT分型)",
+    "生产线指纹未变: v12_scoring.py 与生产模型 hash 与基线一致"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "启动写死(R01); 分regime(R11); 消融(R12++); 单月outlier; pump 月度重训复用 t005 walk-forward 口径(apples-to-apples)",
+    "label_change": "pump up 去 past_r5≤+8% 偏好: up = 前向5日 max_gain>=10% & max_dd>=-5% (不限 past_r5, 纳入横盘/微涨启动); 其余口径与生产 v3c 一致, 唯一差异=label 的 past_r5 约束",
+    "gate": [
+      "Δα(debias pump 臂 − V12.31 v3c baseline) >= +0.30pp/月 walk-forward apples-to-apples (两臂仅 pump label 不同, 同 r20 池/过滤/排序)",
+      "Sharpe/最差月不降; 单月outlier剔后Δα>0; 分regime不伤; 扣[动量+市场+现有形态因子]存活",
+      "盲点捕捉: retrain pump 对 past_r5≥0 启动的 precision/recall 较 v3c 明显提升 (否则没修到盲点)"
+    ]
+  },
+  "responsePlaybook": {
+    "note": "事前注册分叉 (冻结 R02)",
+    "PL-003": {
+      "捕捉成功": "retrain pump 把 past_r5≥0 启动排上来 → 进 PL-004",
+      "捕捉失败": "仍排不上 → 诊断(label改了但模型/特征仍偏), 文档化"
+    },
+    "PL-004": {
+      "PASS": "debias pump 增 α → 改进生产 pump (opt-in)",
+      "真小(0~0.3)": "捕捉了盲点但增益小 → 记 blend 候选不强上",
+      "REJECT_捕捉无α": "捕捉了横盘启动但 Δα≤0 → 重要发现: 盲点真实但修了不赚 = past_r5 偏好其实是隐性质量过滤(横盘启动质量低/已priced)",
+      "REJECT_未捕捉": "PL-003 已失败的延续"
+    }
+  },
+  "features": [
+    {
+      "id": "PL-001",
+      "title": "去偏 pump label 设计 + 偏好来源诊断",
+      "acceptanceCriteria": [
+        "诊断 past_r5 偏好从哪进: v3c label 定义 / 训练数据分布 / 现有 pump_score 对 past_r5 分层的排序(确认软降权机理)",
+        "构建去偏 label: up = 前向5日 max_gain>=10% & max_dd>=-5% (3分类 up/down/neutral, up 不限 past_r5), 全因果, ST排除",
+        "对照: 量化去偏 label vs v3c label 在 past_r5≥0 启动上的正例覆盖差异",
+        "落 research/cache/pump_debias_label.parquet (label 留 cache 非 features 防泄漏); verdicts/PL-001.json status=built"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-12",
+      "notes": "唯一改动=label 的 past_r5 约束。复用 t004/t005 的 build_label 口径改造。[完成] 两关键诊断: (A) past_r5 约束只在 down 类, up-label 两版逐位相同→去偏对 past_r5>=0 启动 UP 零增量覆盖; (B) 粗粒度 ge0 软降权不成立(模型给 ge0 排名 0.529>lt0 0.472, 与更高启动率一致), 真盲点是 barbell 的 flat-mid 段(-5%~+5% 启动率 0.104 但 P_up 排名仅 0.419 vs 两端 0.595/0.724)。纯 label 重训杠杆仅在 down 约束, 修盲点能力存疑→埋 REJECT_捕捉无α 伏笔。"
+    },
+    {
+      "id": "PL-002",
+      "title": "去偏 pump 启动子 walk-forward 月度重训",
+      "acceptanceCriteria": [
+        "复用 t005 walk-forward 口径(19月 202410-202604, 24月lookback月度重训), 3分类 LGBM, 同生产 pump 特征",
+        "用去偏 label 训 → pump_score_debias 每(ts_code,trade_date); 月度模型 checkpoint(SIGN-R08)",
+        "verdicts/PL-002.json status=built + 训练摘要(正例率 vs v3c)"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-12",
+      "notes": "重训较重, 复用 t005_wf_models 口径(两臂可逐位比)。[完成] 19 月 walk-forward 月度重训两臂 (202410-202604, 24m lookback, 3way LGBM, 247 生产特征, apples-to-apples 仅 label past_r5 不同), 1.90M 行 pump 分数落 cache。训练摘要印证 PL-001: up 正例率两臂逐位相同 (0.1238, Δ=+0.0000), 全部杠杆在 down 类 (down 正例率 0.0598→0.0744, Δ=+0.0145/月, 去 past_r5<=8% 把高涨幅伪跌启动收回 down 正样本)。推理端 P_up 相关 0.949 / P_down 相关 0.824 / ratio 相关 0.576 → 去偏对池内排序撬动可观但全经 down 约束放松对 3way softmax 的间接影响 (up 端零增量), 印证 '修盲点能力存疑' 预警。中间指标仅训练摘要, ship 由 PL-004 定 (R03)。"
+    },
+    {
+      "id": "PL-003",
+      "title": "盲点捕捉验证 (debias pump 是否把 past_r5≥0 启动排上来)",
+      "acceptanceCriteria": [
+        "对比 debias vs v3c pump 在 past_r5≥0 启动上的 precision@K / recall / 排名分位提升",
+        "分形态(横盘 flat_base / 微涨 up_drift) 看捕捉率改善; 分regime",
+        "verdicts/PL-003.json: 命中 playbook PL-003 捕捉成功/失败 + 量化表; 若失败 PL-004 标记 skip"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "[完成] 捕捉验证: 用 pl002 两臂 walk-forward 分数 (19月 1.90M行), v3c up正例为 ground-truth 启动, 每日横截面 ratio(生产排序信号)排名分位+recall@K 对比。关键发现=分层后捕捉方向相反: (A) 广义 past_r5>=0 启动 debias Δrank=-0.139 排得更低(印证机理: 去down约束抬高高past_r5股P_down→ratio分母变大→沉底), up_drift&ge0 -0.074 / other&ge0 -0.243 都更差; (B) 但 PL-001 锁定的真盲点 flat-mid(-5%~+5%) Δrank=+0.034 recall@20+0.060, flat_base&ge0 +0.060, 三 regime 一致正(mom+0.051/rev+0.023/mix+0.033); precision@10% flat-mid启动占比 v3c 4.9%→debias 9.0%(近翻倍)。机理: 高past_r5股吸走新增down正样本而沉底, flat-mid小past_r5股相对上浮→去偏把排序从up_drift/趋势启动转向横盘base启动(正是CB-002关心的MA20走平形态)。裁决=捕捉成功(对精确盲点), 进 PL-004 walk-forward 看捕捉了能否增α(REJECT_捕捉无α伏笔仍在:flat_base启动质量可能低/已priced)。中间捕捉≠落地(R03)。",
+      "completed_at": "2026-06-12"
+    },
+    {
+      "id": "PL-004",
+      "title": "walk-forward 决策 gate (debias pump vs v3c, 同池同排序)",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "apples-to-apples: 两臂仅 pump label 不同(debias vs v3c), 同 V7c 池/过滤/r20池/ratio排序, 复用 t005 harness",
+        "19月 walk-forward, 断言 gate(Δα>=+0.30pp + Sharpe/最差月不降 + 单月outlier + 分regime + 扣形态因子存活)",
+        "verdicts/PL-004.json: status in {PASS, 真小, REJECT_捕捉无α, REJECT_未捕捉} + metrics + 三/双臂对照"
+      ],
+      "priority": 4,
+      "passes": true,
+      "skip": false,
+      "completed_at": "2026-06-12",
+      "notes": "[完成] status=真小。19月 walk-forward apples-to-apples (两臂仅 pump label past_r5 约束, filter+sort 全用本臂 pump, 分数复用 PL-002 月度重训, r20池模型固定共用)。Δα=+0.161pp/月 (未过+0.30 bar)。gate 6条件 2 fail: ①Δα<+0.30 ②worst_month 降 (v3c -0.115→debias -1.434, 去偏新引入 202602 一个灾难月)。其余过: Sharpe +4.03→+4.08, 正α月占比 94.7% 持平, 单月outlier剔202602后Δα=+0.244>0, 分regime不伤 (动量+0.264/反转+0.203, 仅mixed 2月-0.404)。**playbook 落在'真小'而非 REJECT_捕捉无α**: 捕捉确带正Δα (PL-003 已证捕捉 flat-mid 成功, 这里 Δα>0 印证横盘启动非纯噪声), 但 ①增益不足单独 ship ②代价是尾部恶化 (高past_r5趋势启动被挤出池顶=去掉了隐性质量/尾部保护, 换入低质横盘启动→均值微升但灾难月加深)。裁决=记 blend 候选不强上, 生产 V12.31 v3c 冻结不动 (SIGN-R02 合法完成)。北极星'盲点真实但修了不赚'部分成立: 修了微赚 (+0.16) 但买了尾部风险, past_r5 偏好确含隐性质量/尾部过滤成分。"
+    },
+    {
+      "id": "PL-005",
+      "title": "落地 (仅 PL-004=PASS): debias pump opt-in 改进生产",
+      "acceptanceCriteria": [
+        "opt-in 开关切 debias pump, 默认关; 默认生产路径(v3c)逐位一致",
+        "verdicts/PL-005.json: status in {landed, skipped}"
+      ],
+      "priority": 5,
+      "passes": false,
+      "skip": true,
+      "skipReason": "条件: 仅 PL-004=PASS 解除; 否则保持 skip。",
+      "notes": "未 PASS 不落地。"
+    }
+  ]
+}

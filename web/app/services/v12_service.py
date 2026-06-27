@@ -165,9 +165,54 @@ def _pool_items(df) -> list[dict]:
     return items
 
 
+def _prev_scores_map(date: str) -> dict:
+    """上一池日的 {ts_code: {r20, ratio}} (优先 scores_<prev>.parquet 全量, 否则四池CSV并集兜底)。"""
+    base = settings.project_root / "output" / "daily_pick"
+    prev_dates = [d for d in list_pool_dates() if d < date]
+    if not prev_dates:
+        return {}
+    prev = prev_dates[-1]
+    sp = base / f"scores_{prev}.parquet"
+    out = {}
+    if sp.exists():
+        df = pd.read_parquet(sp)
+        df["ts_code"] = df["ts_code"].astype(str)
+        if "ratio" not in df.columns and "pump_score" in df.columns:
+            df["ratio"] = df["pump_score"] / (df["pump_down_score"] + 0.01)
+        for _, r in df.iterrows():
+            out[r["ts_code"]] = {"r20": r.get("buy_r20_score"), "ratio": r.get("ratio")}
+        return out
+    # 兜底: 上一池日四池CSV并集
+    pd_ = _dash_dir(prev)
+    for fname in _POOL_FILES.values():
+        fp = pd_ / fname
+        if not fp.exists():
+            continue
+        df = pd.read_csv(fp, dtype={"ts_code": str})
+        if "ratio" not in df.columns and "pump_score" in df.columns:
+            df["ratio"] = df["pump_score"] / (df["pump_down_score"] + 0.01)
+        for _, r in df.iterrows():
+            out.setdefault(str(r["ts_code"]),
+                           {"r20": r.get("buy_r20_score"), "ratio": r.get("ratio")})
+    return out
+
+
+def _dir(cur, prev, eps=1e-9):
+    """涨跌方向: up/down/flat/None(无上日数据)。"""
+    if cur is None or prev is None:
+        return None
+    diff = cur - prev
+    if diff > eps:
+        return "up"
+    if diff < -eps:
+        return "down"
+    return "flat"
+
+
 def read_four_pools(date: str) -> dict:
-    """读四池看板 CSV (daily_dashboard build_pools 产出). 无则 total=0."""
+    """读四池看板 CSV (daily_dashboard build_pools 产出). 无则 total=0. 含与上一池日 r20/ratio 涨跌方向。"""
     d = _dash_dir(date)
+    prev = _prev_scores_map(date)
     pools, total = {}, 0
     for key, fname in _POOL_FILES.items():
         fp = d / fname
@@ -177,12 +222,65 @@ def read_four_pools(date: str) -> dict:
             if "ratio" not in df.columns and "pump_score" in df.columns:
                 df["ratio"] = df["pump_score"] / (df["pump_down_score"] + 0.01)
             items = _pool_items(df)
+            for it in items:
+                pv = prev.get(it["ts_code"])
+                it["r20_dir"] = _dir(it["r20"], pv["r20"] if pv else None)
+                it["ratio_dir"] = _dir(it["ratio"], pv["ratio"] if pv else None)
             total += len(items)
             n_star = sum(1 for x in items if x["v7c"])
             pools[key] = {**meta, "count": len(items), "n_star": n_star, "items": items}
         else:
             pools[key] = {**meta, "count": 0, "n_star": 0, "items": []}
-    return {"date": date, "total": total, "pools": pools, "exists": total > 0}
+    return {"date": date, "total": total, "pools": pools, "exists": total > 0, "prev_compared": bool(prev)}
+
+
+# ── 池B 自选管理 (JSON 持久化, 复用 daily_dashboard 单一真相) ──
+def get_watchlist_b() -> list[str]:
+    import daily_dashboard as dd
+    return dd.load_watchlist_b()
+
+
+def add_watchlist_b(code: str) -> list[str]:
+    import daily_dashboard as dd
+    c = dd._norm_code(code)
+    if not (c.endswith(".SZ") or c.endswith(".SH")):
+        raise ValueError(f"非法代码 {code} (需 6位.SZ/.SH 或纯6位)")
+    return dd.add_to_b(c)
+
+
+def remove_watchlist_b(code: str) -> list[str]:
+    import daily_dashboard as dd
+    return dd.remove_from_b(code)
+
+
+def score_pool_item(date: str, code: str) -> Optional[dict]:
+    """从 scores_<date>.parquet 取单 code 的池-item (供池B加自选即时注入). 无则 None。"""
+    import daily_dashboard as dd
+    code = dd._norm_code(code)
+    fp = settings.project_root / "output/daily_pick" / f"scores_{date}.parquet"
+    if not fp.exists():
+        return None
+    df = pd.read_parquet(fp)
+    row = df[df["ts_code"] == code]
+    if row.empty:
+        return None
+    r = row.iloc[0]
+    industry = None
+    try:
+        basic = pd.read_parquet(settings.project_root / "output/tushare_cache/stock_basic.parquet")
+        m = basic[basic["ts_code"] == code]
+        if not m.empty:
+            industry = m.iloc[0].get("industry")
+    except Exception:
+        pass
+    f = lambda k: None if pd.isna(r.get(k)) else float(r.get(k))
+    return {
+        "ts_code": code, "name": (None if pd.isna(r.get("name")) else r.get("name")),
+        "industry": industry,
+        "r20": f("buy_r20_score") or 0.0, "pump_up": f("pump_score") or 0.0,
+        "pump_down": f("pump_down_score") or 0.0, "ratio": f("ratio"),
+        "past5": f("past_r5") or 0.0, "v7c": bool(r.get("v7c_recommend")), "n_funds": None,
+    }
 
 
 def read_contradiction(date: str) -> list[dict]:

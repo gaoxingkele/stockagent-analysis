@@ -1,17 +1,17 @@
 {
   "id": "PT-002",
-  "title": "生成 20260615 V12.31-clean picks + append-only 落库 (前向 paper-trade)",
+  "title": "生成 20260622 V12.31-clean picks + append-only 落库 (前向 paper-trade)",
   "status": "built",
-  "conclusion": "启动前向 paper-trade: 用 **当期 PIT-clean r20** (剔 holder_pct + embargo cut=预测日−21 交易日, 非生产 in-sample 模型) + 生产 v3c pump (s5 ratio 排序) 给最新可用交易日 **20260615** (数据 as-of 20260615, 已刷 Tushare daily/moneyflow + 增量 factor_lab/衍生特征到该日) 打分, 口径逐字同 V12.31-clean (V7c 池 → ratio_s5 排序 → 双轨 70/20/10 → 行业 cap4 → close-based → ST 源头排除 R06), 产 **8 持仓 / 4 行业 / 总 alloc 0.900**。经 paper_trade_harness.log_picks_for_date **append-only 落库** (source=v12.31-clean-live, existing 拒覆盖红线 SIGN-R01/R02), 落库状态 written, 读回确认 8 行 (log 总计 383 日)。前向 paper-trade 第一笔真实记录就位, 后续每交易日续落, 满 20/40d 用 harness realize_book 对锚 FIN-001 净 Sharpe 1.31±CI[0.11,2.60] (分 regime R11)。生产线 v12_scoring/v12_dual_track 只读冻结 (R05, 本任务用 PIT-clean 变体, 0 生产改动)。",
+  "conclusion": "启动前向 paper-trade: 用 **当期 PIT-clean r20** (剔 holder_pct + embargo cut=预测日−21 交易日, 非生产 in-sample 模型) + 生产 v3c pump (s5 ratio 排序) 给最新可用交易日 **20260622** (数据 as-of 20260622, 已刷 Tushare daily/moneyflow + 增量 factor_lab/衍生特征到该日) 打分, 口径逐字同 V12.31-clean (V7c 池 → ratio_s5 排序 → 双轨 70/20/10 → 行业 cap4 → close-based → ST 源头排除 R06), 产 **12 持仓 / 6 行业 / 总 alloc 0.900**。经 paper_trade_harness.log_picks_for_date **append-only 落库** (source=v12.31-clean-live, existing 拒覆盖红线 SIGN-R01/R02), 落库状态 written, 读回确认 12 行 (log 总计 387 日)。前向 paper-trade 第一笔真实记录就位, 后续每交易日续落, 满 20/40d 用 harness realize_book 对锚 FIN-001 净 Sharpe 1.31±CI[0.11,2.60] (分 regime R11)。生产线 v12_scoring/v12_dual_track 只读冻结 (R05, 本任务用 PIT-clean 变体, 0 生产改动)。",
   "metrics": {
-    "target_date": "20260615",
-    "data_asof": "20260615",
-    "n_picks": 8,
-    "n_industries": 4,
+    "target_date": "20260622",
+    "data_asof": "20260622",
+    "n_picks": 12,
+    "n_industries": 6,
     "total_alloc": 0.9,
     "log_status": "written",
-    "n_rows_readback": 8,
-    "n_logged_days_total": 383,
+    "n_rows_readback": 12,
+    "n_logged_days_total": 387,
     "r20_embargo_cut": "20260514",
     "r20_train_window": [
       "20240501",
@@ -23,75 +23,107 @@
   },
   "picks": [
     {
-      "ts_code": "300641.SZ",
-      "name": "正丹股份",
-      "industry": "化工原料",
-      "ratio_s5": 5.4632,
-      "r20_pred_clean": 7.5943,
-      "alloc_pct": 0.14
+      "ts_code": "688620.SH",
+      "name": "安凯微",
+      "industry": "半导体",
+      "ratio_s5": 6.0831,
+      "r20_pred_clean": 20.7086,
+      "alloc_pct": 0.1
     },
     {
-      "ts_code": "688379.SH",
-      "name": "华光新材",
-      "industry": "机械基件",
-      "ratio_s5": 4.991,
-      "r20_pred_clean": 8.713,
-      "alloc_pct": 0.14
+      "ts_code": "688378.SH",
+      "name": "奥来德",
+      "industry": "专用机械",
+      "ratio_s5": 5.8901,
+      "r20_pred_clean": 20.6731,
+      "alloc_pct": 0.1
     },
     {
-      "ts_code": "002136.SZ",
-      "name": "安纳达",
-      "industry": "化工原料",
-      "ratio_s5": 4.7509,
-      "r20_pred_clean": 10.3723,
-      "alloc_pct": 0.14
+      "ts_code": "300736.SZ",
+      "name": "百邦科技",
+      "industry": "通信设备",
+      "ratio_s5": 5.4594,
+      "r20_pred_clean": 18.9144,
+      "alloc_pct": 0.1
     },
     {
-      "ts_code": "301571.SZ",
-      "name": "国科天成",
+      "ts_code": "002213.SZ",
+      "name": "大为股份",
+      "industry": "半导体",
+      "ratio_s5": 5.4168,
+      "r20_pred_clean": 19.2179,
+      "alloc_pct": 0.1
+    },
+    {
+      "ts_code": "301285.SZ",
+      "name": "鸿日达",
       "industry": "元器件",
-      "ratio_s5": 4.6932,
-      "r20_pred_clean": 7.7882,
-      "alloc_pct": 0.14
+      "ratio_s5": 5.3157,
+      "r20_pred_clean": 22.0306,
+      "alloc_pct": 0.1
     },
     {
-      "ts_code": "688582.SH",
-      "name": "芯动联科",
+      "ts_code": "301086.SZ",
+      "name": "鸿富瀚",
       "industry": "元器件",
-      "ratio_s5": 4.3762,
-      "r20_pred_clean": 7.6401,
-      "alloc_pct": 0.14
+      "ratio_s5": 4.9927,
+      "r20_pred_clean": 20.1027,
+      "alloc_pct": 0.1
     },
     {
-      "ts_code": "600490.SH",
-      "name": "鹏欣资源",
-      "industry": "铜",
-      "ratio_s5": 3.115,
-      "r20_pred_clean": 9.0362,
-      "alloc_pct": 0.06667
-    },
-    {
-      "ts_code": "301125.SZ",
-      "name": "腾亚精工",
+      "ts_code": "688028.SH",
+      "name": "沃尔德",
       "industry": "机械基件",
-      "ratio_s5": 3.0954,
-      "r20_pred_clean": 7.2431,
-      "alloc_pct": 0.06667
+      "ratio_s5": 4.905,
+      "r20_pred_clean": 19.5036,
+      "alloc_pct": 0.1
     },
     {
-      "ts_code": "002282.SZ",
-      "name": "博深股份",
+      "ts_code": "688387.SH",
+      "name": "信科移动-U",
+      "industry": "通信设备",
+      "ratio_s5": 4.3043,
+      "r20_pred_clean": 21.4878,
+      "alloc_pct": 0.04
+    },
+    {
+      "ts_code": "600590.SH",
+      "name": "泰豪科技",
+      "industry": "通信设备",
+      "ratio_s5": 4.1841,
+      "r20_pred_clean": 19.7957,
+      "alloc_pct": 0.04
+    },
+    {
+      "ts_code": "002021.SZ",
+      "name": "中捷资源",
+      "industry": "纺织机械",
+      "ratio_s5": 3.9204,
+      "r20_pred_clean": 19.6345,
+      "alloc_pct": 0.04
+    },
+    {
+      "ts_code": "300134.SZ",
+      "name": "大富科技",
+      "industry": "通信设备",
+      "ratio_s5": 3.7649,
+      "r20_pred_clean": 19.259,
+      "alloc_pct": 0.04
+    },
+    {
+      "ts_code": "301070.SZ",
+      "name": "开勒股份",
       "industry": "机械基件",
-      "ratio_s5": 2.9194,
-      "r20_pred_clean": 7.9906,
-      "alloc_pct": 0.06667
+      "ratio_s5": 3.5925,
+      "r20_pred_clean": 18.9051,
+      "alloc_pct": 0.04
     }
   ],
   "artifacts": {
     "generator": "research/backtest/pt001_gen_today.py",
     "results": "research/cache/pt001/pt001_results.json",
-    "r20_model": "research/cache/pt001/r20_model/r20_clean_20260615.txt",
-    "picks_log": "research/cache/paper_trade/picks/20260615.parquet (append-only)",
+    "r20_model": "research/cache/pt001/r20_model/r20_clean_20260622.txt",
+    "picks_log": "research/cache/paper_trade/picks/20260622.parquet (append-only)",
     "log_jsonl": "research/cache/paper_trade/log.jsonl",
     "anchor": "FIN-001 净 Sharpe 1.31 ± CI[0.11,2.60] (V12.31_BASELINE.md §3)"
   },

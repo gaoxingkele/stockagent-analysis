@@ -1,0 +1,75 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/backtest",
+  "northStar": "RETRO 阶段 (用户问): 回顾 0501 起 V12.31 每日评分股票的真实表现, 并与同桶内'后来涨得好但没入池'的好股票对比, 找差异、判对比学习可行性。锚真实 OOS(0501+ 是前向真实数据), within-bucket 对比天然控住桶 beta。**主桶=merged 概念板块(用户定为最合理)**, winner 预注册冻结=桶内按后续20日max_gain排序TOP20%。**通用框架: 同桶对比可换分桶原则(PE+市值相似peer也是一种), 故 RETRO-003 加 PE+市值 peer 桶交叉验证看差异是概念特异还是泛截面**。两个先验: 概念lead-lag已REJECT(A股同概念共涨主要beta), 神经网络对比学习否过一次。陷阱: '后来涨得好'是forward-conditioned(hindsight幸存者偏差,同SLV-002), 故'差异'必须严格分 ex-ante可观测特征差异(可能有用) vs 纯realized收益差异(hindsight不可交易)。真问题=扣桶beta+扣现有V12.31因子(pump/r20)后, 桶内还有没有ex-ante残差能分谁跑赢(=对比学习是否增ex-ante alpha)。生产线 V12.31 只读冻结。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出 research/verdicts/RETRO-00x.json (status + conclusion + 关键数字)",
+    "winner 预注册冻结: 主桶=merged概念 + 桶内后续20日max_gain TOP20%, 不在结果上调 (R01)",
+    "hindsight 陷阱: '差异'严格分 ex-ante特征 vs realized收益; 对比学习gate须扣桶beta+扣现有因子残差 (R03/R12)",
+    "0501+ picks=生产V12.31重建(model-vintage caveat: 生产r20对早5月有in-sample暴露须标注); realized收益用日线到最新, 报前向horizon可用性",
+    "全因果(ex-ante特征只用下单前可知), ST源头排除 (R06), 大缓存gitignored不写features (R04); 生产线指纹未变 (R05)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "RETRO-001/002 描述性(真实表现+桶内漏赢家画像); RETRO-003 对比学习可行性gate + PE市值桶交叉验证。",
+    "picks_source": "0501-最新交易日, 复用 daily_dashboard/v12_scoring 重建生产 V12.31 picks(V7c池→ratio top20→行业cap4); 报实际可重建覆盖(特征数据缺的日跳过并记录); model-vintage caveat 标注",
+    "winner_def": "主桶=merged概念库(output/concept_local/concept_merged.parquet)映射每股概念; 每(pick_date,concept)内全成员按后续20日max_gain(=max(high[t+1..t+20])/close-1)排序TOP20%=winner; missed_winner=winner且未在V12.31池",
+    "exante_features": "对比picks vs missed_winners下单前可观测特征: past_r5/动量(mkt多窗)/pyr_velocity/pump_up/pump_down/ratio/市值/换手/ADX/RSI/V7c规则值; 严格区分ex-ante特征差异 vs realized max_gain差异(hindsight)",
+    "contrastive_gate": "within-bucket残差可分性: 桶内去均值(扣beta)后候选ex-ante特征对后续20日收益残差IC, 再扣[pump ratio+r20]; NEW=残差|IC|>=0.01&|t|>=2(过桶demean+因子消融)→learning-to-rank/对比学习候选(需walk-forward); 否则REJECT_beta_hindsight",
+    "bucket_crosscheck": "RETRO-003 除概念主桶, 加 PE+市值相似 peer 桶(同日按 log市值+PE 邻域分桶, 如市值五分位×PE五分位)重算同一残差IC; 若两桶残差一致→差异泛截面非概念特异; 若概念桶残差显著高于PE市值桶→存在概念特异结构(更支持概念对比学习)"
+  },
+  "responsePlaybook": {
+    "note": "事前注册 (R02)",
+    "RETRO-003": {
+      "对比学习候选": "桶内扣beta+扣因子后仍有ex-ante残差→within-bucket LTR/对比学习值得做(独立walk-forward), 19否后首个正向; 看概念桶vs PE市值桶残差判是否概念特异",
+      "REJECT_beta_hindsight": "残差被桶beta+现有因子吃掉→'漏掉的赢家'差异是beta+hindsight, picks没系统输给同桶可交易信号, 对比学习不增alpha, 文档化",
+      "真小": "有残差但<阈/不稳→记候选不强上"
+    }
+  },
+  "features": [
+    {
+      "id": "RETRO-001",
+      "title": "0501+ 真实 picks 表现回顾 (vs 全市场/概念均值)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "按 preRegisteredGate.picks_source 重建 0501-最新 生产 V12.31 picks(报覆盖+vintage caveat)",
+        "算每只 pick 实现 5/10/20d 收益 + 20d max_gain + 胜率; vs 全市场均值 + vs 其所属概念均值(超额)",
+        "分批次(周/批)看 picks 真实表现, 标前向horizon不满20d的日",
+        "verdicts/RETRO-001.json: status=built, conclusion(0501+我们高评分股票真实涨没涨/相对概念跑赢没), metrics(收益/胜率/概念超额)"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-15"
+    },
+    {
+      "id": "RETRO-002",
+      "title": "概念内漏掉的赢家画像 (ex-ante 特征 vs hindsight 收益)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "按 winner_def 映射概念、标 winner(概念内20d max_gain TOP20%)、定位 missed_winner(winner且未入池)",
+        "对比 V12.31 picks vs missed_winners 的 ex-ante 特征分布(preRegisteredGate.exante_features)均值/差异 + realized max_gain 差异",
+        "严格分开: 哪些是 ex-ante 可观测特征差异(下单前可见), 哪些纯 realized 收益差异(hindsight)",
+        "verdicts/RETRO-002.json: status=built, conclusion(差异在哪+ex-ante vs hindsight分解), 特征对比表"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-15"
+    },
+    {
+      "id": "RETRO-003",
+      "title": "对比学习可行性 gate (within-bucket 扣beta+扣因子残差 + PE市值桶交叉验证)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "概念主桶 within-bucket 去均值(扣beta)后 ex-ante 特征/简单 LTR 对后续20d收益残差IC, 再扣[pump ratio+r20]残差IC+t",
+        "按 bucket_crosscheck 加 PE+市值相似 peer 桶重算同残差IC, 比概念桶 vs PE市值桶 → 差异概念特异 or 泛截面",
+        "按 contrastive_gate 判 NEW/REJECT_beta_hindsight/真小; NEW则说明增量来源",
+        "verdicts/RETRO-003.json: status in {对比学习候选, REJECT_beta_hindsight, 真小} + metrics(概念桶残差IC/PE市值桶残差IC/扣因子后IC/t) + playbook命中"
+      ],
+      "priority": 3,
+      "passes": true,
+      "completed_at": "2026-06-15"
+    }
+  ]
+}

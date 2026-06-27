@@ -1,0 +1,80 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/backtest",
+  "northStar": "WFE 阶段 (吃进 codex 第二次 review WF 裁决的 5 条): embargo 干净收尾。codex 抓到两个真问题: ①WF-001 仍缺 label embargo — 训练按特征日<train_end 切, 但 r20 label 是前向20日(next_open→close_20d), 靠近截止日样本标签延伸进预测月=purging/embargo 泄漏, 1.84 仍偏高; ②WF-002 gate 太松 — TP +0.809 vs 随机阈值 placebo 均值 +0.769 仅多+0.04 且落分布内, 'TP真改进'过度, 应改为'结构性减仓真改善(过静态降暴露placebo)但固定档位无择价alpha'。WFE-001 加 label embargo 重跑 r20 真walk-forward 拿真·真实 P&L; WFE-002 在 embargo picks 上重跑止盈, 强化 gate(TP须>随机p90非均值)+close-based保守成交主口径+扩展负控分解edge(盈利条件vs缩短持有vs阈值)。生产线 V12.31 只读冻结。codex review 存 research/backtest/audits/; 见 SIGN-R13。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出 research/verdicts/WFE-00x.json (status + conclusion + 关键数字)",
+    "label embargo 正确: 训练样本须 trade_date <= 预测起 - 20交易日 - 1 (label 全部可知), 无 horizon 泄漏 (R04)",
+    "WFE-002 强化 gate(随机 p90)+ close-based 保守成交主口径 + 分解负控, 预注册不搜 (R01)",
+    "全因果, ST 源头排除 (R06), 大缓存写 research/cache/ (gitignored), 不写 research/features/ (R04)",
+    "生产线指纹未变: v12_scoring.py / v12_dual_track.py 只读 (R05)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "embargo 干净收尾, 吃进 codex 第二次 review 5 条 + SIGN-R13。WFE 后才谈最终 holdout / triple-barrier。",
+    "embargo": "label-availability embargo: r20 月度重训时, 训练样本 trade_date <= 预测窗起始 - 20交易日 - 1 (保证前向20日label在预测前已知); 重跑 WF-001 全流程, 报 vs 无embargo版(WF-001 1.84)的额外缩水",
+    "tp_retest_v2": "在 WFE-001 embargo OOS picks 上: 主口径=close-based保守成交(非日内high); 臂=baseline-40d/TP-40d/placebo静态降暴露/placebo随机阈值(50seed); 强化gate=TP ΔSharpe须>随机阈值分布p90(非均值); 扩展负控分解edge: (a)盈利条件控(入场后首个上涨日卖1/3)(b)缩短持有控(随机卖出日but条件已盈利)(c)收益分位控(按realized return分位减仓非价格阈值); per-cohort bootstrap CI+LOO+regime",
+    "gate_tp_v2": "结构性减仓改进 = TP(close-based) ΔSharpe(TP40-base40)>0 AND bootstrap CI不含0 AND >静态降暴露placebo; 择价alpha = TP须>随机阈值p90(预期不成立=档位无alpha); 分解=指出edge主来源(盈利条件/缩短持有/阈值)"
+  },
+  "responsePlaybook": {
+    "note": "事前注册 (R02)",
+    "WFE-001": {
+      "embargo后仍稳": "加embargo后真实Sharpe仍显著正(小幅再缩) → V12.31真·可交易数定案, 进部署/holdout讨论",
+      "embargo后大缩": "embargo再削大块 → 真实优势比想象小, 实盘预期再下修",
+      "embargo后塌": "近零 → r20优势主要是label泄漏+记忆, 重大发现"
+    },
+    "WFE-002": {
+      "结构成立档位无alpha": "close-based下结构性减仓仍过CI但TP<随机p90 → ship'任意分批减仓结构', 不声称择价(符合codex预期)",
+      "结构也不成立": "close-based保守口径下结构性减仓ΔSharpe CI含0 → 止盈增益是成交乐观假象, 弃",
+      "意外择价": "TP>随机p90 → 固定档位确有alpha(反预期, 强记录需holdout)"
+    }
+  },
+  "features": [
+    {
+      "id": "WFE-001",
+      "title": "label embargo r20 真walk-forward 重跑 (真·真实 P&L)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "按 preRegisteredGate.embargo 加 label-availability embargo(训练样本 trade_date<=预测起-20交易日-1) 重跑 WF-001 r20 月度重训",
+        "因果自检: 确认训练 label 全部在预测前可知, 无 horizon 泄漏",
+        "重建 V12.31 book 过引擎, 报真实 Sharpe/年化/maxDD + vs WF-001(无embargo 1.84) 的额外缩水; 分regime",
+        "verdicts/WFE-001.json: status=built, conclusion(embargo后真·真实P&L+再缩多少+该不该跑), metrics"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-14"
+    },
+    {
+      "id": "WFE-002",
+      "title": "强化版止盈复测 (embargo picks + close-based + 随机p90 + 分解负控)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "在 WFE-001 embargo OOS picks 上跑 preRegisteredGate.tp_retest_v2 全部臂(close-based主口径)",
+        "强化gate: TP ΔSharpe 须 > 随机阈值分布 p90(非均值); 报结构性减仓是否过(vs静态降暴露placebo+bootstrap CI)",
+        "扩展负控分解 edge: 盈利条件控/缩短持有控/收益分位控, 指出 edge 主来源",
+        "verdicts/WFE-002.json: status in {结构成立档位无alpha, 结构也不成立, 意外择价} + metrics(各臂close-based Sharpe/随机p90/分解控/bootstrap CI) + playbook命中"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-14"
+    },
+    {
+      "id": "WF-003",
+      "title": "[预注册,后开] r20 triple-barrier 重标 (仅 WFE 干净基线后)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "双屏障 label 重训 r20 臂(屏障参数预注册冻结), book 层 walk-forward apples-to-apples 两臂同出场防循环, 含 embargo",
+        "gate: 重训臂 book净Sharpe>原r20臂 & maxDD不升 & 单月outlier + 分regime + de-lookahead+embargo",
+        "verdicts/WF-003.json: status in {PASS,真小,REJECT} + metrics{alpha_delta_pp,sharpe,worst_month,pos_alpha_month_ratio}"
+      ],
+      "priority": 3,
+      "passes": false,
+      "isGate": true,
+      "skip": true,
+      "skipReason": "重活: 待 WFE-001 embargo 真实基线 + WFE-002 止盈定案后再开。",
+      "notes": "triple-barrier 已预注册; 仅 embargo 干净地基稳固后上。"
+    }
+  ]
+}

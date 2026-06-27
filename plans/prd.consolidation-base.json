@@ -1,0 +1,112 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/consolidation-base",
+  "northStar": "用户洞察: V12.31 偏好'下蹲后起跳'(past_r5<0), 但上涨前形态是一族(回调/宽幅横盘/微涨震荡/旗形三角楔形向上整理), 统一特征=上涨前 MA20 走平+收敛蓄势。系统只抓下蹲、漏掉横盘启动; 且第6铁律'横盘僵尸过滤'可能误杀好的蓄势基底。三问: ① MA20平/蓄势候选能否抓到past_r5≥0的横盘/三角启动(系统漏的)? ② 僵尸过滤是否误杀蓄势基底? ③ 扣现有形态因子(MA/ADX/布林/past_r5)后还有无独立 walk-forward α? 这是选择面细化(非被否的出场/择时overlay), 有公平胜算。生产线 V12.31 冻结。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出工件 + research/verdicts/CB-00x.json (status+结论+命中分支)",
+    "CB-004 walk-forward gate 已评估 (PASS/真小/REJECT), 或 CB-003 无残差触发 precondition skip",
+    "生产线指纹未变: v12_scoring.py 与生产模型 hash 与基线一致"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "启动写死(R01); 分regime(R11); 消融升级(R12++): 扣[价格动量 + 市场 + 现有形态因子(MA斜率/ADX/布林带宽/past_r5/rsi)]后仍存在",
+    "phase1_screen": "蓄势信号(MA20走平+收敛+量能) 对前向 r20/启动 的横截面残差 IC (扣 动量+市场+现有形态因子) |IC|>=0.02 且 |t|>=3 → residual_signal, 否则廉价 REJECT",
+    "gate": [
+      "Δα(蓄势候选臂 − V12.31 baseline) >= +0.30pp/月 walk-forward apples-to-apples",
+      "Sharpe/最差月不降; 单月outlier剔后Δα>0; 分regime不伤; 扣[动量+市场+现有形态因子]存活"
+    ]
+  },
+  "responsePlaybook": {
+    "note": "事前注册分叉 (冻结 R02)",
+    "CB-002_盲点": {
+      "存在": "past_r5≥0 启动占比高且系统漏 → 验证盲点, 继续",
+      "不存在": "启动几乎都来自下蹲 → 用户假设证伪, 文档化, CB-003/004 仍可测但先验降低"
+    },
+    "CB-002_僵尸": {
+      "误杀": "被is_zombie剔的票里蓄势基底假阴性率高 → 僵尸过滤需精炼",
+      "无误杀": "僵尸过滤剔的确实是死横盘 → 不动它"
+    },
+    "CB-003": {
+      "residual_signal": "进 CB-004 walk-forward",
+      "no_residual": "蓄势信号≈现有形态因子换皮, 廉价 REJECT 跳 gate"
+    },
+    "CB-004": {
+      "PASS": "改进v7c池构造落地",
+      "真小(0~0.3)": "记 blend/候选不强上",
+      "REJECT": "文档化, 生产线不动"
+    }
+  },
+  "features": [
+    {
+      "id": "CB-001",
+      "title": "蓄势候选特征构建 (MA20走平 + 收敛 + 量能) + 僵尸分解",
+      "acceptanceCriteria": [
+        "MA20走平: ma20_slope(过去N日MA20变化率), flatness=|ma20_slope|低; 收敛: 近20d振幅/布林带宽收窄(三角/楔量化); 量能: 缩量蓄势(近期量/均量)",
+        "基底类型标签 base_type ∈ {pullback(past_r5<0), flat_base(past_r5≈0 & MA20平), up_drift(微涨震荡), other}",
+        "僵尸分解: is_zombie 拆 '死横盘'(无量阴跌) vs '蓄势横盘'(缩量+收敛) 两类",
+        "全历史因果落盘 research/features/consolidation.parquet, ST排除, 零泄漏, 确定性自检; verdicts/CB-001.json status=built+分布"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-12",
+      "notes": "复用 zombie_filter.py + daily cache OHLCV。MA20走平是用户核心洞察的量化。built: 5.33M 行 5439 股 1073 日; flat_base 17.5%/up_drift 18.7% (非下蹲基底占 36%+); 候选 14.5%; 僵尸 454k 拆 蓄势横盘 228k/死横盘 226k; 确定性 True 零泄漏 ST 排除。"
+    },
+    {
+      "id": "CB-002",
+      "title": "盲点 & 僵尸误杀 量化 (描述, 直答前两问)",
+      "acceptanceCriteria": [
+        "定义真启动=前向5日 max_gain>=10% & max_dd>=-5%(pump up口径); 启动股按启动前形态(下蹲/横盘/微涨/旗三角)分类",
+        "盲点: 真启动里 past_r5≥0(横盘/微涨基底)占比? V12.31 v7c池抓到/漏掉多少?",
+        "僵尸误杀: 被 is_zombie 剔除的票里, 后续真启动的'蓄势基底'假阴性率多少?",
+        "verdicts/CB-002.json: 命中 responsePlaybook CB-002_盲点/僵尸 分支 + 量化表"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-12",
+      "notes": "纯描述(前向仅作outcome测量非特征, 零泄漏)。直接回答'盲点存在吗''僵尸误杀吗'。measured: 评估 5.30M 决策点/643k 真启动(率12.14%)。①盲点=存在: 真启动里 past_r5≥0 占 52.2%(非下蹲 flat+drift 占 32.8%), 且 past_r5≥0 启动率 13.15% > past_r5<0 11.19% → 系统下蹲软偏好系统性漏掉过半且更高率的横盘/微涨启动(全 regime 一致 48~56%); V12.31 第6铁律硬漏启动 4.2%, 下蹲偏好软降权 52.2% → CB-003/004 继续。②僵尸=无误杀: coiling(蓄势横盘)启动率 5.0% < dead(死横盘)6.8% < 全样本 12.1%(lift 0.74) → 僵尸里蓄势子类并非被误杀的金矿, 6铁律不动它。脚本 research/cb002_blindspot_zombie.py; outcome research/cache/cb002/launch_panel.parquet(非features目录)。"
+    },
+    {
+      "id": "CB-003",
+      "title": "Phase-1 廉价筛查 (蓄势信号扣[动量+市场+现有形态因子]正交IC)",
+      "acceptanceCriteria": [
+        "≥36月横截面 rank-IC(蓄势信号 ma20_flat/收敛/量能, 前向r20), 扣[动量+市场+现有形态因子(MA斜率/ADX/布林/past_r5/rsi)]残差, 分regime",
+        "逐步消融定位(单扣各组); verdicts/CB-003.json: status in {residual_signal, no_residual} + 残差IC表",
+        "若 no_residual → CB-004 skip:true"
+      ],
+      "priority": 3,
+      "passes": true,
+      "completed_at": "2026-06-12",
+      "notes": "核心防自欺: 蓄势信号会不会被现有 MA/ADX/布林因子吃掉(换皮)。screened: 月末 rebalance 54月/268k 决策点; 最强蓄势信号 s_bw_squeeze orth_full(扣[动量+市场+MA斜率/ADX/布林/past_r5/RSI]) IC=-0.0273 |t|=2.53 < 阈(|IC|≥0.02 & |t|≥3) → no_residual。逐步消融定位: s_coil raw IC=+0.030(t2.26) → 单扣形态因子即翻负 -0.019 → 全扣 -0.011; 唯一扛 minus_pattern 的 s_vol_shrink 全扣后也仅 +0.013/t1.89 不过线。蓄势信号(MA20走平+收敛+缩量)对 r20 预测力被现有标准 TA 吸收(≈换皮), 无独立残差 → 廉价 REJECT, CB-004 precondition skip。与 CB-002 盲点真实性不矛盾(盲点=系统漏这族启动; 本任务=蓄势特征是否提供超越现有因子的增量, 二者独立)。脚本 research/cb003_phase1_screen.py; 工件 research/cache/cb003/。"
+    },
+    {
+      "id": "CB-004",
+      "title": "walk-forward 决策 gate (蓄势候选池 / 放松僵尸过滤 vs V12.31)",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "三臂 apples: baseline=V12.31现行池(下蹲偏好) / arm_flat=候选池纳入MA20平蓄势基底(past_r5≥0横盘启动) / arm_zombie=精炼僵尸过滤(区分蓄势vs死横盘)",
+        "19月 walk-forward, 断言 gate(Δα>=+0.30pp + Sharpe/最差月不降 + 单月outlier + 分regime + 扣现有形态因子存活)",
+        "verdicts/CB-004.json: status in {PASS, 真小, REJECT} + metrics(alpha_delta_pp/sharpe/worst_month/pos_alpha_month_ratio) + 三臂对照"
+      ],
+      "priority": 4,
+      "passes": false,
+      "skip": true,
+      "notes": "playbook CB-004 分叉。回答第三问(扣形态因子后有无独立α)。REJECT 合法完成(R02)。",
+      "skipReason": "CB-003=no_residual: 蓄势信号扣[动量+市场+现有形态因子]无残差(换皮), precondition skip (playbook CB-003 分叉)。"
+    },
+    {
+      "id": "CB-005",
+      "title": "落地 (仅 CB-004=PASS): 改进 v7c 池构造 opt-in",
+      "acceptanceCriteria": [
+        "opt-in 开关: v7c 候选池纳入蓄势基底 / 精炼僵尸过滤, 默认关; 默认生产路径逐位一致",
+        "verdicts/CB-005.json: status in {landed, skipped}"
+      ],
+      "priority": 5,
+      "passes": false,
+      "skip": true,
+      "skipReason": "条件: 仅 CB-004=PASS 解除; 否则保持 skip。",
+      "notes": "未 PASS 不落地。"
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/backtest",
+  "northStar": "CL 阶段: 严格验证 RETRO-003 的首个正向候选——within-concept 相对动量 re-ranking。RETRO-003 廉价 gate: 概念内动量 composite(z(mom_20)+z(mom_60))扣桶beta+扣[ratio,r20]残差IC+0.0287 t2.68, 概念特异(>PE市值桶)。但这是20实验首个正向=过拟合最爱藏处, 且: ①信号是动量(V12.31故意排除的, 扣偏均值回归的pump/r20后动量存活近乎平凡); ②消融仅2因子非R12全集; ③非walk-forward未分regime, 0501+大概率动量window(我们最弱regime); ④动量overlay RG-002已证tricky。**故设计成能主动证伪的严格验证**: CL-001全因子消融+walk-forward+分regime(杀或活信号本身), CL-002 book层apples-to-apples gate(净赚不赚), CL-003 regime/稳健分解(是稳健alpha还是动量regime overlay)。动量为预注册单假设(从RETRO-002 SMD排序选出, 不再搜特征, 报多重检验背景)。⚠概念membership是current快照(轻lookahead, 须flag PIT)。生产线 V12.31 只读冻结; within-concept动量是平行候选, 过gate才谈。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出 research/verdicts/CL-00x.json (status + conclusion + 关键数字)",
+    "动量候选预注册冻结(z(mom_20)+z(mom_60)概念内demean), 不再搜特征/不在结果上调 (R01); 报从RETRO-002 ~10特征选出的多重检验背景",
+    "CL-001全因子消融(R12: 扣mkt多窗动量+pyr_velocity+size+value+ADX+RSI+形态+pump ratio+r20) + walk-forward(embargo) + 分regime(R11)",
+    "全因果, label embargo, ST源头排除 (R06), 概念membership PIT风险须flag(current快照对历史的轻lookahead), 大缓存gitignored不写features (R04); 生产线指纹未变 (R05)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "首个正向, 设计为主动证伪。CL-001信号存活gate, CL-002 book落地gate, CL-003 overlay/稳健分解。",
+    "signal": "within-concept 相对动量 = z(mom_20)+z(mom_60) 在概念内去均值(扣概念beta); 预注册单假设不再搜",
+    "cl001_ablation": "残差IC: 概念内demean后, 扣全因子集[mkt_ret多窗+pyr_velocity_20_60+log市值+pe+adx+rsi+形态z+ratio_s5+pred_r20] 逐日截面正交化, 月度walk-forward(embargo P_start-21), 分regime(动量/反转/混合)报残差IC+NW_t; gate: 全消融后|IC|>=0.01&|t|>=2 AND 至少2个regime同号正(非动量window独有)",
+    "cl002_book_gate": "若CL-001存活: 预注册blend=V12.31池内 final_rank = 0.5*rank(ratio_s5)+0.5*rank(within_concept_mom) (λ=0.5冻结), 重建book过引擎(embargo+close-based+成本+双轨+cap+20d再平衡), apples-to-apples vs PIT-clean V12.31基线(DEP-001); gate: ΔSharpe>0 AND block bootstrap CI不含0 AND maxDD不升 AND 单月outlier剔后仍优 AND 分regime不伤(尤其反转月不伤)",
+    "cl003_decomp": "regime分解book ΔSharpe(是否仅动量月正=overlay) + PE市值桶交叉(概念特异确认) + hindsight placebo(随机within-concept re-rank对照); 分类 stable_alpha/regime_overlay/artifact"
+  },
+  "responsePlaybook": {
+    "note": "事前注册 (R02); 首个正向须最严, 宁可错杀",
+    "CL-001": {
+      "存活": "全消融+多regime后残差仍在 → 进CL-002 book gate",
+      "死于消融": "全因子消融后|IC|<阈 → 之前+0.0287是2因子弱消融artifact, 就是标准动量被现有因子吃, REJECT文档化",
+      "动量window独有": "仅动量regime正 → regime条件非稳健, 转CL-003判overlay"
+    },
+    "CL-002": {
+      "PASS": "blend干净跑赢PIT-clean基线且反转月不伤 → within-concept动量re-rank真候选(独立holdout), 20否后首个真落地候选",
+      "regime_overlay": "仅动量月赚反转月伤 → 是动量regime择时overlay(RG-002已证tricky), 非稳健改进, 须regime detection(滞后)才能用",
+      "REJECT": "≤基线或伤maxDD/反转月 → 漏概念动量赢家是hindsight+我们均值回归身份的必然代价, 不可交易修, 文档化"
+    }
+  },
+  "features": [
+    {
+      "id": "CL-001",
+      "title": "全因子消融 + walk-forward + 分regime 残差验证 (杀或活信号)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "构 within-concept 相对动量 (z(mom_20)+z(mom_60) 概念内demean, 概念membership PIT风险flag)",
+        "按 cl001_ablation 全因子集逐日截面正交化残差IC, 月度walk-forward(embargo), 分regime(动量/反转/混合)报残差IC+NW_t",
+        "对比 RETRO-003 的2因子弱消融(+0.0287): 全消融后还剩多少 = 多少是标准动量被现有因子吃",
+        "verdicts/CL-001.json: status in {存活, 死于消融, 动量window独有} + metrics(全消融残差IC/t/分regime IC) + playbook命中"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-15",
+      "verdict_status": "死于消融",
+      "verdict_note": "全消融(9因子)残差 IC +0.0198 NW_t +1.77 未过冻结 gate; 非重叠 t +0.68 (core 同) 去重叠膨胀后无显著性; full IC 缩到 RETRO-003 +0.0286 的 69% 且显著性蒸发. ★诚实 nuance(与 RETRO-003 反转): 残差不是均匀归零, 而集中到动量 regime (full mom +0.0393 t+5.41, reversal/mixed 不显著) → 揭示 RETRO-003 '动量月≈0' 是其 2 因子控制被 regime 混淆的 artifact; 但整体未过存活闸 → 死于消融, 不进 CL-002; 残差性质属动量 regime overlay (CL-003 territory), 非稳健 cross-sectional alpha."
+    },
+    {
+      "id": "CL-002",
+      "title": "book层 apples-to-apples gate (blend vs PIT-clean基线)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "仅CL-001存活才跑: 按 cl002_book_gate 预注册blend(λ=0.5)重建V12.31 book过引擎(embargo+close-based), vs PIT-clean基线(DEP-001)",
+        "断言 gate: ΔSharpe>0 + block bootstrap CI不含0 + maxDD不升 + 单月outlier + 分regime不伤(反转月)",
+        "若CL-001未存活则skip并文档化",
+        "verdicts/CL-002.json: status in {PASS, regime_overlay, REJECT} + metrics{sharpe,delta_sharpe_vs_baseline,worst_month,bootstrap_ci,by_regime} + playbook命中"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-15",
+      "verdict_status": "skipped",
+      "verdict_note": "CL-001 死于消融 → gate 前提 (CL-001 存活) 不满足, 按预注册 cl002_book_gate '仅CL-001存活才跑' 协议 skip 并文档化 (R02). 不在死信号上硬跑 book 凑 PASS (R01). blend(λ=0.5)/引擎/基线/gate 条件均为冻结配置, 仅记录不实例化. 残差动量 regime 集中性属 overlay (CL-001 nuance), book gate 不适用; overlay 判定留 CL-003. 生产线 V12.31 只读冻结 (R05)."
+    },
+    {
+      "id": "CL-003",
+      "title": "regime/稳健分解 (overlay判定 + PE市值桶 + placebo)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "分解 CL-002 book ΔSharpe by regime(是否仅动量月正=overlay)",
+        "PE+市值桶交叉验证(概念特异确认) + hindsight placebo(随机within-concept re-rank对照, 真信号须显著胜placebo)",
+        "综合分类: stable_alpha / regime_overlay / artifact, 给最终定性",
+        "verdicts/CL-003.json: status=built, conclusion(稳健alpha还是动量overlay还是artifact), metrics(分regime Δ/PE市值桶/placebo对照)"
+      ],
+      "priority": 3,
+      "passes": true,
+      "completed_at": "2026-06-15",
+      "verdict_status": "built",
+      "classification": "regime_overlay",
+      "verdict_note": "CL 阶段收尾定性=regime_overlay. CL-002 因 CL-001 死于消融 skip→无 book ΔSharpe, regime 分解在残差 IC 层 (复用 CL-001 full 块). 三路一致: ①regime 仅动量 regime 显著 (mom IC+0.0393 t+5.41; reversal/mixed 不显著)=overlay 签名; ②概念特异性证伪——概念桶 full IC+0.0198≈PE×市值桶 full IC+0.0205 (gap-0.0007, PE/mv NW_t+1.63 也不过闸)→残差非概念特异, 是泛截面弱动量残差被 PE/市值结构吸收; ③placebo (随机 within-concept re-rank K=200) real+0.0198 vs null mean+0.0037 sd0.0002 z+67.87 p<0.001 落 null 100% 分位→残差是真信号非方法 artifact. 综合: 残差是真但微弱的动量残差, 恰且仅在动量 regime 显著 (V12.31 实盘被血洗的动量态), 非概念特异/非全 regime 兑现→动量择时 overlay (RG-002 已证 tricky), 非稳健 cross-section alpha. within-concept 相对动量 re-rank 终判=不落地 (RETRO-003 +0.0286 名义过闸→1/3 被全因子吃 CL-001→余下动量 overlay CL-003). 生产线 V12.31 只读冻结."
+    }
+  ]
+}

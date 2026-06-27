@@ -1,0 +1,42 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/backtest",
+  "northStar": "DEP 阶段: 剔除 holder_pct 泄漏因子, 产 PIT-clean 可部署 r20, 清掉 codex 唯一硬红线。查证确认: ①holder_pct 是真前视(backtest_new_factors.py compute_holder_pct_at 按 end_date<=target_date 选数, ann_date 未取 → Q1 end_date 0331 在 ~0430 公告前即被用); ②但重要度极低(r20 gain 排 118/236 占 0.005%, v2 87/236 占 0.022%, 仅 2-9 split, 模型靠 mkt_ret/regime 类)。用户决策=低影响则剔。剔除最干净(零 ann_date 工程, 隐患彻底消除)。DEP-001 剔 holder_pct 重训 r20(embargo walk-forward 同 WFE-001 口径)→重建 V12.31 book→确认 Sharpe≈1.31 不变(若材料性下降=该跌幅就是泄漏的假edge, 红旗; 若≈1.31=确认clean红线清除)。生产线 V12.31(v12_scoring/v12_dual_track)只读冻结; PIT-clean r20 是可部署变体。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "DEP-001 产出 research/verdicts/DEP-001.json (status + conclusion + 关键数字)",
+    "r20 重训严格剔 holder_pct, 余特征/超参/embargo口径与 WFE-001 apples-to-apples (唯一差异=去 holder_pct)",
+    "全因果, label embargo(P_start-21交易日), ST 源头排除 (R06), 大缓存 gitignored 不写 features (R04)",
+    "生产线指纹未变: v12_scoring.py / v12_dual_track.py 只读 (R05)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "剔泄漏因子确认 deployable baseline。预期 Sharpe≈1.31(holder_pct gain~0.01% → 几乎不变), 落 FIN-001 CI[0.11,2.60]内/与1.31差<噪声即确认clean。",
+    "dep_retrain": "复用 WFE-001 embargo walk-forward 口径(24m lookback, P_start-21, time-split val), 训练特征集**剔除 holder_pct**(余 235/234 特征不变), 同超参; 生成 PIT-clean r20 OOS 分数 → 重建 V12.31 book 过引擎(close-based+成本+双轨+cap+20d再平衡) → 净Sharpe/年化/maxDD vs WFE-001 基线 1.31",
+    "gate_dep": "clean确认 = PIT-clean Sharpe 与 1.31 差 |ΔSharpe| 在 per-cohort bootstrap 噪声内(不材料性下降) → 红线清除, PIT-clean r20 = deployable; 若 ΔSharpe 材料性<0(超噪声) → 该跌幅=holder_pct泄漏的假edge, 记录(真实基线再下修)"
+  },
+  "responsePlaybook": {
+    "note": "事前注册 (R02)",
+    "DEP-001": {
+      "clean确认": "剔 holder_pct 后 Sharpe≈1.31(差在噪声内) → 泄漏无实质影响, PIT-clean r20 产出, codex 硬红线清除, 可进真钱前 checklist 其余项",
+      "材料性下降": "Sharpe 明显<1.31 → holder_pct 泄漏确实贡献了假edge, 真实基线下修到 clean 值(诚实, 反而说明早该剔)"
+    }
+  },
+  "features": [
+    {
+      "id": "DEP-001",
+      "title": "剔 holder_pct 重训 PIT-clean r20 + 确认 1.31 (清硬红线)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "按 preRegisteredGate.dep_retrain 剔 holder_pct 重训 r20 embargo walk-forward(余口径与 WFE-001 全同), 因果自检无泄漏",
+        "重建 V12.31 book 过引擎(close-based), 报 PIT-clean 净Sharpe/年化/maxDD + per-cohort bootstrap ΔvsWFE-001(1.31)",
+        "按 gate_dep 判 clean确认/材料性下降; 产出 PIT-clean r20 OOS 分数 + 更新 V12.31_BASELINE.md 红线状态",
+        "verdicts/DEP-001.json: status in {clean确认, 材料性下降} + metrics(PIT-clean Sharpe/年化/maxDD/ΔvsBaseline/bootstrap CI) + playbook命中"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-14"
+    }
+  ]
+}

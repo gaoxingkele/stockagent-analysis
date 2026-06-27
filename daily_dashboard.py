@@ -46,10 +46,58 @@ def build_c_pool(min_funds=CROWD_MIN):
     return codes if codes else C_FALLBACK
 
 
-WATCHLISTS = {        # 自定义池 (代码可加减/新增池)
-    "B 自选": ["002571.SZ", "600388.SH", "300648.SZ",
+# ── 池B 自选: JSON 持久化 (CLI/web 单一真相, 加删自选不改代码) ──
+import json as _json
+WATCHLIST_B_FILE = ROOT / "config" / "watchlist_b.json"
+_B_DEFAULT = ["002571.SZ", "600388.SH", "300648.SZ",
               "688783.SH", "300706.SZ", "000962.SZ", "300054.SZ", "002842.SZ", "688662.SH", "000733.SZ",
-              "301027.SZ", "603992.SH"],
+              "301027.SZ", "603992.SH"]
+
+
+def _norm_code(code: str) -> str:
+    """规范化为 6位.SZ/SH (容错: 纯6位补后缀, 小写转大写)."""
+    c = str(code).strip().upper()
+    if c.endswith(".SZ") or c.endswith(".SH"):
+        return c
+    if c.isdigit() and len(c) == 6:
+        return c + (".SH" if c[0] == "6" else ".SZ")
+    return c
+
+
+def load_watchlist_b() -> list[str]:
+    """读池B自选 (JSON 优先, 缺则 seed 默认并落盘). 去重保序."""
+    if WATCHLIST_B_FILE.exists():
+        try:
+            codes = _json.loads(WATCHLIST_B_FILE.read_text(encoding="utf-8"))
+            if isinstance(codes, list):
+                return list(dict.fromkeys(_norm_code(c) for c in codes if c))
+        except Exception:
+            pass
+    save_watchlist_b(_B_DEFAULT)   # seed
+    return list(_B_DEFAULT)
+
+
+def save_watchlist_b(codes: list[str]) -> list[str]:
+    """落盘池B (去重保序, 规范化)."""
+    clean = list(dict.fromkeys(_norm_code(c) for c in codes if c))
+    WATCHLIST_B_FILE.parent.mkdir(parents=True, exist_ok=True)
+    WATCHLIST_B_FILE.write_text(_json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+    return clean
+
+
+def add_to_b(code: str) -> list[str]:
+    """加一只到池B, 返回新清单 (已存在则原样)."""
+    return save_watchlist_b(load_watchlist_b() + [code])
+
+
+def remove_from_b(code: str) -> list[str]:
+    """从池B删一只, 返回新清单."""
+    c = _norm_code(code)
+    return save_watchlist_b([x for x in load_watchlist_b() if x != c])
+
+
+WATCHLISTS = {        # 自定义池 (代码可加减/新增池)
+    "B 自选": load_watchlist_b(),    # JSON 持久化 (config/watchlist_b.json), 见 add_to_b/remove_from_b
     "C 基金重仓": build_c_pool(),   # 动态: 好基金优选池 (被>=2只高收益基金持有)
 }
 COLS = ["ts_code", "name", "industry", "buy_r20_score", "pump_score",
@@ -148,6 +196,10 @@ def build_pools(date: str, cb=None, write_csv: bool = True) -> dict:
     D = D[D["ratio"] >= RATIO_D].sort_values("ratio", ascending=False)
 
     if write_csv:
+        # 全量评分快照 (供次日 r20/ratio 涨跌对比, 含全市场所有评分股)
+        snap = [c for c in ["ts_code", "name", "buy_r20_score", "pump_score",
+                            "pump_down_score", "ratio", "past_r5", "v7c_recommend"] if c in df.columns]
+        df[snap].to_parquet(ROOT / "output/daily_pick" / f"scores_{date}.parquet", index=False)
         A[COLS].to_csv(out / "poolA_system.csv", index=False, encoding="utf-8-sig")
         B[COLS].to_csv(out / "pool_B.csv", index=False, encoding="utf-8-sig")
         ccols = COLS + (["n_funds"] if "n_funds" in Cdf.columns else [])

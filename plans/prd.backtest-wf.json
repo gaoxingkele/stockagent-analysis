@@ -1,0 +1,83 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/backtest",
+  "northStar": "WF 阶段 (吃进 codex 0614 交叉审计修正): de-lookahead 拿 r20 真实可交易 P&L + 修正版止盈复测。BT-003 已证 r20 池=几乎全部 book α, 但所有绝对 Sharpe/年化(+94%/+140%)含 r20 共模 lookahead 注水, 非可交易。codex 指出: ①受控 Δ 算在 lookahead 选出的理想样本上, 真实 WF picks 一换会缩水(SIGN-R13); ②EX-001 止盈+1.36 Sharpe 混了 baseline-20d vs TP-40d 持有期 + 降暴露, 须 baseline-40d + placebo 负控才能定量级。WF-001 de-lookahead r20 月度重训真 walk-forward → 过 book 引擎 → V12.31 真实 Sharpe/年化/maxDD(答'该不该真金白银跑', 是一切地基); WF-002 在真实 WF picks 上修正版止盈复测(baseline-20d/40d + TP-40d/close + placebo 随机阈值/降暴露对照 + per-cohort bootstrap + leave-one-out + regime)。生产线 V12.31 只读冻结。设计 research/backtest/DESIGN.md §8; codex 审计存 research/backtest/audits/。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出 research/verdicts/WF-00x.json (status + conclusion + 关键数字)",
+    "de-lookahead 真 walk-forward: r20 月度重训只用预测月之前数据, 无未来泄漏 (R04)",
+    "止盈复测吃进 SIGN-R13 负控包 (baseline-40d对齐 + placebo + bootstrap), 网格预注册不搜 (R01)",
+    "全因果, ST 源头排除 (R06), 大缓存写 research/cache/ (gitignored), 不写 research/features/ (R04)",
+    "生产线指纹未变: v12_scoring.py / v12_dual_track.py 只读 (R05)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "WF-001 是 de-lookahead 地基(描述真实 P&L); WF-002 是止盈的负控复测 gate。吃进 codex 0614 + SIGN-R13/R14。",
+    "wf_r20_delookahead": "r20 月度 walk-forward 重训(24m lookback, 同 t005 口径), 每预测月只用该月之前数据, 生成 OOS r20 分数; 重建 V12.31 book(同 V7c 池/ratio/行业cap/双轨)在 OOS 分数上; 报真实 Sharpe/年化/maxDD/换手 vs BT-002 lookahead 注水版的缩水幅度",
+    "tp_retest_controls": "在 WF-001 真实 OOS picks 上跑: baseline-20d / baseline-40d / TP-only-40d(日内high) / TP-only-close / placebo-随机TP阈值 / placebo-固定降暴露现金化; 报 per-cohort block bootstrap CI + leave-one-out + 分regime; 净结论=TP 是否在去混淆(40d对齐)+去暴露(placebo)后仍提 Sharpe",
+    "gate_tp": "TP真改进 = (TP-40d − baseline-40d) ΔSharpe > 0 AND > placebo降暴露对照 AND bootstrap CI 不含0 AND 分regime不伤; 否则=暴露artifact/真小"
+  },
+  "responsePlaybook": {
+    "note": "事前注册 (R02)",
+    "WF-001": {
+      "缩水温和": "de-lookahead 后真实 Sharpe 仍显著正 → V12.31 可交易, 进部署讨论",
+      "大幅缩水": "真实 Sharpe 远低于注水版 → 之前所有绝对数不可信, 实盘预期须按真实数重设",
+      "塌": "de-lookahead 后近零/负 → r20 优势主要是 lookahead artifact, 重大发现, 整个评估口径重估"
+    },
+    "WF-002": {
+      "TP真改进": "去混淆+去暴露后 TP 仍提 Sharpe → 进出场层 ship 候选(仍需最终 holdout)",
+      "暴露artifact": "TP 增益 ≈ placebo 降暴露对照 → +1.36 主要是少持仓数学抬升, 非技能, 文档化(codex 预警兑现)",
+      "真小": "去混淆后 ΔSharpe 缩到小正 → 记候选不强上"
+    }
+  },
+  "features": [
+    {
+      "id": "WF-001",
+      "title": "de-lookahead r20 真实 walk-forward → V12.31 可交易 P&L",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "r20 月度 walk-forward 重训(24m lookback, 复用 t005 harness 口径), 每预测月只用之前数据生成 OOS r20 分数, 月度 checkpoint(R08)",
+        "因果自检: 确认 r20 OOS 分数无未来泄漏(对比 in-sample 版应有衰减)",
+        "重建 V12.31 book(同 V7c 池/ratio/行业cap/双轨)在 OOS r20 分数上过 BT-001 引擎",
+        "报真实 Sharpe/年化/maxDD/换手 + vs BT-002 lookahead 注水版的缩水幅度; 分 regime",
+        "verdicts/WF-001.json: status=built, conclusion(真实可交易 P&L + 缩水多少 + 该不该跑), metrics"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-14",
+      "verdict": "built / playbook=大幅缩水。de-lookahead r20 月度 walk-forward(24m, 固定120树无早停)重建 V12.31 OOS book: 真实年化+65.9% 净Sharpe+1.84 maxDD-18.0% 月胜率65%, vs BT-002注水版(+140.5%/2.78) 缩水 ΔSharpe-0.94/年化约腰斩。smoking gun: 生产r20 IC 从in-sample(12/19月在<20250930训练窗)+0.44 暴跌true-OOS+0.18, WF在同true-OOS段+0.18≈生产 → 生产+0.44全是记忆, 真实OOS r20 IC≈+0.10。仍净正且跑赢全基准(hs300 0.46/CSI1000 0.81), V12.31真可交易但绝对预期须按真实数(非+140%)重设; 相对Δ/受控对照(BT-003/EX)不受影响。de-lookahead后momentum月最弱(超额+0.79pp/胜率44%)。"
+    },
+    {
+      "id": "WF-002",
+      "title": "修正版止盈复测 (真实WF picks + baseline-40d + placebo负控)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "在 WF-001 真实 OOS picks 上跑 preRegisteredGate.tp_retest_controls 全部臂(含 baseline-40d 对齐 + placebo 降暴露)",
+        "报 per-cohort block bootstrap CI + leave-one-out + 分regime",
+        "按 gate_tp 判: TP 去混淆(40d)+去暴露(placebo)后是否仍提 Sharpe",
+        "verdicts/WF-002.json: status in {TP真改进, 暴露artifact, 真小} + metrics(各臂Sharpe/ΔvsBaseline40d/placebo对照/bootstrapCI) + playbook命中"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-14",
+      "verdict": "TP真改进 (frozen gate) / 但非择价技能。在 WF-001 de-lookahead 真实 OOS picks(20 cohort)上修正版止盈复测, 吃进 codex SIGN-R13 三处修正(真OOS picks/baseline-40d对齐/placebo负控)。apples-to-apples ΔSharpe(TP40-base40)=+0.809 (EX-001 混淆口径+1.358 缩到此; 缩水来自 baseline-20d→40d 持有期对齐 + de-lookahead picks)。bootstrap 95%CI=[+0.146,+1.328] 不含0/P(Δ>0)=1.00, LOO[+0.380,+1.088]符号稳定, regime momentum+0.76/reversal+0.16/mixed-0.43(n=2)pp/月。**双 placebo 关键**: (1)静态降暴露 placebo≈-0.09 被决定性击败 → 增益非'少持仓数学抬升'(codex 该担忧排除); (2)**随机阈值 placebo +0.769 与真实 TP +0.809 统计无法区分**(TP 落在随机[p5,p95]=[+0.52,+1.09]内) → **无'卖在真高点'择价技能, 边际全来自'均值回归宇宙里随持有期系统性减仓赢家'的结构性 de-risk(任意阈值都行)**。Δ年化≈0(+0.03pp)但 maxDD 砍14.7pp=保收益降波动(兑现用户止盈直觉); 动量月增益最大(+0.76pp)正打 WF-001 揭示的 book 最弱 regime(动量月超额仅+0.79/胜率44%)→缓解用户'动量月吃亏'痛点。净结论=结构性 de-risk 真实稳健(出场层 ship 候选, 待 EX-003 最终 holdout), 但非择价 alpha。"
+    },
+    {
+      "id": "WF-003",
+      "title": "[预注册,后开] r20 triple-barrier 重标 (仅 WF-001/002 informs 后)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "双屏障 label 重训 r20 臂(屏障参数预注册冻结), book 层 walk-forward apples-to-apples 两臂同出场防循环",
+        "gate: 重训臂 book净Sharpe>原r20臂 & maxDD不升 & 单月outlier + 分regime + de-lookahead",
+        "verdicts/WF-003.json: status in {PASS,真小,REJECT} + metrics{alpha_delta_pp,sharpe,worst_month,pos_alpha_month_ratio}"
+      ],
+      "priority": 3,
+      "passes": false,
+      "isGate": true,
+      "skip": true,
+      "skipReason": "重活: 待 WF-001 真实基线 + WF-002 止盈定性后再开; codex 警告先有真 baseline 否则出场发现反向灌入 label 循环自证。",
+      "notes": "triple-barrier 已在 EX 阶段预注册; 此处续挂, 仅地基稳固后上。"
+    }
+  ]
+}

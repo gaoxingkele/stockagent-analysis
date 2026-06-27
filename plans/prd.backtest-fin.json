@@ -1,0 +1,73 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/backtest",
+  "northStar": "FIN 阶段 (吃进 codex 第三次 review 收尾建议, 完成 all): ①给 V12.31 真实基线 Sharpe~1.31 补误差条; ②冻结 V12.31 真实基线 + 前向 paper-trade 协议(部署验证地基); ③triple-barrier 作 V12.32 独立挑战者(用户'不限天数,限幅度+回撤'直觉在选股 label 层落地, 走完整 embargo 验证)。codex 第三次 review 定论: 1.31 是最干净真实基线点估计(非最终可部署期望, CI 须补); 止盈死透; triple-barrier 须独立分支全验证非基线补丁。生产线 V12.31(v12_scoring/v12_dual_track)只读冻结; triple-barrier 是平行 V12.32 候选, 过 gate 才谈替换。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出 research/verdicts/FIN-00x.json (status + conclusion + 关键数字)",
+    "triple-barrier 须含 label embargo(屏障 horizon=40d → 训练截止 P_start - 41交易日), 屏障参数预注册冻结不搜 (R01/R04)",
+    "全因果, ST 源头排除 (R06), 大缓存写 research/cache/ (gitignored), 不写 research/features/ (R04)",
+    "生产线指纹未变: v12_scoring.py / v12_dual_track.py 只读 (R05)",
+    "TB gate 与 WFE-001 embargo 基线(1.31)apples-to-apples 比 (同池/cap/双轨/成本/close-based/embargo)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "吃进 codex 第三次 review。FIN-001/002 是基线收尾(误差条+冻结协议); FIN-003 是 triple-barrier 挑战者 gate。",
+    "baseline_errorbars": "WFE-001 embargo 基线(净Sharpe 1.306, 20 cohort)补: per-cohort block bootstrap CI + leave-one-out + 月度/regime 归因 → 给 1.31 误差条, 不改策略",
+    "freeze_protocol": "产 research/backtest/V12.31_BASELINE.md: 冻结配置(V7c池/ratio/行业cap4/双轨/成本/close-based/embargo) + 真实期望=Sharpe 1.31±CI(来自FIN-001) + 前向 paper-trade 追踪计划(daily_review 记录每日 picks→满20/40d 复盘实现 vs 期望, 接 7月血洗窗复检) + 部署前 checklist(财务特征 point-in-time/模型重建确认 from codex#3)",
+    "triple_barrier": "r20 替代 label = 双屏障(上+15% 先触 vs 下-8% 先触)+ 时间 backstop 40d; 屏障参数 X=+0.15/Y=-0.08 预注册冻结; 重训用 embargo walk-forward(训练截止 P_start-41交易日, 因屏障 horizon 40d); score 排序替代 r20 重建 V12.31 book 过引擎(close-based+成本+embargo)",
+    "gate_tb": "V12.32 候选 PASS = TB book 净Sharpe(close-based) > WFE-001 基线 1.31 AND maxDD不升 AND ΔSharpe block bootstrap CI 不含0 AND 单月outlier剔后仍优 AND 分regime不伤; 否则 真小/REJECT"
+  },
+  "responsePlaybook": {
+    "note": "事前注册 (R02)",
+    "FIN-003": {
+      "PASS": "triple-barrier 干净跑赢 1.31 基线 → V12.32 候选, 进独立 holdout(不拿来修饰 V12.31)",
+      "真小": "ΔSharpe>0 但 CI 含0/增益小 → 记候选不强上",
+      "REJECT": "≤1.31 或伤 maxDD/regime → 用户 triple-barrier 直觉在选股层不兑现, 文档化(均值回归选股已近最优)"
+    }
+  },
+  "features": [
+    {
+      "id": "FIN-001",
+      "title": "V12.31 真实基线 1.31 补误差条 (bootstrap/LOO/regime)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "WFE-001 embargo 基线 per-cohort block bootstrap(1000次) Sharpe CI + leave-one-out + 月度/regime 归因",
+        "给 1.31 一个诚实 CI; 指出 Sharpe 主要靠哪些月/regime(集中度风险)",
+        "verdicts/FIN-001.json: status=built, conclusion(1.31 的 CI + 集中度), metrics(bootstrap CI/LOO范围/regime分解)"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-14"
+    },
+    {
+      "id": "FIN-002",
+      "title": "冻结 V12.31 真实基线 + 前向 paper-trade 协议",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "产 research/backtest/V12.31_BASELINE.md 按 preRegisteredGate.freeze_protocol(冻结配置+真实期望1.31±CI+前向追踪计划+部署前checklist)",
+        "部署前 checklist 执行: 核对 r20 特征是否含基本面 point-in-time 风险字段(codex#3 残留盲点), 报告",
+        "verdicts/FIN-002.json: status=built, conclusion(基线已冻结+前向协议就绪+checklist结果)"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-14"
+    },
+    {
+      "id": "FIN-003",
+      "title": "triple-barrier V12.32 挑战者 (双屏障label + embargo WF + book gate)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "按 preRegisteredGate.triple_barrier 双屏障(+15%/-8%/40d backstop)重训 r20 替代 score, embargo walk-forward(P_start-41交易日)",
+        "score 排序替代 r20 重建 V12.31 book 过引擎(close-based+成本+embargo), apples-to-apples vs WFE-001 基线 1.31",
+        "按 gate_tb 断言(净Sharpe>1.31 + maxDD不升 + bootstrap CI不含0 + 单月outlier + 分regime)",
+        "verdicts/FIN-003.json: status in {PASS,真小,REJECT} + metrics{sharpe,delta_sharpe_vs_baseline,worst_month,bootstrap_ci,by_regime} + playbook命中"
+      ],
+      "priority": 3,
+      "passes": true,
+      "completed_at": "2026-06-14"
+    }
+  ]
+}

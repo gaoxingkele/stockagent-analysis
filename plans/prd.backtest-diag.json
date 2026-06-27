@@ -1,0 +1,72 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/backtest",
+  "northStar": "DIAG 阶段 (codex 第五次 review 建议的只读稳定性诊断): 定位'剔 0.005% holder_pct 却晃 book Sharpe 0.46(1.31→0.84)'的来源——到底是 ① 少数边际票/全局重排(pick turnover) ② 少数 cohort 主导(jackknife)。这关系到 V12.31 是不是'刀尖选股'(对真钱部署很关键)。纯只读, 复用 WFE-001(含holder,1.31)与 DEP-001(剔holder,0.84)已缓存的 OOS picks/cohort 收益, 不重训不改策略。codex#5 定论: PIT 红线已清, 部署预期'正但宽带~0.84非1.31', 这两个诊断把摆动来源讲清。生产线 V12.31 只读冻结。多 seed 稳定性(需重训)留 DIAG-003 skip 待部署前。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出 research/verdicts/DIAG-00x.json (status + conclusion + 关键数字)",
+    "纯只读: 复用 research/cache/wfe001 与 dep001 已缓存 picks/book/cohort, 不重训不改策略",
+    "全因果口径不变, ST 源头排除 (R06), 大缓存 gitignored 不写 features (R04)",
+    "生产线指纹未变: v12_scoring.py / v12_dual_track.py 只读 (R05)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "codex#5 诊断, 描述性定位摆动来源, 非 gate。结论用于部署稳健性判断, 不改 1.31/0.84 定性。",
+    "turnover": "对每个 cohort 比 DEP-001(剔holder)vs WFE-001(含holder)的 book picks: 重叠率(Jaccard)/rank turnover/被替换票数; 把 cohort 月超额收益差(Δ)归因到'被替换的少数票'还是'全局重排'; 报 0.46 Sharpe 摆动有多少来自前 k 只 swing 票",
+    "jackknife": "对 DEP-001(0.84)与 WFE-001(1.31)各做 leave-one-cohort-out: 删每个 cohort 后 Sharpe, 看 0.84 vs 1.31 的差是否被少数 cohort 主导; 报删哪个 cohort 后两者最接近/最远"
+  },
+  "responsePlaybook": {
+    "note": "事前注册 (R02)",
+    "DIAG-001": {
+      "少数票主导": "0.46 来自少数边际 swing 票 → 刀尖选股, 部署须警惕单票/容量风险, 记 caveat",
+      "全局重排": "0.46 来自全局排序重排 → 模型对小扰动整体敏感, 部署须降集中/增N稳健性(strategy层, 另议)"
+    },
+    "DIAG-002": {
+      "少数cohort主导": "0.84 vs 1.31 差被少数月主导 → 进一步证明短样本噪声(非真实信息损失), 1.31/0.84 都是宽带抽样",
+      "普遍": "差跨 cohort 普遍 → 剔 holder 系统性小降, 需多 seed(DIAG-003)进一步定"
+    }
+  },
+  "features": [
+    {
+      "id": "DIAG-001",
+      "title": "pick turnover/overlap — 0.46 摆动来自少数票还是全局重排",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "复用 dep001 与 wfe001 picks_oos_daily/picks_by_month, 逐 cohort 算 Jaccard 重叠/rank turnover/替换票数",
+        "把每 cohort 月超额 Δ(DEP−WFE)归因: 前 k 只 swing 票贡献占比 vs 全局; 判少数票/全局重排",
+        "verdicts/DIAG-001.json: status=built, conclusion(0.46 来源+是否刀尖选股), metrics(重叠率/turnover/swing票贡献) + playbook命中"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-15"
+    },
+    {
+      "id": "DIAG-002",
+      "title": "cohort jackknife — 0.84 vs 1.31 是否少数 cohort 主导",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "对 dep001(0.84)与 wfe001(1.31)各 leave-one-cohort-out 重算 Sharpe; 报删每 cohort 后两者 Sharpe + 差",
+        "判 0.84 vs 1.31 的差是否被少数 cohort 主导(短样本噪声 vs 系统性)",
+        "verdicts/DIAG-002.json: status=built, conclusion(差是否少数月主导+对1.31/0.84定性的含义), metrics(LOO Sharpe表/最影响cohort) + playbook命中"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-15"
+    },
+    {
+      "id": "DIAG-003",
+      "title": "[skip,部署前] 多 seed 重训稳定性",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "多 seed 重训 r20(含/剔 holder + 剔其他低重要度对照), 看 Sharpe 摆动是否普遍",
+        "verdicts/DIAG-003.json: status=built + 摆动分布"
+      ],
+      "priority": 3,
+      "passes": false,
+      "skip": true,
+      "skipReason": "需重训较重; codex#5 列为部署前补充, DIAG-001/002 廉价先行。",
+      "notes": "部署前再开。"
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/backtest",
+  "northStar": "建 book 级组合回测引擎 + 因子归因, 发现问题。18 个选股因子全否后转 book/风控层: 我们从没建过真实组合回测器(一直只测等权 Top-N 选股 α), 没有持仓/sizing/暴露/成本/回撤/换手。用户要它发现'混合因子里哪些在实盘 P&L 层面拖后腿'。核心交付: ①参数化组合回测引擎(持仓carryover + A股真实成本 + T+1 + 双轨 sizing, 基线复刻 V12.31 生产 book) ②V12.31 扣成本真实净 P&L(年化/Sharpe/最大回撤/换手, vs hs300/CSI1000/动量基准 → 答'该不该真金白银跑') ③因子/铁律 leave-one-out 归因(book 层 ΔSharpe/Δ回撤, 分 regime → 标正贡献 vs 拖后腿)。它是 book 层地基: 服务交易决策 + 后续 RL-lite 风控策略搜索的 environment + 用户事件序列洞察的 meta-labeling 落点。生产线 V12.31(v12_scoring.py/v12_dual_track.py)只读冻结, 消融全在 research 侧。设计见 research/backtest/DESIGN.md。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出 research/verdicts/BT-00x.json (status + conclusion + 关键数字)",
+    "成本模型/book基线/归因法 预注册冻结于 DESIGN.md, 不在结果上调 (R01)",
+    "全因果, ST 源头排除 (R06), 大缓存写 research/cache/ (gitignored), 不写 research/features/ (R04)",
+    "生产线指纹未变: v12_scoring.py 与基线 manifest 一致 (R05); v12_dual_track.py 亦只读",
+    "引擎 sanity: 成本关+等权时 BT 数与 t005 选股 α 同量级"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "本实验主体是建基础设施 + 描述性归因, 非 walk-forward 落地 gate。BT-004 是预注册的下游残差 gate (skip 待开)。",
+    "cost_model": "佣金0.025%双向 + 印花税0.05%仅卖 + 过户费0.001%双向 + 滑点基线0.10%/边(报0/0.05/0.10/0.20敏感); T+1买入当日不可卖; |涨幅|>=9.8%当日不可成交",
+    "book_baseline": "复刻 v12_dual_track.py 生产 book (双轨70/20/10, 行业cap4, 持有~r20/生产再平衡周期); research侧复述不改生产文件",
+    "attribution": "对评分组件(r20池/pump_up/pump_down/行业cap/双轨sizing) + V7c 6铁律 逐个 leave-one-out, 跑消融arm过引擎, 报 book层 Δ(净Sharpe/年化/最大回撤) 分regime; 正负贡献标注",
+    "bt004_prereg": "事件上下文 meta-label 残差测: 单一表示 ctx=(MA20事件前K日内已上拐?)×(MA5上穿MA20), 不搜窗口/MA组合; 测对T+20残差RankIC扣[pump+MA20斜率+pyr_velocity+ADX]; 报Deflated Sharpe/PBO; gate: 残差|IC|>=0.01&t>=2&过deflation→meta-label/条件sizing(非新α), 否则REJECT_reskin"
+  },
+  "responsePlaybook": {
+    "note": "事前注册 (R02)",
+    "BT-002": {
+      "净正": "扣成本后仍显著正 Sharpe/年化 → V12.31 可实盘, 下一步部署/运营",
+      "净弱": "扣成本后 Sharpe/年化大幅缩水 → 换手/成本是真问题, 优先降换手而非加因子",
+      "regime暴露": "若动量月系统性跑输基准 → 印证用户'基金赢我们输'是 book 层暴露问题, 指向 RL-lite 风控"
+    },
+    "BT-003": {
+      "发现拖后腿": "某组件/铁律 book层 Δ 为负 → 记录候选(生产仍冻结, 仅作 future opt-in 依据)",
+      "全正贡献": "6铁律/组件均正贡献 → V12.31 book 无明显内鬼, 增益须靠 sizing/风控层"
+    }
+  },
+  "features": [
+    {
+      "id": "BT-001",
+      "title": "参数化组合回测引擎 (持仓+A股成本+T+1+双轨sizing)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "实现 research/backtest/engine.py: 输入每期 V12.31 排序picks, 参数化(book policy/再平衡周期/sizing/成本/滑点), 模拟持仓carryover+换手+T+1+涨跌停不可成交",
+        "成本模型按 preRegisteredGate.cost_model 冻结实现",
+        "baseline book 复刻 v12_dual_track 生产规则(只读复述, 不改生产文件)",
+        "输出: 净值曲线/年化/Sharpe/最大回撤/换手/暴露 时序; 落 research/cache/bt001/",
+        "sanity: 成本关+等权 vs t005 选股α 同量级 (验证引擎无bug)",
+        "verdicts/BT-001.json: status=built, conclusion(引擎就绪+sanity结果), 关键数字"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-14",
+      "verdict": "built — engine.py 解析自检全通过(买入持有/成本round-trip≈0.30%/涨跌停/T+1/carryover); picks 复刻 t005 选股α corr+0.999 MAE0.66pp(输入忠实V12.31); 等权成本关 book 每期(≈20d)超额+5.45% vs t005 +3.75% 同量级=无bug"
+    },
+    {
+      "id": "BT-002",
+      "title": "V12.31 扣成本真实净 P&L + 基准/基金对照 (该不该真跑)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "全history跑 V12.31 生产 book 过引擎, 含真实成本+滑点敏感(0/0.05/0.10/0.20)",
+        "报: 年化收益/净Sharpe/最大回撤/月度换手/胜率; vs hs300 + CSI1000 + 动量基准",
+        "分 regime 分解(动量/反转/混合月): 是否动量月系统性跑输(=用户'基金赢我们输'的book层检验)",
+        "verdicts/BT-002.json: status=built, conclusion(扣成本能否赚+regime暴露诊断), metrics(各滑点档 Sharpe/年化/回撤/换手)"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-14",
+      "verdict": "built — V12.31 alloc加权双轨book扣真实成本+滑点敏感(0/0.05/0.10/0.20)全history(21月)过引擎: 基线0.10%滑点 年化+140.5% 净Sharpe+2.78 maxDD-22.0% 月换手1.55 月胜率85%; 滑点0→0.20% Sharpe仅衰减0.12=成本非杀手. 基准 hs300+6.6%/CSI1000+18.5%/动量基准+12.1%. regime(R11): 动量月超额hs300+4.44pp(67%胜)绝对未跑输但是相对最弱regime(vs反转+6.23/混合+9.62)=用户'动量月吃亏'部分印证→指向RL-lite风控. 关键caveat: +140%绝对量级含r20池共模lookahead+集中抬高(同BT-001)非可交易声明, 增量待BT-003 leave-one-out+BT-004残差gate去lookahead后定; 本task可信结论=成本层无杀手+regime相对结构不受等比抬高影响."
+    },
+    {
+      "id": "BT-003",
+      "title": "因子/铁律 leave-one-out 归因 (谁在拖后腿)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "对评分组件(r20池/pump_up/pump_down/行业cap/双轨sizing)+V7c 6铁律逐个leave-one-out, 消融arm过引擎",
+        "每个报 book层 Δ(净Sharpe/年化/最大回撤) vs 完整V12.31基线, 分regime",
+        "标出正贡献 vs 负贡献(拖后腿)组件/铁律; 消融全在research侧, v12_scoring冻结",
+        "verdicts/BT-003.json: status=built, conclusion(哪些拖后腿/哪些核心), 归因表(各组件Δ)"
+      ],
+      "priority": 3,
+      "passes": true,
+      "completed_at": "2026-06-14",
+      "verdict": "built — V12.31 研究 book 7 组件逐个 leave-one-out 过引擎(基线滑点0.10%, 19月). 完整基线 净Sharpe+2.10 年化+94.0% maxDD-23.6%. 归因(ΔSharpe vs baseline): **r20池=绝对核心**(去掉 ΔSharpe-1.37 年化崩+94%→+19%); pump_up排序(ratio_s5)+0.16/pyr_velocity铁律+0.06 为次正贡献; **pump_down过滤完全惰性**(ΔSharpe 0.00, r20池候选几乎无 pump_down_s5≥0.60, filter不binding); 行业cap+0.03/双轨sizing+0.04 近中性(双轨增收益但也增回撤 maxDD-23.6 vs 单轨-18.9); **最拖后腿=行业动量排除铁律**(去掉反而 ΔSharpe+0.10 年化+5.3%, 在 mixed regime +1.29pp). 结论: book α 几乎全靠 r20池, 评分/铁律多为边际或中性, 行业动量排除是 future opt-in 放松候选(生产冻结). Δ受控差分共模lookahead相消, 归因比BT-002绝对量级可信; 双静默/非僵尸推理铁律不在t005研究池harness不在范围."
+    },
+    {
+      "id": "BT-004",
+      "title": "[预注册,后开] 事件上下文 meta-label 残差测 (单表示+PBO)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "按 preRegisteredGate.bt004_prereg 单一表示 ctx, 测对 T+20 残差 RankIC 扣[pump+MA20斜率+pyr_velocity+ADX]",
+        "报 Deflated Sharpe / PBO; 不搜窗口/MA组合(防钓鱼)",
+        "verdicts/BT-004.json: status in {NEW_INFO_meta_label, REJECT_reskin} + 残差IC/t/deflation"
+      ],
+      "priority": 4,
+      "passes": true,
+      "completed_at": "2026-06-14",
+      "skip": false,
+      "skipReason": "",
+      "notes": "前置(BT-001/002/003 回测器+归因)已完成 2026-06-14, 用户指定优先做; 预注册单表示已冻结防钓鱼, 严格不搜窗口/MA组合。",
+      "verdict": "REJECT_reskin — 单表示 ctx=(MA20前5日内已上拐)×(MA5上穿MA20金叉) 严格不搜窗口/MA组合(R01), 事件率1.48%(28126例). 扣[pump+MA20斜率+pyr_velocity+ADX]后残差对T+20 RankIC: 非重叠(每20日,headline防t膨胀)=+0.00019 t=0.007(n=19) ≈纯零; 全日重叠(参考)-0.00159 t=-0.25. raw(不扣)非重叠IC -0.00287 → 金叉本身对T+20微负(A股均值回归,同duokongK). Deflated Sharpe=PSR(SR*=0,trials=1): per-period Sharpe -0.12 PSR 0.31. 三闸(|IC|>=0.01&|t|>=2&PSR>=0.95)全FAIL. regime: reversal微正(+0.020 t1.84)但momentum/mixed微负, 无稳定方向. 结论: ctx增益被现有[MA斜率/pump/pyr/ADX]完全吃掉(印证DESIGN§5先验:MA事件序列≈现有TA重打包,同关系张量TCN≈0), 不作meta-label; 生产线冻结(R05). 第19个被脚手架诚实否的假设, 未p-hack(单表示一次定调,R02)."
+    }
+  ]
+}

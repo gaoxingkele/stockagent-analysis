@@ -77,7 +77,12 @@
             <span class="text-text-dim" x-text="pools[k].count+'股 · 入主推★ '+pools[k].n_star"></span>
             <span class="ml-auto flex items-center gap-2">
               <template x-if="k==='B'">
-                <a href="/analyze" class="btn btn-primary text-xs py-1">+ 新建分析</a>
+                <span class="flex items-center gap-2">
+                  <span x-show="watchMsg" class="text-xs" :class="watchMsg.startsWith('✗')?'text-danger':'text-success'" x-text="watchMsg"></span>
+                  <input x-model="watchInput" @keydown.enter="addWatchB()" placeholder="加自选 如 600519" class="text-xs w-36 font-mono py-1">
+                  <button class="btn btn-ghost text-xs py-1" @click="addWatchB()" :disabled="busy.watch">＋ 加自选</button>
+                  <a href="/analyze" class="btn btn-primary text-xs py-1">新建分析</a>
+                </span>
               </template>
               <template x-if="k!=='B'">
                 <span class="badge badge-accent">⚙ 系统自动生成</span>
@@ -93,32 +98,41 @@
                   <th class="px-3 py-2 text-left">名称</th>
                   <th class="px-3 py-2 text-left">行业</th>
                   <th class="px-3 py-2 text-right" x-show="k==='C'">持有基金</th>
-                  <th class="px-3 py-2 text-right">r20</th>
+                  <th class="px-3 py-2 text-right cursor-pointer select-none hover:text-accent" @click="setSort('r20')"
+                      :class="sortKey==='r20'?'text-accent':''">r20<span x-text="sortArrow('r20')"></span></th>
                   <th class="px-3 py-2 text-right">pump↑</th>
                   <th class="px-3 py-2 text-right">pump↓</th>
-                  <th class="px-3 py-2 text-right">ratio</th>
-                  <th class="px-3 py-2 text-right">past5</th>
+                  <th class="px-3 py-2 text-right cursor-pointer select-none hover:text-accent" @click="setSort('ratio')"
+                      :class="sortKey==='ratio'?'text-accent':''">ratio<span x-text="sortArrow('ratio')"></span></th>
+                  <th class="px-3 py-2 text-right cursor-pointer select-none hover:text-accent" @click="setSort('past5')"
+                      :class="sortKey==='past5'?'text-accent':''">past5<span x-text="sortArrow('past5')"></span></th>
                   <th class="px-3 py-2 text-center">主推</th>
                 </tr>
               </thead>
               <tbody>
-                <template x-for="(r,i) in pools[k].items" :key="r.ts_code">
+                <template x-for="(r,i) in sortedItems(k)" :key="r.ts_code">
                   <tr class="border-t border-line hover:bg-bg-hover">
                     <td class="px-3 py-2 text-text-dim" x-text="i+1"></td>
-                    <td class="px-3 py-2 font-mono">
+                    <td class="px-3 py-2 font-mono whitespace-nowrap">
                       <a :href="`/stock/${r.ts_code}/history`" class="hover:text-accent" x-text="r.ts_code"></a>
+                      <button x-show="k==='B'" @click="removeWatchB(r.ts_code)" class="ml-2 text-text-dim hover:text-danger" title="移出自选">✕</button>
                     </td>
                     <td class="px-3 py-2" x-text="r.name || '—'"></td>
                     <td class="px-3 py-2 text-text-muted" x-text="r.industry || '—'"></td>
                     <td class="px-3 py-2 text-right" x-show="k==='C'"
                         :class="(r.n_funds||0)>=10 ? 'text-accent font-medium' : 'text-text-muted'"
                         x-text="r.n_funds!=null ? r.n_funds : '—'"></td>
-                    <td class="px-3 py-2 text-right" x-text="r.r20!=null ? r.r20.toFixed(0) : '—'"></td>
+                    <td class="px-3 py-2 text-right whitespace-nowrap">
+                      <span x-text="r.r20!=null ? r.r20.toFixed(0) : '—'"></span>
+                      <span x-show="r.r20_dir==='up'" class="up">↑</span><span x-show="r.r20_dir==='down'" class="down">↓</span>
+                    </td>
                     <td class="px-3 py-2 text-right text-text-muted" x-text="r.pump_up!=null ? r.pump_up.toFixed(3) : '—'"></td>
                     <td class="px-3 py-2 text-right text-text-muted" x-text="r.pump_down!=null ? r.pump_down.toFixed(3) : '—'"></td>
-                    <td class="px-3 py-2 text-right font-medium"
-                        :class="r.ratio>=5 ? 'text-warn' : (r.ratio>=2 ? 'text-success' : 'text-text')"
-                        x-text="r.ratio!=null ? r.ratio.toFixed(1)+'x' : '—'"></td>
+                    <td class="px-3 py-2 text-right font-medium whitespace-nowrap">
+                      <span :class="r.ratio>=5 ? 'text-warn' : (r.ratio>=2 ? 'text-success' : 'text-text')"
+                            x-text="r.ratio!=null ? r.ratio.toFixed(1)+'x' : '—'"></span>
+                      <span x-show="r.ratio_dir==='up'" class="up">↑</span><span x-show="r.ratio_dir==='down'" class="down">↓</span>
+                    </td>
                     <td class="px-3 py-2 text-right"
                         :class="(r.past5||0)>0 ? 'up' : 'down'"
                         x-text="r.past5!=null ? ((r.past5*100>=0?'+':'')+(r.past5*100).toFixed(1)+'%') : '—'"></td>
@@ -176,8 +190,10 @@
 function poolsApp() {
   return {
     date: '', dates: [], pools: null, tab: 'A',
-    busy: { market: false, score: false },
+    sortKey: '', sortDir: 'desc',
+    busy: { market: false, score: false, watch: false },
     symbolQuery: '', singleResult: null,
+    watchInput: '', watchMsg: '',
     activeProgress: { show:false, title:'', phase:'', percent:0, message:'', elapsed:0, events:[], _startTs:null, _es:null },
 
     async init() {
@@ -201,6 +217,54 @@ function poolsApp() {
     },
     formatDate(d){ return `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`; },
     poolBadge(k){ return ({A:'badge-success',B:'badge-accent',C:'badge-warn',D:'badge-danger'})[k]||'badge-accent'; },
+    setSort(key){ if(this.sortKey===key){ this.sortDir = this.sortDir==='desc'?'asc':'desc'; } else { this.sortKey=key; this.sortDir='desc'; } },
+    sortArrow(key){ if(this.sortKey!==key) return ' ⇅'; return this.sortDir==='desc'?' ↓':' ↑'; },
+    sortedItems(k){
+      const items = (this.pools && this.pools[k]) ? this.pools[k].items : [];
+      if(!this.sortKey) return items;
+      const key=this.sortKey, asc=this.sortDir==='asc';
+      return [...items].sort((a,b)=>{
+        let x=a[key], y=b[key];
+        if(x==null) return 1; if(y==null) return -1;   // null 永远排末尾
+        return asc ? x-y : y-x;
+      });
+    },
+    // ── 池B 自选管理 (持久化 REST + 即时打分注入) ──
+    async addWatchB(){
+      const code = (this.watchInput||'').trim().toUpperCase(); if(!code) return;
+      this.busy.watch = true; this.watchMsg = '';
+      try {
+        const r = await api(`/api/v12/watchlist-b?code=${encodeURIComponent(code)}`, {method:'POST'});
+        if(!r) return;
+        if(!r.ok){ this.watchMsg = '✗ ' + (await r.text()).slice(0,60); return; }
+        const norm = (await r.json()).added || code;
+        this.watchInput = '';
+        const ok = await this.injectScored(norm);
+        this.watchMsg = ok ? `✓ ${norm} 已加入并打分` : `✓ ${norm} 已加入 (该日无数据,下次生成入池)`;
+        this.tab = 'B';
+        setTimeout(()=>{ this.watchMsg=''; }, 5000);
+      } finally { this.busy.watch = false; }
+    },
+    async injectScored(code){
+      try {
+        const r = await fetch(`/api/v12/pool-item?date=${this.date}&code=${encodeURIComponent(code)}`, {credentials:'include'});
+        if(!r.ok) return false;
+        const item = await r.json();
+        if(this.pools && this.pools.B && !this.pools.B.items.some(x=>x.ts_code===item.ts_code)){
+          this.pools.B.items.push(item); this.pools.B.count = this.pools.B.items.length;
+        }
+        return true;
+      } catch { return false; }
+    },
+    async removeWatchB(code){
+      if(!confirm(`移出自选 ${code}?`)) return;
+      const r = await api(`/api/v12/watchlist-b/${code}`, {method:'DELETE'});
+      if(!r || !r.ok) return;
+      if(this.pools && this.pools.B){
+        this.pools.B.items = this.pools.B.items.filter(x=>x.ts_code!==code);
+        this.pools.B.count = this.pools.B.items.length;
+      }
+    },
     num(v,n=3){ return (v!=null && !isNaN(v)) ? Number(v).toFixed(n) : '—'; },
     sr_ratio(){ const s=this.singleResult; if(!s||s.pump_score==null) return '—';
       return (s.pump_score/((s.pump_down_score||0)+0.01)).toFixed(1)+'x'; },

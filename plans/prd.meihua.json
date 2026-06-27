@@ -1,0 +1,98 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/meihua",
+  "northStar": "把梅花易数起卦(research/meihua_encoder.py, vendored from ds-oracle-cli)做成确定性 categorical 特征, 检验它对起涨点(+20 forward)是否有经 walk-forward 验证、且扣除朴素对照(公历月+板块cohort)后仍存在的真 alpha。两阶段: Phase1 廉价 IC+消融筛查(无残差则廉价收手), Phase2 walk-forward gate。先验=大概率噪声(组合卦≈日历+价格末位, 静态卦≈股票ID)。生产线 V12.31 全程冻结。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0 (纪律检查器全绿)",
+    "每个非 skip task 产出工件 + research/verdicts/<id>.json (含 status 与一句话结论)",
+    "MH-004 walk-forward gate 已评估 (PASS 落地 / REJECT 文档化), 或 MH-002 无残差触发 precondition skip",
+    "生产线指纹未变: v12_scoring.py 与生产模型 hash 与基线一致"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "循环启动时写死, 不得修改 (SIGN-R01); 必须按 regime 分层 (SIGN-R11); 必须存活朴素消融 (SIGN-R12)",
+    "metric": "19 月 walk-forward, 梅花特征臂 vs 无梅花 baseline 臂 apples-to-apples, 对照 V12.31",
+    "pass_conditions": [
+      "Δα(月化) >= +0.30pp 相对无梅花 baseline",
+      "Sharpe 不低于 baseline",
+      "最差月不低于 baseline",
+      "增益在扣除公历月 + 板块 cohort 朴素对照后仍存在 (SIGN-R12 消融存活)"
+    ]
+  },
+  "features": [
+    {
+      "id": "MH-001",
+      "title": "全历史梅花特征 parquet 生成 + 泄漏/确定性校验",
+      "acceptanceCriteria": [
+        "用 research/meihua_encoder.encode_frame 对全历史面板 (ts_code,trade_date,close) 生成 mh_*/mhs_* 特征",
+        "输出 research/features/meihua_features.parquet (key: ts_code,trade_date)",
+        "确定性自检 (重算逐位一致) + research/verify.py leakage guard 通过 (只吃决策时刻已知量, 无 forward 字段)",
+        "卦象分布 sanity (体用关系 5 类不退化, 64 卦覆盖)",
+        "research/verdicts/MH-001.json: status=built + 分布摘要"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "notes": "编码器已建 (research/meihua_encoder.py)。本 task = 批量落盘 + 校验。+20 等 forward label 绝不进特征。DONE: research/mh001_build_features.py 生成 research/features/meihua_features.parquet (5,302,085 行 × 20 特征, 20220104~20260603, ST 源头排除 266 只/280K 行); 确定性=True, 零泄漏, 体用5类不退化 (21.9/18.7/18.8/20.3/20.3%), 组合卦 base 64/64, 静态卦 57/64。"
+    },
+    {
+      "id": "MH-002",
+      "title": "Phase-1 廉价筛查: regime 分层 rank-IC + 朴素消融对照",
+      "acceptanceCriteria": [
+        "算 mh_*/mhs_* 对前向 r20 的横截面 rank-IC, 按 RG-001 regime 分层 (纯描述, 非 gate, SIGN-R03)",
+        "朴素对照: 同口径只用 '公历月 + 板块 cohort' 预测 r20; 比较梅花是否有独立残差 IC",
+        "research/verdicts/MH-002.json: status in {residual_signal, no_residual_signal} + IC 表 + 消融对照",
+        "若 no_residual_signal 则把 MH-003/004 标记 skip:true, MH-005 skipped"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-04",
+      "notes": "防自欺核心 (SIGN-R12): 梅花增益若被 月历+板块 朴素对照吃掉 = 信号来自世俗来源被卦象打包, 廉价 REJECT。precondition: no_residual → 后续 skip。DONE: research/mh002_phase1_screen.py。判定 no_residual_signal。最强动态 mh_* 残差 = mh_yang_count IC=-0.0011 t=-2.15 (|IC| 比 0.01 floor 低一个量级, t 只因 1012 日才过线 = 经济上零信号); 所有动态 mh_* |IC|<=0.0011。朴素对照 (公历月×板块) OOF-IC=+0.0073。mhs_* 静态卦残差 IC 更大 (至 -0.018) 但=卦象版股票ID 的个股固定效应非占卜 (扣板块后反增, 证实是 per-stock 固定效应)。横截面 IC 天然差掉当日全市场常数 ⇒ 纯公历月季节性不进 IC。precondition 触发: MH-003/004 置 skip, MH-005 skipped。"
+    },
+    {
+      "id": "MH-003",
+      "title": "Phase-2: 梅花特征加进 V12.31 池排序模型 (apples-to-apples 臂)",
+      "acceptanceCriteria": [
+        "两臂唯一差异 = 排序模型是否含 mh_*/mhs_* 特征, 其余 (池/过滤/仓位/持有) 完全一致",
+        "全因果无泄漏, 复用 t005 walk-forward harness 口径",
+        "research/verdicts/MH-003.json: status=built"
+      ],
+      "priority": 3,
+      "passes": false,
+      "skip": true,
+      "skipReason": "MH-002 判定 no_residual_signal (2026-06-04): 动态 mh_* 残差 |IC|<=0.0011 (≪0.01 floor), 卦象信号被 公历月×板块 朴素对照解释完毕, 无独立残差 ⇒ 廉价收手, 不进 walk-forward。",
+      "notes": "依赖 MH-002=residual_signal; no_residual 时由 MH-002 置 skip。"
+    },
+    {
+      "id": "MH-004",
+      "title": "walk-forward 决策 gate (梅花特征臂 vs 无梅花 baseline)",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "19 月 walk-forward, 协议与 project_walk_forward_validation_0525 一致, apples-to-apples",
+        "报告全期 + 分 regime 的 α/Sharpe/最差月/胜率 vs baseline",
+        "断言 preRegisteredGate.pass_conditions (含消融存活 SIGN-R12): 全满足 -> PASS, 否则 REJECT",
+        "research/verdicts/MH-004.json: status in {PASS, REJECT} + metrics(alpha_delta_pp/sharpe/worst_month/pos_alpha_month_ratio) + 消融对照"
+      ],
+      "priority": 4,
+      "passes": false,
+      "skip": true,
+      "skipReason": "MH-002 判定 no_residual_signal (2026-06-04): 卦象消融未存活 (SIGN-R12), 无独立残差信号送进 walk-forward gate ⇒ 廉价收手。",
+      "notes": "REJECT 是合法完成 (SIGN-R02)。按 regime 分层 (SIGN-R11) + 消融存活 (SIGN-R12) 缺一不可。"
+    },
+    {
+      "id": "MH-005",
+      "title": "落地 (仅 MH-004 PASS): opt-in 接进 v12_scoring",
+      "acceptanceCriteria": [
+        "以 opt-in 开关接入 v12_scoring.py, 默认关闭",
+        "默认生产路径 (开关关) 输出与基线逐位一致",
+        "research/verdicts/MH-005.json: status in {landed, skipped}"
+      ],
+      "priority": 5,
+      "passes": false,
+      "skip": true,
+      "skipReason": "条件任务: 仅当 MH-004 verdict=PASS 时由迭代解除 skip; REJECT 或 MH-002 no_residual 则保持 skip 并写 verdict=skipped。",
+      "notes": "未 PASS 不落地。"
+    }
+  ]
+}

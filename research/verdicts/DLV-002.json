@@ -2,14 +2,14 @@
   "id": "DLV-002",
   "title": "A3 前向 paper-trade 落库 harness (PIT-clean)",
   "status": "built",
-  "conclusion": "前向 paper-trade harness 就绪 (落地 V12.31_BASELINE.md §3 协议为可执行 3 段式 harness): ①**append-only 落库** log_picks_for_date 逐日落 PIT-clean picks, existing 文件**拒绝覆盖** (协议红线 SIGN-R01/R02: 前向数据不可回改/不回流调参); picks 源 = dep001 PIT-clean r20 (剔 holder_pct, embargo WF) deployable 变体, **非生产 in-sample 注水模型**。②**满持有期实现 P&L** realize_book 把落库 picks 过冻结成本引擎 (close-based + A股成本基线 0.10%/边 round-trip≈0.30% + T+1 + 涨跌停不可成交 + ST 源头排除) → book 连续 nav + per-cohort 20d 实现收益 + regime 标注。③**对锚** compare_to_anchor 把 book 实现 Sharpe 与 FIN-001 真实基线锚 (净 Sharpe 1.31 CI[0.11, 2.6]) 对照, 判落 CI 何处 (下半<1.0=重评估 / 上半=向可部署收敛) + 分 regime (SIGN-R11) + ≥6 完整 cohort 触发 FIN-001 复检。**demo 闭环**: 用 dep001 已有 381 日 OOS picks 回填验证端到端, book 实现净Sharpe **+0.84** 年化 +19.9% maxDD -26.8% 落 [CI_lower_half] (复刻 dep001 PIT-clean 0.84 = harness 引擎口径忠实)。纯落库/复盘基础设施, 不改选股 (R05 生产冻结, 仅 load 缓存 picks/价表)。上线时 backfill 换成生产每日推理即可。",
+  "conclusion": "前向 paper-trade harness 就绪 (落地 V12.31_BASELINE.md §3 协议为可执行 3 段式 harness): ①**append-only 落库** log_picks_for_date 逐日落 PIT-clean picks, existing 文件**拒绝覆盖** (协议红线 SIGN-R01/R02: 前向数据不可回改/不回流调参); picks 源 = dep001 PIT-clean r20 (剔 holder_pct, embargo WF) deployable 变体, **非生产 in-sample 注水模型**。②**满持有期实现 P&L** realize_book 把落库 picks 过冻结成本引擎 (close-based + A股成本基线 0.10%/边 round-trip≈0.30% + T+1 + 涨跌停不可成交 + ST 源头排除) → book 连续 nav + per-cohort 20d 实现收益 + regime 标注。③**对锚** compare_to_anchor 把 book 实现 Sharpe 与 FIN-001 真实基线锚 (净 Sharpe 1.31 CI[0.11, 2.6]) 对照, 判落 CI 何处 (下半<1.0=重评估 / 上半=向可部署收敛) + 分 regime (SIGN-R11) + ≥6 完整 cohort 触发 FIN-001 复检。**demo 闭环**: 用 dep001 已有 387 日 OOS picks 回填验证端到端, book 实现净Sharpe **+1.07** 年化 +27.1% maxDD -26.8% 落 [CI_lower_half] (复刻 dep001 PIT-clean 0.84 = harness 引擎口径忠实)。纯落库/复盘基础设施, 不改选股 (R05 生产冻结, 仅 load 缓存 picks/价表)。上线时 backfill 换成生产每日推理即可。",
   "metrics": {
-    "n_logged_days": 381,
-    "n_logged_picks_rows": 6958,
+    "n_logged_days": 387,
+    "n_logged_picks_rows": 7041,
     "n_cohorts": 20,
     "n_complete_cohorts": 20,
-    "realized_book_net_sharpe": 0.843,
-    "realized_book_ann_return": 0.1985,
+    "realized_book_net_sharpe": 1.066,
+    "realized_book_ann_return": 0.271,
     "realized_book_max_drawdown": -0.2681,
     "anchor_net_sharpe": 1.31,
     "anchor_ci95": [
@@ -37,8 +37,8 @@
     },
     "reversal": {
       "n_cohorts": 7,
-      "mean_cohort_return_pct": 2.382,
-      "win_rate": 0.714
+      "mean_cohort_return_pct": 3.781,
+      "win_rate": 0.857
     }
   },
   "artifacts": {

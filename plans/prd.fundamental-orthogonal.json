@@ -1,0 +1,117 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/fundamental-orthogonal",
+  "northStar": "验证基本面成长因子(营收增速 or_yoy / 利润增速 netprofit_yoy, 标准化+行业中性)是否对 V12.31 带来经 walk-forward 验证、且扣除[动量+size+value+其他基本面]后仍存在的真 alpha。这是 8 次价量否决后第一个不塌的正交信号(快测: or_yoy 扣动量后 IC +0.033 原封不动, 但 18月 t=1.39 未显著)。需拉长历史补功率。生产线 V12.31 全程冻结。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0 (纪律检查器全绿)",
+    "每个非 skip task 产出工件 + research/verdicts/FU-00x.json (含 status 与一句话结论 + 命中的 responsePlaybook 分支)",
+    "FU-004 walk-forward gate 已评估 (PASS/REJECT 按 playbook), 或 FU-003 塌缩触发 precondition skip",
+    "生产线指纹未变: v12_scoring.py 与生产模型 hash 与基线一致"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "启动写死(R01); 分regime(R11); 基本面消融升级(R12++): 扣[价格动量 + size(total_mv) + value(PE/PB) + 其他基本面(ROE/margin)]后仍存在",
+    "fu003_significance": "拉长历史(≥40月)后, or_yoy(或成长组合)扣[动量+size+value+其他基本面]残差 cross-sectional IC: |IC|>=0.02 且 |t|>=3 → 显著正交",
+    "fu004_gate": [
+      "Δα(基本面臂 − V12.31 baseline) >= +0.30pp/月 (walk-forward apples-to-apples)",
+      "Sharpe / 最差月 不低于 baseline",
+      "单月 outlier 检验: 剔除任一单月后 Δα 仍 > 0",
+      "按 regime 分层无伤",
+      "增量扣 [动量+size+value+其他基本面] 后仍存在 (R12++)"
+    ]
+  },
+  "responsePlaybook": {
+    "note": "事前注册的分叉应对 (冻结, 防事后找补 R02)。每个 verdict 必须标注命中的分支。",
+    "FU-001_data": {
+      "财报重述restatement": "用首次披露 ann_date / vintage 值, 绝不用最新修正值回填历史 (前视泄漏)",
+      "ann_date缺失": "用 first_ann_date 兜底; 仍缺则剔除该记录",
+      "覆盖不足": "若某市值档覆盖<10% 标注并在该档单列评估, 不强行全市场"
+    },
+    "FU-003_outcomes": {
+      "A_显著正交": "扣全控制后 |IC|>=0.02 且 |t|>=3 → 进 FU-004 walk-forward",
+      "B_边缘": "|IC|>=0.02 但 t∈[2,3) → 进 FU-004 但标注低功率; 若 FU-004 也边缘 → REJECT + 文档化 promising_unproven (待更多数据复检, 不强上)",
+      "C_塌缩": "扣控制后 |IC|<0.01 或 t<2 → 廉价 REJECT, 跳过 walk-forward (是 size/value/动量 reskin 或窗口 artifact), FU-004/005 skip",
+      "D_已知因子reskin": "or_yoy 被 size 或 value 单独吃掉(扣 size/value 后塌) → REJECT, 记录=成长/小盘 reskin 非新 alpha"
+    },
+    "FU-004_outcomes": {
+      "A_PASS": "Δα>=+0.30pp 且全子条件过 → FU-005 opt-in 落地",
+      "B_真小": "Δα∈(0,+0.30) 显著 → 不独立落地, 记录为 blend 候选(未来组合用), 不强上 (SIGN-R03)",
+      "C_子条件挂": "Δα>=+0.30 但 worst月/单月outlier/regime 任一挂 → REJECT, 记录挂哪条+机理(如集中在某报告季)",
+      "D_负": "Δα<0 → 干净 REJECT",
+      "E_条件有效": "仅某子域/regime 有效 → 仅当该条件可因果识别(RG-002 教训: 因果可 gate)才记录条件部署候选; 否则 REJECT"
+    }
+  },
+  "features": [
+    {
+      "id": "FU-001",
+      "title": "Point-in-time 基本面面板 (fina_indicator_vip 拉长至 ~2019, ann_date 对齐)",
+      "acceptanceCriteria": [
+        "fina_indicator_vip 按报告期 bulk 拉 ~2019Q4 至 2025Q3 (≥24 期), 字段含 ann_date/end_date/roe/grossprofit_margin/netprofit_yoy/or_yoy/debt_to_assets",
+        "构建 point-in-time 面板: 每 (ts_code,trade_date) as-of ann_date<=date 取最新期 (重述用首次ann_date, SIGN-R04)",
+        "+ size(total_mv via daily_basic) + value(pe/pb) 控制列 (消融用); ST 源头排除",
+        "落盘 research/features/fundamental_pit.parquet; 确定性/泄漏自检(无未来 ann_date); research/verdicts/FU-001.json status=built + 覆盖率(分市值档)"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-05",
+      "notes": "playbook FU-001_data 处理重述/缺失/覆盖。快测已证 fina_indicator_vip 一调全市场可行。DONE: research/features/fundamental_pit.parquet 268525行×5435股×54月度网格(2022-01~2026-06), ann_date对齐(首次披露不回填), 22报告期used(2019Q4起), or_yoy覆盖98.9%(各市值档>98%), 报告滞后中位62d, 无未来公告泄漏。"
+    },
+    {
+      "id": "FU-002",
+      "title": "成长因子构建 + 控制集 (标准化/行业中性/组合 + 动量+size+value+其他基本面)",
+      "acceptanceCriteria": [
+        "成长因子: or_yoy / netprofit_yoy winsorize + 横截面 rank/z + 行业中性化 + 组合(growth_composite)",
+        "控制集: 价格动量(mom_5/20/60) + size(ln total_mv) + value(1/pe,1/pb) + 其他基本面(roe/margin) — 全 point-in-time 因果",
+        "research/verdicts/FU-002.json status=built + 因子/控制清单 + 相关性矩阵(成长 vs 控制)"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-05",
+      "notes": "控制集是 R12++ 消融核心: 决定成长因子是否只是 size/value/动量 reskin。DONE: research/fu002_build_factors.py 产出 research/features/fundamental_factors.parquet (268525行×17列, growth_or/growth_np/growth_composite winsor+横截面z+行业中性, 控制集 mom_5/20/60+ln_total_mv+inv_pe/pb+roe/margin), growth_composite 覆盖98.9%。逐日横截面 Spearman: growth_composite vs roe +0.352(最强,其他基本面), vs inv_pb -0.137(value), vs ln_total_mv +0.121(size), vs mom_20 弱 — 成长主要与 ROE/盈利质量同向, 与价值反向, 与动量近正交。已 merge regime(覆盖79.5%)供 FU-003 分层。无 forward 字段(label 在 FU-003 另接)。"
+    },
+    {
+      "id": "FU-003",
+      "title": "功率充足的正交 IC 验证 (≥40月, 扣全控制残差 IC + 分regime + 显著性)",
+      "acceptanceCriteria": [
+        "≥40 个月度 rebalance 横截面 rank-IC(成长因子, fwd r20), 全期 + 分regime(SIGN-R11)",
+        "正交 IC: 扣 [动量+size+value+其他基本面] 残差化后的 IC + t (FU-002 控制集)",
+        "逐步消融: 单扣动量 / 单扣size / 单扣value 各看塌不塌 (定位信号来源)",
+        "research/verdicts/FU-003.json: status in {A_显著正交, B_边缘, C_塌缩, D_已知因子} (按 responsePlaybook) + IC表",
+        "若 C 或 D → FU-004 标记 skip:true, FU-005 skipped"
+      ],
+      "priority": 3,
+      "passes": true,
+      "completed_at": "2026-06-05",
+      "notes": "VERDICT=C_塌缩 (REJECT, 命中 playbook FU-003_outcomes::C). research/fu003_orthogonal_ic.py 跑 47 月度 rebalance(≥40 功率达标) × 成长因子(growth_or/np/composite) × 6 残差变体(raw/单扣mom/size/value/ofund/orth_full), 复用 rt004_r20_label.parquet(因果 close.shift(-20))。头号因子 or_yoy(growth_or): 原始 IC 在 47 月窗口转负 -0.0080(18月快测 +0.033 是短窗 artifact), 扣[动量+size+value+其他基本面]全控制残差 orth IC=+0.0055 |t|=1.08 — 远未达显著线(需 |IC|>=0.02 & |t|>=3)。growth_composite orth IC=+0.0081 t=1.52; 最强 growth_np orth IC=+0.0130 t=2.44 仍不过线。逐步消融: raw 本就≈0/负(无可被吃掉的信号), 非被单一 size/value 吃掉 → 归 C 非 D。分 regime(SIGN-R11) 无任一 cell 过线(最强 growth_np@reversal IC=0.0188 t=2.08)。第 9 个被否假设, 但首个非价量换皮信号最终也塌于长窗口。IC 表 research/cache/fu003_ic_table.parquet。FU-004/005 skip(廉价省 walk-forward 算力)。"
+    },
+    {
+      "id": "FU-004",
+      "title": "walk-forward 决策 gate (基本面成长臂 vs V12.31, 扣全控制消融)",
+      "isGate": true,
+      "acceptanceCriteria": [
+        "19月(或更长) walk-forward apples-to-apples: V12.31 排序 + 成长因子 vs 纯 V12.31 baseline",
+        "断言 fu004_gate (Δα>=+0.30pp + Sharpe/最差月不降 + 单月outlier + 分regime + 扣[动量+size+value+其他基本面]存活)",
+        "research/verdicts/FU-004.json: status in {A_PASS,B_真小,C_子条件挂,D_负,E_条件有效} (按 playbook) + metrics(alpha_delta_pp/sharpe/worst_month/pos_alpha_month_ratio)"
+      ],
+      "priority": 4,
+      "passes": false,
+      "skip": true,
+      "skipReason": "FU-003 verdict=C_塌缩 触发 precondition skip (responsePlaybook FU-003_outcomes::C → 廉价 REJECT 跳 walk-forward, 省算力)。成长正交信号已在功率充足(47月)正交 IC 上塌缩, 无 go 信号进 walk-forward。",
+      "notes": "playbook FU-004_outcomes 决定落地/blend/REJECT。REJECT 合法完成(R02)。本轮因 FU-003 塌缩跳过, 见 research/verdicts/FU-004.json status=skipped。"
+    },
+    {
+      "id": "FU-005",
+      "title": "落地 (仅 FU-004=A_PASS): opt-in 接进 v12_scoring",
+      "acceptanceCriteria": [
+        "以 opt-in 开关接入 v12_scoring.py, 默认关闭; 默认生产路径输出与基线逐位一致",
+        "research/verdicts/FU-005.json: status in {landed, skipped} + 若 B_真小 记 blend 候选"
+      ],
+      "priority": 5,
+      "passes": false,
+      "skip": true,
+      "skipReason": "条件任务: 仅当 FU-004 verdict=A_PASS 时由迭代解除 skip; 其余分支保持 skip 并按 playbook 写 verdict(skipped / blend候选 / promising_unproven)。",
+      "notes": "未 A_PASS 不落地。B_真小 仅记 blend 候选不强上。"
+    }
+  ]
+}

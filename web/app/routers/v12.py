@@ -50,6 +50,47 @@ async def get_pools(
     return data
 
 
+@router.get("/watchlist-b")
+async def get_watchlist_b(user: Annotated[User, Depends(get_current_user)]):
+    """池B 自选清单 (JSON 持久化, config/watchlist_b.json)."""
+    return {"codes": v12_service.get_watchlist_b()}
+
+
+@router.post("/watchlist-b")
+async def add_watchlist_b(
+    user: Annotated[User, Depends(get_current_user)],
+    code: str = Query(..., description="6位.SZ/.SH 或纯6位"),
+):
+    """加一只到池B自选 (持久化; 次日四池重生成后入池打分)."""
+    try:
+        codes = v12_service.add_watchlist_b(code)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"codes": codes, "added": code}
+
+
+@router.delete("/watchlist-b/{code}")
+async def remove_watchlist_b(
+    user: Annotated[User, Depends(get_current_user)],
+    code: str,
+):
+    """从池B自选删一只 (持久化)."""
+    return {"codes": v12_service.remove_watchlist_b(code), "removed": code}
+
+
+@router.get("/pool-item")
+async def get_pool_item(
+    user: Annotated[User, Depends(get_current_user)],
+    date: str = Query(..., pattern=r"^\d{8}$"),
+    code: str = Query(...),
+):
+    """单 code 的池-item (加自选后即时注入当前视图; 读 scores_<date>.parquet)."""
+    item = v12_service.score_pool_item(date, code)
+    if not item:
+        raise HTTPException(404, f"{date} 无 {code} 市场评分 (下次跑全市场后入池)")
+    return item
+
+
 @router.get("/recommend", response_model=V12RecommendResponse)
 async def get_recommend(
     user: Annotated[User, Depends(get_current_user)],

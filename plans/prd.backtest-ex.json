@@ -1,0 +1,80 @@
+{
+  "repo": "gaoxingkele/stockagent-analysis",
+  "branchName": "research/backtest",
+  "northStar": "EX 阶段: 出场策略测 + 基金/风格对照 (承用户 triple-barrier 直觉, 用 BT-001 现成回测器)。19× 价格/形态选股信号穷尽(BT-004 事件上下文也 REJECT_reskin) → 增量不在新信号, 在目标函数/出场策略/universe。用户提'不限天数, 限上涨幅度(分批止盈)+最大回撤(止损)提 Sharpe'=triple-barrier。拆 3 杠杆先验差别巨大: 回撤止损强负(均值回归上反指,砍在反弹前)/分批止盈可能正(遇强减仓顺edge)/r20 triple-barrier 重标最有戏(改选股目标瞄Sharpe,重活后开)。EX-001 同一批V12.31 picks套不同出场比book Sharpe(受控Δ共模相消可信),分离验证'止盈帮止损伤'; EX-002 量化'基金更强'是选股还是风格(picks风格画像+vs质量基准/基金重仓篮); EX-003 r20 triple-barrier 重标预注册待开。生产线 V12.31(v12_scoring/v12_dual_track)只读冻结。设计见 research/backtest/DESIGN.md §7。",
+  "verifyCommand": "python research/verify.py",
+  "acceptanceCriteria": [
+    "python research/verify.py 退出码 0",
+    "每个非 skip task 产出 research/verdicts/EX-00x.json (status + conclusion + 关键数字)",
+    "出场网格/对照法 预注册冻结于 DESIGN.md §7, 不搜不在结果上调 (R01)",
+    "全因果, ST 源头排除 (R06), 大缓存写 research/cache/ (gitignored), 不写 research/features/ (R04)",
+    "生产线指纹未变: v12_scoring.py 与基线 manifest 一致 (R05); v12_dual_track.py 只读",
+    "EX-001 受控 Δ 同 picks 共模相消; 绝对量级含 r20 lookahead 非可交易声明 (R03)"
+  ],
+  "preRegisteredGate": {
+    "frozen": true,
+    "note": "EX-001/002 是回测器上的描述性/受控Δ对照, 非 walk-forward 落地 gate (那是 EX-003 r20 重标)。复用 BT-001 engine.py + 冻结成本模型。",
+    "exit_grid": "baseline=固定~r20持有; 分批止盈TP=三档+10/+20/+30%各1/3(日内high达标价,缺口→开盘,涨停不可卖); 回撤止损SL=自入场峰值回撤{-8%,-12%}(日内low,跌停不可卖); 组合TP+SL; 时间backstop40d; 分离报TP-only/SL-only/组合 vs baseline; close-based作保守参考",
+    "fund_compare": "V12.31 picks风格画像(市值/波动/换手/行业 vs 全市场); book Sharpe vs 大盘质量基准+池C基金重仓静态篮(标注幸存者偏差); Tushare fund_portfolio历史持仓可得则拉真共识篮否则降级文档化",
+    "ex003_prereg": "r20 triple-barrier重标: 不固定天数,双屏障(上+X%先触vs下-Y%先触)+时间backstop; 屏障参数预注册冻结; book层walk-forward apples-to-apples两臂同出场防循环自证; gate: 重训臂book净Sharpe>原r20臂&maxDD不升&单月outlier+分regime+de-lookahead真walk-forward"
+  },
+  "responsePlaybook": {
+    "note": "事前注册 (R02)",
+    "EX-001": {
+      "止盈帮止损伤": "符合先验 → TP进出场层候选, SL弃; 指向EX-003重标用上屏障为主",
+      "都帮": "TP+SL组合均提Sharpe → 意外正, 记录(仍需walk-forward去lookahead确认)",
+      "都不帮/伤": "出场策略对V12.31无增益 → book Sharpe瓶颈不在出场, 文档化"
+    },
+    "EX-002": {
+      "风格差": "基金更强主要来自大盘质量风格暴露(我们小盘高波) → 增量在风格tilt非选股重标, 重要发现",
+      "选股差": "扣风格后基金选股仍更强 → 选股层有差距, 支持EX-003重标"
+    }
+  },
+  "features": [
+    {
+      "id": "EX-001",
+      "title": "出场策略测 (分批止盈+回撤止损, 同picks受控Δ)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "复用 BT-001 engine.py, 对同一批 V12.31 picks 套 preRegisteredGate.exit_grid 各出场规则",
+        "分离报 baseline / TP-only / SL-only / TP+SL 的 book 净Sharpe/年化/maxDD/换手, 分regime",
+        "验证先验方向: 分批止盈是否提Sharpe / 回撤止损是否伤(均值回归反指)",
+        "verdicts/EX-001.json: status=built, conclusion(各出场Δ vs baseline+止盈止损分离结论), 对照表"
+      ],
+      "priority": 1,
+      "passes": true,
+      "completed_at": "2026-06-14"
+    },
+    {
+      "id": "EX-002",
+      "title": "基金/风格对照 (基金更强是选股还是风格)",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "V12.31 picks 风格画像: 市值/波动/换手/行业分布 vs 全市场",
+        "book Sharpe 对照: vs 大盘质量基准(基金风格代理) + 池C基金重仓静态篮(标注幸存者偏差); 尝试Tushare fund_portfolio历史持仓真共识篮, 不可得则降级并文档化限制",
+        "结论: 与基金Sharpe差归因 风格/universe vs 选股",
+        "verdicts/EX-002.json: status=built, conclusion(差距是风格还是选股), 风格画像表+对照"
+      ],
+      "priority": 2,
+      "passes": true,
+      "completed_at": "2026-06-14"
+    },
+    {
+      "id": "EX-003",
+      "title": "[预注册,后开] r20 triple-barrier 重标 + walk-forward",
+      "plan_file": "research/backtest/DESIGN.md",
+      "acceptanceCriteria": [
+        "按 preRegisteredGate.ex003_prereg 双屏障label重训 r20 臂, 屏障参数预注册冻结",
+        "book层 walk-forward apples-to-apples(两臂同出场规则防循环), de-lookahead真walk-forward",
+        "gate: 重训臂 book净Sharpe>原r20臂 & maxDD不升 & 单月outlier剔后仍优 & 分regime不伤",
+        "verdicts/EX-003.json: status in {PASS, 真小, REJECT} + metrics{alpha_delta_pp,sharpe,worst_month,pos_alpha_month_ratio}"
+      ],
+      "priority": 3,
+      "passes": false,
+      "isGate": true,
+      "skip": true,
+      "skipReason": "重活: 待 EX-001(出场) + EX-002(风格)informs 后再开; triple-barrier 已预注册防过拟合。",
+      "notes": "改核心模型目标=最高杠杆但最大风险, 仅在出场策略+风格诊断之后上。"
+    }
+  ]
+}
