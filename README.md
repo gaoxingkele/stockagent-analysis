@@ -231,11 +231,13 @@ git checkout publish/web-fourpool   # 必须切到这个分支才是最新全量
 | Agent 配置 (`configs/` `config/`) | <1M | ✅ | clone 即得 |
 | 生产模型 `research/models/` | 2M | ✅ | clone 即得（V12.31 pump 模型） |
 | 基金重仓缓存 `research/cache/fund_portfolio_cache.parquet` | 192K | ✅ | clone 即得（web 池C 依赖） |
-| **因子/特征 `research/features/`** | **4.4G** | ❌ | **重建或拷贝**（见下） |
-| **因子缓存 `research/cache/`（其余）** | **5.0G** | ❌ | **重建或拷贝**（见下） |
-| 运行产物 `output/` | 31G | ❌ | 无需迁移，运行时自动生成 |
+| **运行时数据 `output/`（部分子目录）** | **~5.6G** | ❌ | **打包搬运**（见步骤②，生产打分/四引擎所需的因子面板/标签/缓存） |
+| 研究死缓存 `research/features/` + `research/cache/`（其余） | 9.4G | ❌ | **不需要**：20+ 个已否决实验的中间产物，运行任何功能都不读，可忽略 |
+| 运行产物 `output/`（其余，如 runs/ 报告） | ~25G | ❌ | 无需迁移，运行时自动生成 |
 | 密钥 `.env` | — | ❌ | 照 `.env.example` 新建 |
 | web 数据库 `data/app.db` | — | ❌ | `alembic upgrade head` 自动创建 |
+
+> ⚠️ **不要搬 `research/features/` 和 `research/cache/`（9.4G）**——它们是研究阶段被否决假设的死缓存（rel_tensor / meihua / mt00x 面板等），生产打分、四池看板、四引擎评估**都不读**。生产唯一需要的 `research` 文件是 192K 的基金缓存，已在 git 里。运行时真正的数据在 `output/` 下。
 
 ### 三步上手
 
@@ -248,17 +250,27 @@ pip install -r web/requirements.txt      # web 看板（如需）
 cp .env.example .env                      # 填 TUSHARE_TOKEN + 至少一个 LLM key
 ```
 
-**② 准备因子/特征数据（9.4G，二选一）**
+**② 搬运运行时数据（`output/` 子目录，打包传输）**
 
-- **方案 A — 直接拷贝（快）**：用网盘/移动硬盘把旧机器的 `research/features/` 和 `research/cache/` 两个目录整个搬过来。
-- **方案 B — 从 Tushare 重建（干净但慢）**：
+`output/` 被 gitignore，纯代码检出没有运行时数据（因子面板/标签/缓存）。在**数据源机器**用打包脚本生成数据包，再用网盘/移动硬盘/scp 搬到远程机器项目根解包：
 
 ```bash
-python update_factor_lab_from_tushare.py    # 全量重算 factor_lab 153 因子
-python update_features_to_0605.py           # 重算衍生特征 (mfk/pyramid/moneyflow/v7)
+# 数据源机器：打包 (校验齐全后打 tar.gz; 档位 eval / prod / all)
+python scripts/pack_eval_bundle.py              # all = 四引擎+生产打分并集 (~5.6G)
+python scripts/pack_eval_bundle.py -p eval      # 仅四引擎评估 (~2.5G)
+python scripts/pack_eval_bundle.py -p prod      # 仅生产看板/web (~5.5G)
+python scripts/pack_eval_bundle.py -p all --check  # 只校验清单不打包
+
+# 远程机器：项目根解包即用
+tar -xzf all_bundle.tar.gz
+python eval_4engine_fast.py     # 四引擎评估
+python daily_dashboard.py       # 四池看板 (生产打分)
 ```
 
-> 日常增量更新用 `python daily_review.py`，它只重算尾部 4 个交易日并自动补数据缺口（依赖已有历史特征，不能替代首次全量重建）。
+- **eval 档**：`factor_lab_3y/factor_groups`（OOS 因子）+ `labels` + `validity_matrix` + `etf` 映射 + `lgbm_maxgain` 模型。
+- **prod 档**：`factor_groups`(+extension) + `mfk_features` + `moneyflow` + `pyramid_v2` + `v7_extras` + `amount_features` + `tushare_cache`(daily/moneyflow/stock_basic)。
+- **从 Tushare 重建**（兜底，无传输通道时）：全量重算需数小时（`update_factor_lab_from_tushare.py` + `update_features_to_*.py`），优先用打包搬运。
+- 搬到后日常增量更新用 `python daily_review.py`（只重算尾部 4 个交易日并自动补缺口，依赖已有历史数据，不能替代首次搬运）。
 
 **③ 运行**
 
@@ -277,26 +289,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 9000   # 浏览器开 http://localhos
 
 > Web 首次启动需先 `cd web && alembic upgrade head` 建库（自动注册管理员账号 `18606099618`），并视需要起 Redis（`docker run -d -p 6379:6379 redis:7-alpine`）。完整步骤见 [web/README.md](web/README.md)。
 
-### 四引擎评估的数据（output/ 派生产物）
-
-`eval_4engine_fast.py` / `eval_4engine_position.py` 依赖 `output/` 下的**派生数据产物**（OOS 因子面板 + 标签 + 模型，约 **2.5G**），`output/` 被 gitignore，纯代码检出没有这些文件，需从数据源机器搬运：
-
-```bash
-# 数据源机器：打包(只含四引擎最小输入, 校验齐全)
-python scripts/pack_eval_bundle.py          # 生成 eval_bundle.tar.gz (~2G)
-python scripts/pack_eval_bundle.py --check  # 只校验清单不打包
-
-# 远程机器：项目根解包即用
-tar -xzf eval_bundle.tar.gz
-python eval_4engine_fast.py
-```
-
-包内含 `factor_lab_3y/factor_groups/`（2.4G OOS 因子）、`labels/max_gain_labels.parquet`、`factor_lab_oos/validity_matrix.json`、`etf_analysis/stock_to_etfs.json`、`lgbm_maxgain/`（模型）。重建上游需 Tushare 重算 5149 股×3 年因子面板（数小时），**优先用打包搬运**。
-
 ### 注意事项
 
 - 生产线 V12.31 **只读冻结**，`daily_review.py` / web 看板均不改选股逻辑。
-- 因子/特征数据有数据日期（截至最近更新交易日），新机器重建后用 `daily_review.py` 续到最新即可。
+- `output/` 运行时数据有数据日期（截至最近更新交易日），搬运到位后用 `daily_review.py` 续到最新即可。
+- 数据包打包脚本：`scripts/pack_eval_bundle.py`（`-p eval/prod/all`，`--check` 只校验）。**不要搬 `research/features/` + `research/cache/`（9.4G 研究死缓存，运行不读）**。
 - `research/fund-crowding` 分支拉不到属正常（大文件历史），以 `publish/web-fourpool` 为准。
 
 ## 项目结构
