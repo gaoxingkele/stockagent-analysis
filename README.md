@@ -205,6 +205,84 @@ output/runs/<run_id>/
     └── charts/kline_{tf}.png       # K 线图表
 ```
 
+## 跨设备部署 / 换机器运行
+
+本项目本地约 **42G**，其中绝大部分是**可重建或可丢弃**的数据，GitHub 上只放代码与少量必需小文件。换一台电脑运行时按下面三步走。
+
+### 仓库与分支（重要）
+
+| 分支 | 用途 | 能否拉取 |
+|------|------|----------|
+| `publish/web-fourpool` | **全量最新代码快照**（含 web 四池看板 / paper-trade / 生产模型） | ✅ 在这里 clone/checkout |
+| `main` | 干净基线，**缺最新代码** | ⚠️ clone 默认是它，需手动切到 publish |
+| `research/fund-crowding` | 本地主工作分支，历史含 475M 大文件 | ❌ 超 GitHub 限额，**推不上去也拉不到** |
+
+```bash
+git clone https://github.com/gaoxingkele/stockagent-analysis.git
+cd stockagent-analysis
+git checkout publish/web-fourpool   # 必须切到这个分支才是最新全量代码
+```
+
+### GitHub 上有什么 / 没有什么
+
+| 内容 | 大小 | 在 GitHub | 换机器怎么办 |
+|------|------|-----------|--------------|
+| 全部代码 (`src/` `web/` `scripts/` 根级脚本) | ~10M | ✅ | clone 即得 |
+| Agent 配置 (`configs/` `config/`) | <1M | ✅ | clone 即得 |
+| 生产模型 `research/models/` | 2M | ✅ | clone 即得（V12.31 pump 模型） |
+| 基金重仓缓存 `research/cache/fund_portfolio_cache.parquet` | 192K | ✅ | clone 即得（web 池C 依赖） |
+| **因子/特征 `research/features/`** | **4.4G** | ❌ | **重建或拷贝**（见下） |
+| **因子缓存 `research/cache/`（其余）** | **5.0G** | ❌ | **重建或拷贝**（见下） |
+| 运行产物 `output/` | 31G | ❌ | 无需迁移，运行时自动生成 |
+| 密钥 `.env` | — | ❌ | 照 `.env.example` 新建 |
+| web 数据库 `data/app.db` | — | ❌ | `alembic upgrade head` 自动创建 |
+
+### 三步上手
+
+**① 装依赖 + 配密钥**
+
+```bash
+pip install -r requirements.txt          # 主系统（分析 / 研究）
+pip install -r web/requirements.txt      # web 看板（如需）
+
+cp .env.example .env                      # 填 TUSHARE_TOKEN + 至少一个 LLM key
+```
+
+**② 准备因子/特征数据（9.4G，二选一）**
+
+- **方案 A — 直接拷贝（快）**：用网盘/移动硬盘把旧机器的 `research/features/` 和 `research/cache/` 两个目录整个搬过来。
+- **方案 B — 从 Tushare 重建（干净但慢）**：
+
+```bash
+python update_factor_lab_from_tushare.py    # 全量重算 factor_lab 153 因子
+python update_features_to_0605.py           # 重算衍生特征 (mfk/pyramid/moneyflow/v7)
+```
+
+> 日常增量更新用 `python daily_review.py`，它只重算尾部 4 个交易日并自动补数据缺口（依赖已有历史特征，不能替代首次全量重建）。
+
+**③ 运行**
+
+```bash
+# A. 多智能体 PDF 分析报告
+python run.py analyze --symbol 600388 --name 龙净环保
+
+# B. 量化研究 — 一条命令复盘（更新数据 + 四池看板）
+python daily_review.py                    # 自动到最新交易日
+python daily_review.py --no-update        # 跳过更新, 直接看板
+
+# C. Web 四池看板（详细见 web/README.md）
+cd web
+uvicorn app.main:app --host 0.0.0.0 --port 9000   # 浏览器开 http://localhost:9000
+```
+
+> Web 首次启动需先 `cd web && alembic upgrade head` 建库（自动注册管理员账号 `18606099618`），并视需要起 Redis（`docker run -d -p 6379:6379 redis:7-alpine`）。完整步骤见 [web/README.md](web/README.md)。
+
+### 注意事项
+
+- 生产线 V12.31 **只读冻结**，`daily_review.py` / web 看板均不改选股逻辑。
+- 因子/特征数据有数据日期（截至最近更新交易日），新机器重建后用 `daily_review.py` 续到最新即可。
+- `research/fund-crowding` 分支拉不到属正常（大文件历史），以 `publish/web-fourpool` 为准。
+
 ## 项目结构
 
 ```
