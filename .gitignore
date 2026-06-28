@@ -52,3 +52,4 @@ research/brain/mine3_results.json
 .omx/
 research/brain/mineA_results.json
 research/brain/mineB_results.json
+eval_bundle*.tar.gz

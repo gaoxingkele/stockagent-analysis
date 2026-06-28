@@ -277,6 +277,22 @@ uvicorn app.main:app --host 0.0.0.0 --port 9000   # 浏览器开 http://localhos
 
 > Web 首次启动需先 `cd web && alembic upgrade head` 建库（自动注册管理员账号 `18606099618`），并视需要起 Redis（`docker run -d -p 6379:6379 redis:7-alpine`）。完整步骤见 [web/README.md](web/README.md)。
 
+### 四引擎评估的数据（output/ 派生产物）
+
+`eval_4engine_fast.py` / `eval_4engine_position.py` 依赖 `output/` 下的**派生数据产物**（OOS 因子面板 + 标签 + 模型，约 **2.5G**），`output/` 被 gitignore，纯代码检出没有这些文件，需从数据源机器搬运：
+
+```bash
+# 数据源机器：打包(只含四引擎最小输入, 校验齐全)
+python scripts/pack_eval_bundle.py          # 生成 eval_bundle.tar.gz (~2G)
+python scripts/pack_eval_bundle.py --check  # 只校验清单不打包
+
+# 远程机器：项目根解包即用
+tar -xzf eval_bundle.tar.gz
+python eval_4engine_fast.py
+```
+
+包内含 `factor_lab_3y/factor_groups/`（2.4G OOS 因子）、`labels/max_gain_labels.parquet`、`factor_lab_oos/validity_matrix.json`、`etf_analysis/stock_to_etfs.json`、`lgbm_maxgain/`（模型）。重建上游需 Tushare 重算 5149 股×3 年因子面板（数小时），**优先用打包搬运**。
+
 ### 注意事项
 
 - 生产线 V12.31 **只读冻结**，`daily_review.py` / web 看板均不改选股逻辑。
