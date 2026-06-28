@@ -37,10 +37,11 @@ Reference/
 logs_*.txt
 
 # research checkpoints (recomputable, large) — directory-level so nested dirs (cb001/, net001/...) are caught too
-research/cache/
+research/cache/*
+!research/cache/fund_portfolio_cache.parquet
 research/features/
-research/models/
 scripts/ralph/runs/
+# research/models/ 故意跟踪 (仅 2M, 含 V12.31 生产 pump 模型, 重建昂贵 — 换机器运行必需)
 
 # WorldQuant BRAIN session cache
 research/brain/.wq_session.json
