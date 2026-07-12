@@ -142,13 +142,14 @@ H5;H10;H20
 
 | Horizon | 方法 | TopK |
 |---|---|---:|
-| H5 | DDG-DA + AlphaAgent imported factors + FAMA seed formulas | 10 |
-| H10 | DoubleAdapt + AlphaAgent imported factors + FAMA seed formulas | 20 |
-| H20 | AdaRNN + AlphaAgent imported factors + FAMA seed formulas | 10 |
+| H5 | DDG-DA + AlphaAgent imported factors + FAMA seed formulas + AutoAlpha Top seeds + QuantaAlpha Top seeds | 10 |
+| H10 | LSR-IGRU + AlphaAgent imported factors + FAMA seed formulas + AutoAlpha Top seeds | 5 |
+| H20 | LSR-IGRU + AlphaAgent imported factors + FAMA seed formulas + AutoAlpha Top seeds | 5 |
 
 说明：
 
-- 回测策略 TopK 分别是 10 / 20 / 10。
+- 回测策略 TopK 分别是 10 / 5 / 5。
+- 当前最佳回测结果：H5 Sharpe 3.07008697，H10 Sharpe 3.51814110，H20 Sharpe 3.47011189。
 - 为了给外部软件稳定提供 TOP30 评分清单，每个周期会取候选 Top30 合并。
 - `strategy_horizons` 和 `in_strategy_topk_h5/h10/h20` 用于识别是否属于回测 TopK 内的强推荐。
 
