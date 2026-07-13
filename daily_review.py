@@ -202,25 +202,47 @@ def update_features(D: str, win_start: str):
         log(f"regime 更新跳过: {str(e)[:60]}")
 
 
+def update_data(date_arg: str | None = None, cb=None) -> str:
+    """检测最新交易日 + 补 daily/moneyflow + 尾部增量算 factor_lab/衍生特征/regime.
+
+    返回目标交易日 D。cb(phase, pct, msg, None) 为可选进度回调 (web SSE 用)。
+    只做"数据更新", 不出看板 (看板由 daily_dashboard.build_pools 负责, 单一真相)。
+    """
+    def emit(phase, pct, msg):
+        log(msg)
+        if cb:
+            try:
+                cb(phase, pct, msg, None)
+            except Exception:
+                pass
+
+    D = date_arg or detect_latest()
+    emit("detect", 3, f"目标交易日 D = {D}")
+    emit("fetch", 6, f"补 daily/moneyflow 到 {D} ...")
+    fetch_missing(D)
+    cd = sorted(p.stem for p in DAILY.glob("*.parquet"))
+    if D not in cd:                       # D 无数据 (非交易日/盘中未出) → 回退 cache 最新
+        D = cd[-1]
+    win_start = cd[max(0, cd.index(D) - TRAIL)]
+    emit("factor", 12, f"尾部窗口 {win_start}~{D}: 增量算 factor_lab ...")
+    update_factor_lab(D, win_start)
+    emit("features", 40, "增量算衍生特征 (amount/mf/mfk/pyramid/v7) + regime ...")
+    update_features(D, win_start)
+    emit("update_done", 55, f"数据更新完成 (D={D})")
+    return D
+
+
 def main():
     args = sys.argv[1:]
     no_update = "--no-update" in args
     date_arg = next((a for a in args if a.isdigit() and len(a) == 8), None)
 
-    D = date_arg or detect_latest()
-    log(f"目标交易日 D = {D}")
-    if not no_update:
-        cd = sorted(p.stem for p in DAILY.glob("*.parquet"))
-        win_start = cd[max(0, cd.index(D) - TRAIL)] if D in cd else \
-                    (datetime.strptime(D, "%Y%m%d") - timedelta(days=10)).strftime("%Y%m%d")
-        fetch_missing(D)
-        cd = sorted(p.stem for p in DAILY.glob("*.parquet"))
-        win_start = cd[max(0, cd.index(D) - TRAIL)]
-        log(f"尾部重算窗口: {win_start} ~ {D}")
-        update_factor_lab(D, win_start)
-        update_features(D, win_start)
-    else:
+    if no_update:
+        D = date_arg or detect_latest()
+        log(f"目标交易日 D = {D}")
         log("--no-update: 跳过数据更新")
+    else:
+        D = update_data(date_arg)
 
     log("出四池看板 ...\n")
     import importlib, daily_dashboard

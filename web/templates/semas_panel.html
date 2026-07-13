@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}SEMAS 最优组合推荐{% endblock %}
+
+{% block content %}
+<div x-data="semasPanelApp()" x-init="init()" class="space-y-6">
+
+  <!-- Header -->
+  <div class="card p-5 flex flex-wrap items-center gap-4 justify-between">
+    <div>
+      <div class="text-lg font-semibold">🎯 SEMAS 最优组合推荐</div>
+      <div class="text-xs text-text-muted mt-1">
+        stock_benchmark 多周期策略推荐 · H5(ALSP-TF) + H10/H20(ESTIMATE) · 合并排名 + V12.31 r20/ratio 评分
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <select x-model="date" @change="load()" class="text-sm bg-bg border border-line rounded px-2 py-1">
+        <template x-for="d in dates" :key="d"><option :value="d" x-text="d"></option></template>
+      </select>
+      <span class="text-xs text-text-dim" x-text="count ? count+'只' : ''"></span>
+    </div>
+  </div>
+
+  <!-- 推荐表格 -->
+  <div class="card overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-bg border-b border-line">
+        <tr>
+          <th @click="toggleSort('merged_rank')" class="px-3 py-3 text-right font-medium text-text-muted cursor-pointer hover:text-text" x-text="'#'+sortIcon('merged_rank')"></th>
+          <th class="px-3 py-3 text-left font-medium text-text-muted">股票</th>
+          <th @click="toggleSort('hit_count')" class="px-3 py-3 text-center font-medium text-text-muted cursor-pointer hover:text-text" x-text="'命中'+sortIcon('hit_count')"></th>
+          <th class="px-3 py-3 text-center font-medium text-text-muted">周期</th>
+          <th @click="toggleSort('avg_rank')" class="px-3 py-3 text-right font-medium text-text-muted cursor-pointer hover:text-text" x-text="'均排名'+sortIcon('avg_rank')"></th>
+          <th @click="toggleSort('r20')" class="px-3 py-3 text-right font-medium text-accent cursor-pointer hover:text-accent" x-text="'r20分'+sortIcon('r20')"></th>
+          <th @click="toggleSort('pump_up')" class="px-3 py-3 text-right font-medium text-success cursor-pointer hover:text-success" x-text="'pump↑'+sortIcon('pump_up')"></th>
+          <th @click="toggleSort('pump_down')" class="px-3 py-3 text-right font-medium text-danger cursor-pointer hover:text-danger" x-text="'pump↓'+sortIcon('pump_down')"></th>
+          <th @click="toggleSort('ratio')" class="px-3 py-3 text-right font-medium text-accent cursor-pointer hover:text-accent" x-text="'ratio'+sortIcon('ratio')"></th>
+          <th @click="toggleSort('past5')" class="px-3 py-3 text-right font-medium text-text-muted cursor-pointer hover:text-text" x-text="'5日'+sortIcon('past5')"></th>
+          <th class="px-3 py-3 text-center font-medium text-text-muted">★</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-if="!items.length && !busy">
+          <tr><td colspan="11" class="px-4 py-8 text-center text-text-muted">该日期无 SEMAS 推荐数据</td></tr>
+        </template>
+        <template x-for="it in sortedItems" :key="it.ts_code">
+          <tr class="border-b border-line hover:bg-bg-hover">
+            <td class="px-3 py-3 text-right font-mono font-bold" x-text="it.merged_rank"></td>
+            <td class="px-3 py-3">
+              <div class="font-medium" x-text="it.name"></div>
+              <div class="text-xs text-text-dim" x-text="it.ts_code"></div>
+            </td>
+            <td class="px-3 py-3 text-center">
+              <span class="badge" :class="it.hit_count >= 3 ? 'badge-success' : it.hit_count >= 2 ? 'badge-accent' : 'badge-warn'" x-text="it.hit_count"></span>
+            </td>
+            <td class="px-3 py-3 text-center text-xs text-text-muted" x-text="it.recommended_horizons"></td>
+            <td class="px-3 py-3 text-right font-mono" x-text="it.avg_rank.toFixed(1)"></td>
+            <td class="px-3 py-3 text-right font-mono font-bold"
+              :class="it.r20 >= 60 ? 'text-success' : it.r20 <= 30 ? 'text-danger' : ''"
+              x-text="it.r20.toFixed(0)"></td>
+            <td class="px-3 py-3 text-right font-mono text-success" x-text="(it.pump_up*100).toFixed(1)+'%'"></td>
+            <td class="px-3 py-3 text-right font-mono text-danger" x-text="(it.pump_down*100).toFixed(1)+'%'"></td>
+            <td class="px-3 py-3 text-right font-mono font-bold"
+              :class="it.ratio >= 2 ? 'text-success' : it.ratio < 1 ? 'text-danger' : ''"
+              x-text="it.ratio.toFixed(2)+'x'"></td>
+            <td class="px-3 py-3 text-right font-mono"
+              :class="it.past5 > 0 ? 'text-success' : it.past5 < 0 ? 'text-danger' : ''"
+              x-text="(it.past5 > 0 ? '+' : '') + (it.past5*100).toFixed(1) + '%'"></td>
+            <td class="px-3 py-3 text-center" x-text="it.v7c ? '★' : ''"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 说明 -->
+  <div class="card p-4 text-xs text-text-muted space-y-1">
+    <div><strong>SEMAS 最优组合:</strong> stock_benchmark 项目的多周期策略推荐</div>
+    <div>• <strong>命中</strong> — 被几个周期同时推荐 (H5/H10/H20), ≥3 最佳</div>
+    <div>• <strong>#</strong> — 合并排名 (hit_count 降序 → avg_rank 升序 → score_z 降序)</div>
+    <div>• <strong>r20/pump/ratio</strong> — 本项目 V12.31 模型对同一只股的评分, 可交叉验证</div>
+    <div>• <strong>★</strong> — V12.31 v7c 六铁律主推</div>
+  </div>
+
+</div>
+
+<script>
+function semasPanelApp() {
+  return {
+    date: '', dates: [], items: [], count: 0, busy: false,
+    sortKey: 'merged_rank', sortDir: 'asc',
+    get sortedItems() {
+      const arr = [...this.items];
+      const key = this.sortKey;
+      const dir = this.sortDir === 'asc' ? 1 : -1;
+      return arr.sort((a, b) => ((a[key] || 0) - (b[key] || 0)) * dir);
+    },
+    toggleSort(key) {
+      if (this.sortKey === key) { this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc'; }
+      else { this.sortKey = key; this.sortDir = key === 'merged_rank' || key === 'avg_rank' ? 'asc' : 'desc'; }
+    },
+    sortIcon(key) {
+      if (this.sortKey !== key) return '';
+      return this.sortDir === 'desc' ? ' ↓' : ' ↑';
+    },
+    async init() {
+      await this.loadDates();
+      if (this.dates.length) { this.date = this.dates[this.dates.length - 1]; await this.load(); }
+    },
+    async loadDates() {
+      const r = await fetch('/api/v12/pool-dates', {credentials: 'include'});
+      if (r.ok) { const j = await r.json(); this.dates = j.dates || []; }
+    },
+    async load() {
+      if (!this.date) return;
+      this.busy = true; this.items = [];
+      try {
+        const r = await fetch(`/api/v12/semas-stocks?date=${this.date}`, {credentials: 'include'});
+        if (r.ok) { const j = await r.json(); this.items = j.items || []; this.count = j.count || 0; }
+        else { this.items = []; this.count = 0; }
+      } catch(e) { console.error(e); }
+      this.busy = false;
+    },
+  }
+}
+</script>
+{% endblock %}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}V12.31 四池看板{% endblock %}
+{% block title %}V12.31 五池看板{% endblock %}
 
 {% block content %}
 <div x-data="poolsApp()" x-init="init()" class="space-y-6">
@@ -7,7 +7,7 @@
   <!-- Header: 日期 + 生成 + 单股 -->
   <div class="card p-5 flex flex-wrap items-center gap-4 justify-between">
     <div>
-      <div class="text-lg font-semibold">V12.31 四池看板</div>
+      <div class="text-lg font-semibold">V12.31 五池看板</div>
       <div class="text-xs text-text-muted mt-1">
         池A 系统推荐(抄底回调) · 池B 自选 · 池C 基金重仓(机构抱团) · 池D 追高动量(对照) — ratio = pump↑ / (pump↓+ε)
       </div>
@@ -19,8 +19,13 @@
           <option :value="d" x-text="formatDate(d)"></option>
         </template>
       </select>
-      <button class="btn btn-primary" @click="runMarket()" :disabled="busy.market">
-        <span x-show="!busy.market">🧮 跑全市场生成四池</span>
+      <button class="btn btn-ghost" @click="runUpdate()" :disabled="busy.update || busy.market" title="拉取最新交易日数据 + 重算特征 + 重跑五池">
+        <span x-show="!busy.update">🔄 更新数据</span>
+        <span x-show="busy.update" class="text-text-muted">更新中...</span>
+        <span class="text-text-dim text-xs">5 pt</span>
+      </button>
+      <button class="btn btn-primary" @click="runMarket()" :disabled="busy.market || busy.update">
+        <span x-show="!busy.market">🧮 跑全市场生成五池</span>
         <span x-show="busy.market" class="text-text-muted">推理中...</span>
         <span class="text-text-dim text-xs">5 pt</span>
       </button>
@@ -54,12 +59,25 @@
     </div>
   </template>
 
-  <!-- 四池 Tab -->
+  <!-- 五池 Tab -->
   <template x-if="pools">
     <div class="card overflow-hidden">
+      <!-- 大盘指数基准 -->
+      <template x-if="benchmark && benchmark.length">
+        <div class="px-5 py-2 bg-bg border-b border-line flex flex-wrap items-center gap-x-6 gap-y-1 text-xs">
+          <span class="text-text-dim font-medium">📊 大盘基准</span>
+          <template x-for="idx in benchmark" :key="idx.ts_code">
+            <span class="inline-flex items-center gap-1">
+              <span class="text-text-muted" x-text="idx.name"></span>
+              <span class="font-mono" :class="idx.past_r5 > 0 ? 'text-success' : idx.past_r5 < 0 ? 'text-danger' : 'text-text-dim'"
+                x-text="idx.past_r5 !== null ? (idx.past_r5 > 0 ? '+' : '') + idx.past_r5.toFixed(1) + '%' : '-'"></span>
+            </span>
+          </template>
+        </div>
+      </template>
       <!-- tab 头 -->
       <div class="flex border-b border-line">
-        <template x-for="k in ['A','B','C','D']" :key="k">
+        <template x-for="k in ['A','B','C','D','E']" :key="k">
           <button @click="tab=k"
             class="px-5 py-3 text-sm font-medium border-b-2 transition"
             :class="tab===k ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text'">
@@ -69,7 +87,7 @@
         </template>
       </div>
       <!-- tab 内容 -->
-      <template x-for="k in ['A','B','C','D']" :key="k">
+      <template x-for="k in ['A','B','C','D','E']" :key="k">
         <div x-show="tab===k">
           <div class="px-5 py-3 bg-bg flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             <span class="badge" :class="poolBadge(k)" x-text="pools[k].dna"></span>
@@ -84,8 +102,11 @@
                   <a href="/analyze" class="btn btn-primary text-xs py-1">新建分析</a>
                 </span>
               </template>
-              <template x-if="k!=='B'">
+              <template x-if="k!=='B' && k!=='E'">
                 <span class="badge badge-accent">⚙ 系统自动生成</span>
+              </template>
+              <template x-if="k==='E'">
+                <span class="badge badge-info">🔗 外部策略每日调用</span>
               </template>
             </span>
           </div>
@@ -158,8 +179,8 @@
 
   <template x-if="pools===null && !busy.market">
     <div class="card p-8 text-center text-text-muted">
-      <div class="text-sm">该日期无四池数据</div>
-      <div class="text-xs mt-2">点击上方"跑全市场生成四池"按钮启动 (约 1-2 分钟)</div>
+      <div class="text-sm">该日期无五池数据</div>
+      <div class="text-xs mt-2">点击上方"跑全市场生成五池"按钮启动 (约 1-2 分钟)</div>
     </div>
   </template>
 
@@ -189,23 +210,23 @@
 <script>
 function poolsApp() {
   return {
-    date: '', dates: [], pools: null, tab: 'A',
+    date: '', dates: [], pools: null, benchmark: [], tab: 'A',
     sortKey: '', sortDir: 'desc',
-    busy: { market: false, score: false, watch: false },
+    busy: { market: false, score: false, watch: false, update: false },
     symbolQuery: '', singleResult: null,
     watchInput: '', watchMsg: '',
     activeProgress: { show:false, title:'', phase:'', percent:0, message:'', elapsed:0, events:[], _startTs:null, _es:null },
 
     async init() {
       const t = new URLSearchParams(location.search).get('tab');
-      if (['A','B','C','D'].includes(t)) this.tab = t;
+      if (['A','B','C','D','E'].includes(t)) this.tab = t;
       await this.loadDates();
       if (this.dates.length) { this.date = this.dates[this.dates.length-1]; await this.loadPools(); }
     },
     async loadDates() {
       const r = await api('/api/v12/pool-dates'); if (!r) return;
       const j = await r.json(); this.dates = j.dates || [];
-      // 若无四池日期, 退回 v12 dates (可生成)
+      // 若无五池日期, 退回 v12 dates (可生成)
       if (!this.dates.length) { const r2 = await api('/api/v12/dates'); if (r2) { const j2 = await r2.json(); this.dates = j2.dates || []; } }
     },
     async loadPools() {
@@ -213,10 +234,10 @@ function poolsApp() {
       this.pools = null;
       const r = await fetch(`/api/v12/pools?date=${this.date}`, {credentials:'include'});
       if (r.status === 404) { this.pools = null; return; }
-      const j = await r.json(); this.pools = j.pools;
+      const j = await r.json(); this.pools = j.pools; this.benchmark = j.benchmark || [];
     },
     formatDate(d){ return `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`; },
-    poolBadge(k){ return ({A:'badge-success',B:'badge-accent',C:'badge-warn',D:'badge-danger'})[k]||'badge-accent'; },
+    poolBadge(k){ return ({A:'badge-success',B:'badge-accent',C:'badge-warn',D:'badge-danger',E:'badge-info'})[k]||'badge-accent'; },
     setSort(key){ if(this.sortKey===key){ this.sortDir = this.sortDir==='desc'?'asc':'desc'; } else { this.sortKey=key; this.sortDir='desc'; } },
     sortArrow(key){ if(this.sortKey!==key) return ' ⇅'; return this.sortDir==='desc'?' ↓':' ↑'; },
     sortedItems(k){
@@ -291,9 +312,25 @@ function poolsApp() {
         const r = await api('/api/v12/jobs/market', {method:'POST', body:JSON.stringify({date:this.date})});
         if (!r.ok) { alert('启动失败: ' + (await r.text()).slice(0,200)); this.busy.market=false; return; }
         const j = await r.json();
-        this._attachSse(j.result_id, `V12 全市场生成四池 (${this.formatDate(this.date)})`,
+        this._attachSse(j.result_id, `V12 全市场生成五池 (${this.formatDate(this.date)})`,
           async ()=>{ this.busy.market=false; await this.loadDates(); await this.loadPools(); });
       } catch(e){ alert('错误: '+e.message); this.busy.market=false; }
+    },
+    async runUpdate() {
+      this.busy.update = true;
+      try {
+        // date 缺省 → 后端自动检测最新交易日, 拉数据 + 重算特征 + 重跑五池
+        const r = await api('/api/v12/jobs/update', {method:'POST', body:JSON.stringify({})});
+        if (!r.ok) { alert('启动失败: ' + (await r.text()).slice(0,200)); this.busy.update=false; return; }
+        const j = await r.json();
+        this._attachSse(j.result_id, '🔄 更新数据 + 重跑五池 (最新交易日)',
+          async ()=>{
+            this.busy.update=false;
+            await this.loadDates();
+            if (this.dates.length) { this.date = this.dates[this.dates.length-1]; }
+            await this.loadPools();
+          });
+      } catch(e){ alert('错误: '+e.message); this.busy.update=false; }
     },
     async scoreOne() {
       const sym = this.symbolQuery.trim().toUpperCase(); if(!sym) return;

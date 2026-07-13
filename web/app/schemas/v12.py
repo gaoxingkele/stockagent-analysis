@@ -73,6 +73,11 @@ class RunMarketRequest(BaseModel):
     date: str = Field(..., pattern=r"^\d{8}$")
 
 
+class RunUpdateRequest(BaseModel):
+    # date 可选: 缺省则自动检测最新交易日 (拉数据 + 重算特征 + 重跑五池)
+    date: Optional[str] = Field(None, pattern=r"^\d{8}$")
+
+
 class RunLlmFilterRequest(BaseModel):
     date: str = Field(..., pattern=r"^\d{8}$")
     symbols: Optional[list[str]] = None   # None = 跑全部矛盾段

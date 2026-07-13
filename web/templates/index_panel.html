@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}大盘指数指标{% endblock %}
+
+{% block content %}
+<div x-data="indexPanelApp()" x-init="init()" class="space-y-6">
+
+  <!-- Header -->
+  <div class="card p-5 flex flex-wrap items-center gap-4 justify-between">
+    <div>
+      <div class="text-lg font-semibold">📊 指数 & ETF 评分面板</div>
+      <div class="text-xs text-text-muted mt-1">
+        5 大指数 + 16 只 ETF · LightGBM 模型评分 (r20/pump/ratio) + 技术面指标 | 训练: 2010-2022, OOS: 2023-2026
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <span class="text-xs text-text-dim" x-text="date ? '数据日: '+date : ''"></span>
+      <button @click="load()" :disabled="busy" class="btn btn-sm">
+        <span x-show="!busy">🔄 刷新</span>
+        <span x-show="busy">加载中...</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 指标表格 -->
+  <div class="card overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-bg border-b border-line">
+        <tr>
+          <th class="px-4 py-3 text-left font-medium text-text-muted">名称</th>
+          <th class="px-4 py-3 text-left font-medium text-text-muted">类型</th>
+          <th class="px-4 py-3 text-right font-medium text-text-muted">收盘</th>
+          <th @click="toggleSort('r20_score')" class="px-4 py-3 text-right font-medium text-accent cursor-pointer hover:text-accent"
+            x-text="'r20分'+sortIcon('r20_score')"></th>
+          <th @click="toggleSort('pump_score')" class="px-4 py-3 text-right font-medium text-success cursor-pointer hover:text-success"
+            x-text="'pump↑'+sortIcon('pump_score')"></th>
+          <th @click="toggleSort('pump_down_score')" class="px-4 py-3 text-right font-medium text-danger cursor-pointer hover:text-danger"
+            x-text="'pump↓'+sortIcon('pump_down_score')"></th>
+          <th @click="toggleSort('model_ratio')" class="px-4 py-3 text-right font-medium text-accent cursor-pointer hover:text-accent"
+            x-text="'ratio'+sortIcon('model_ratio')"></th>
+          <th @click="toggleSort('r20_pred')" class="px-4 py-3 text-right font-medium text-text-muted cursor-pointer hover:text-text"
+            x-text="'预测20日'+sortIcon('r20_pred')"></th>
+          <th @click="toggleSort('ret_5d')" class="px-4 py-3 text-right font-medium text-text-muted cursor-pointer hover:text-text"
+            x-text="'5日'+sortIcon('ret_5d')"></th>
+          <th @click="toggleSort('ret_20d')" class="px-4 py-3 text-right font-medium text-text-muted cursor-pointer hover:text-text"
+            x-text="'20日'+sortIcon('ret_20d')"></th>
+          <th @click="toggleSort('rsi_14')" class="px-4 py-3 text-right font-medium text-text-muted cursor-pointer hover:text-text"
+            x-text="'RSI₁₄'+sortIcon('rsi_14')"></th>
+          <th @click="toggleSort('up_ratio')" class="px-4 py-3 text-center font-medium text-text-muted cursor-pointer hover:text-text"
+            x-text="'涨跌比'+sortIcon('up_ratio')"></th>
+          <th @click="toggleSort('vol_ratio')" class="px-4 py-3 text-right font-medium text-text-muted cursor-pointer hover:text-text"
+            x-text="'量比'+sortIcon('vol_ratio')"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-if="!indices.length && !busy">
+          <tr><td colspan="13" class="px-4 py-8 text-center text-text-muted">暂无数据，点击刷新</td></tr>
+        </template>
+        <template x-for="idx in sortedIndices" :key="idx.ts_code">
+          <tr class="border-b border-line hover:bg-bg-hover"
+            :class="idx.asset_type === '指数' ? 'bg-bg-card' : ''">
+            <td class="px-4 py-3">
+              <div class="font-medium" x-text="idx.name"></div>
+              <div class="text-xs text-text-dim" x-text="idx.ts_code"></div>
+            </td>
+            <td class="px-4 py-3 text-left">
+              <span class="badge text-xs"
+                :class="{'badge-accent': idx.asset_type==='指数', 'badge-success': idx.asset_type==='ETF-宽基', 'badge-warn': idx.asset_type==='ETF-行业', 'badge-info': idx.asset_type==='ETF-跨境'}"
+                x-text="idx.asset_type"></span>
+            </td>
+            <td class="px-4 py-3 text-right font-mono" x-text="idx.close.toFixed(2)"></td>
+            <!-- 模型评分 -->
+            <td class="px-4 py-3 text-right font-mono font-bold"
+              :class="idx.r20_score >= 60 ? 'text-success' : idx.r20_score <= 40 ? 'text-danger' : 'text-text-dim'"
+              x-text="idx.r20_score != null ? idx.r20_score.toFixed(0) : '-'"></td>
+            <td class="px-4 py-3 text-right font-mono text-success"
+              x-text="idx.pump_score != null ? idx.pump_score.toFixed(1)+'%' : '-'"></td>
+            <td class="px-4 py-3 text-right font-mono text-danger"
+              x-text="idx.pump_down_score != null ? idx.pump_down_score.toFixed(1)+'%' : '-'"></td>
+            <td class="px-4 py-3 text-right font-mono font-bold"
+              :class="idx.model_ratio >= 2 ? 'text-success' : idx.model_ratio < 1 ? 'text-danger' : ''"
+              x-text="idx.model_ratio != null ? idx.model_ratio.toFixed(2)+'x' : '-'"></td>
+            <td class="px-4 py-3 text-right font-mono"
+              :class="retColor(idx.r20_pred)"
+              x-text="idx.r20_pred != null ? fmtPct(idx.r20_pred) : '-'"></td>
+            <!-- 基础指标 -->
+            <td class="px-4 py-3 text-right font-mono" :class="retColor(idx.ret_5d)" x-text="fmtPct(idx.ret_5d)"></td>
+            <td class="px-4 py-3 text-right font-mono" :class="retColor(idx.ret_20d)" x-text="fmtPct(idx.ret_20d)"></td>
+            <td class="px-4 py-3 text-right font-mono" :class="rsiColor(idx.rsi_14)" x-text="idx.rsi_14.toFixed(1)"></td>
+            <td class="px-4 py-3 text-center">
+              <span class="font-mono" :class="idx.up_ratio >= 1.5 ? 'text-success' : idx.up_ratio < 0.8 ? 'text-danger' : 'text-text-dim'"
+                x-text="idx.up_days+'涨/'+idx.down_days+'跌 '+idx.up_ratio.toFixed(1)+'x'"></span>
+            </td>
+            <td class="px-4 py-3 text-right font-mono"
+              :class="idx.vol_ratio > 1.3 ? 'text-warn' : idx.vol_ratio < 0.7 ? 'text-text-dim' : ''"
+              x-text="idx.vol_ratio.toFixed(2)"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 指标说明 -->
+  <div class="card p-4 text-xs text-text-muted space-y-1">
+    <div><strong>模型评分 (LightGBM, 训练 2010-2022, OOS 2023-2026):</strong></div>
+    <div>• <strong>r20分</strong> — 预测未来20日收益排名 (0-100, 高=看多); 映射自回归预测值</div>
+    <div>• <strong>pump↑</strong> — 未来20日涨&gt;3% 概率; <strong>pump↓</strong> — 跌&gt;3% 概率</div>
+    <div>• <strong>ratio</strong> — pump↑ / pump↓; ≥2 偏多, &lt;1 偏空</div>
+    <div>• <strong>预测20日</strong> — 回归模型直接输出的20日预测收益率 (%)</div>
+    <div class="mt-2"><strong>基础指标:</strong></div>
+    <div>• <strong>5日/20日</strong> — 区间涨幅 (%) · <strong>RSI₁₄</strong> — &gt;70 超买, &lt;30 超卖</div>
+    <div>• <strong>涨跌比</strong> — 20日内涨/跌天数; <strong>量比</strong> — 当日量/20日均量</div>
+  </div>
+
+</div>
+
+<script>
+function indexPanelApp() {
+  return {
+    date: '', indices: [], busy: false,
+    sortKey: 'r20_score', sortDir: 'desc',
+    get sortedIndices() {
+      const arr = [...this.indices];
+      const key = this.sortKey;
+      const dir = this.sortDir === 'desc' ? -1 : 1;
+      return arr.sort((a, b) => {
+        const va = a[key] != null ? a[key] : -999;
+        const vb = b[key] != null ? b[key] : -999;
+        return (va - vb) * dir;
+      });
+    },
+    toggleSort(key) {
+      if (this.sortKey === key) {
+        this.sortDir = this.sortDir === 'desc' ? 'asc' : 'desc';
+      } else {
+        this.sortKey = key;
+        this.sortDir = 'desc';
+      }
+    },
+    sortIcon(key) {
+      if (this.sortKey !== key) return '';
+      return this.sortDir === 'desc' ? ' ↓' : ' ↑';
+    },
+    async init() { await this.load(); },
+    async load() {
+      this.busy = true;
+      try {
+        const r = await fetch('/api/v12/index-metrics', {credentials: 'include'});
+        if (r.ok) {
+          const j = await r.json();
+          this.date = j.date || '';
+          this.indices = j.indices || [];
+        }
+      } catch(e) { console.error(e); }
+      this.busy = false;
+    },
+    fmtPct(v) { return v != null ? (v > 0 ? '+' : '') + v.toFixed(1) + '%' : '-'; },
+    retColor(v) { return v > 0 ? 'text-success' : v < 0 ? 'text-danger' : 'text-text-dim'; },
+    rsiColor(v) { return v > 70 ? 'text-danger' : v < 30 ? 'text-success' : ''; },
+  }
+}
+</script>
+{% endblock %}

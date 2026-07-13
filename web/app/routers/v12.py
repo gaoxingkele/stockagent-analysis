@@ -14,7 +14,7 @@ from ..core.db import get_db
 from ..core.deps import get_current_user
 from ..models import User
 from ..schemas.v12 import (
-    RunLlmFilterRequest, RunMarketRequest, V12ContradictionItem,
+    RunLlmFilterRequest, RunMarketRequest, RunUpdateRequest, V12ContradictionItem,
     V12DatesResponse, V12JobResponse, V12RecommendResponse, V12ScoreResponse,
 )
 from ..services import v12_service
@@ -48,6 +48,28 @@ async def get_pools(
     if not data["exists"]:
         raise HTTPException(404, f"{date} 无四池数据 - 请先跑全市场推理生成四池看板")
     return data
+
+
+@router.get("/semas-stocks")
+async def get_semas_stocks(
+    user: Annotated[User, Depends(get_current_user)],
+    date: str = Query(..., pattern=r"^\d{8}$"),
+):
+    """SEMAS 最优组合推荐 (stock_benchmark 外部推荐 + r20/ratio 评分)."""
+    data = v12_service.read_semas_stocks(date)
+    if not data["exists"]:
+        raise HTTPException(404, f"{date} 无 SEMAS 推荐数据")
+    return data
+
+
+@router.get("/index-metrics")
+async def get_index_metrics(
+    user: Annotated[User, Depends(get_current_user)],
+    date: str = Query("", pattern=r"^(\d{8})?$"),
+):
+    """大盘指数量化指标 (r20/ratio 代理 + RSI + MA偏离)."""
+    indices = v12_service.compute_index_metrics(date)
+    return {"date": date or indices[0]["trade_date"] if indices else date, "indices": indices}
 
 
 @router.get("/watchlist-b")
@@ -144,6 +166,26 @@ async def run_market(
         job_id=rec.job_id, result_id=rec.id, status=rec.status.value,
         points_charged=rec.points_charged,
         message=f"V12 全市场推理已启动, 通过 /api/results/{rec.id}/stream 监听进度",
+    )
+
+
+@router.post("/jobs/update", response_model=V12JobResponse)
+async def run_update(
+    body: RunUpdateRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """更新数据: 拉最新交易日 daily/moneyflow + 重算特征 + 重跑五池 (异步). date 缺省=自动最新."""
+    try:
+        rec = await v12_service.submit_v12_update(db, user, body.date)
+    except InsufficientPointsError as e:
+        raise HTTPException(402, f"积分不足, 需要 {e.need} 你有 {e.have}")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return V12JobResponse(
+        job_id=rec.job_id, result_id=rec.id, status=rec.status.value,
+        points_charged=rec.points_charged,
+        message=f"更新数据+重跑五池已启动, 通过 /api/results/{rec.id}/stream 监听进度",
     )
 
 

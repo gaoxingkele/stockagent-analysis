@@ -27,24 +27,24 @@
     </div>
   </div>
 
-  <!-- 四池 完整列表 -->
+  <!-- 五池 完整列表 -->
   <div>
     <div class="flex items-center justify-between mb-3">
-      <h2 class="text-lg font-semibold">四池清单</h2>
+      <h2 class="text-lg font-semibold">五池清单</h2>
       <div class="text-xs text-text-muted flex items-center gap-3">
         <span x-show="date" x-text="'数据日 '+fmt(date)"></span>
-        <a href="/v12" class="text-accent hover:underline">四池看板 →</a>
+        <a href="/v12" class="text-accent hover:underline">五池看板 →</a>
       </div>
     </div>
 
     <template x-if="!pools && !loading">
       <div class="card p-8 text-center text-text-muted text-sm">
-        暂无四池数据 · <a href="/v12" class="text-accent">去四池看板点"跑全市场生成"</a>
+        暂无五池数据 · <a href="/v12" class="text-accent">去五池看板点"跑全市场生成"</a>
       </div>
     </template>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4" x-show="pools">
-      <template x-for="k in ['A','B','C','D']" :key="k">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4" x-show="pools">
+      <template x-for="k in ['A','B','C','D','E']" :key="k">
         <div class="card flex flex-col overflow-hidden">
           <!-- 池头 -->
           <div class="px-4 py-3 border-b border-line">
@@ -55,7 +55,8 @@
             <div class="flex items-center justify-between mt-1">
               <span class="text-xs text-text-muted" x-text="pools?pools[k].dna:''"></span>
               <template x-if="k==='B'"><a href="/analyze" class="text-xs text-accent hover:underline">+ 新建分析</a></template>
-              <template x-if="k!=='B'"><span class="text-xs text-text-dim">⚙ 系统自动</span></template>
+              <template x-if="k!=='B' && k!=='E'"><span class="text-xs text-text-dim">⚙ 系统自动</span></template>
+              <template x-if="k==='E'"><span class="text-xs text-text-dim">🔗 外部策略</span></template>
             </div>
           </div>
           <!-- 完整列表 (滚动) -->
@@ -112,7 +113,7 @@ function homeApp() {
       } finally { this.loading = false; }
     },
     fmt(d){ return d ? `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}` : ''; },
-    poolBadge(k){ return ({A:'badge-success',B:'badge-accent',C:'badge-warn',D:'badge-danger'})[k]||'badge-accent'; },
+    poolBadge(k){ return ({A:'badge-success',B:'badge-accent',C:'badge-warn',D:'badge-danger',E:'badge-info'})[k]||'badge-accent'; },
   };
 }
 

@@ -113,6 +113,28 @@ async def stock_history_page(
     return _render(request, "stock_history.html", user, lang, symbol=symbol.upper())
 
 
+@router.get("/semas-panel", response_class=HTMLResponse)
+async def semas_panel_page(
+    request: Request,
+    user: Annotated[User | None, Depends(get_current_user_optional)],
+    lang: Annotated[str, Depends(get_lang)],
+):
+    if user is None:
+        return RedirectResponse("/login")
+    return _render(request, "semas_panel.html", user, lang)
+
+
+@router.get("/index-panel", response_class=HTMLResponse)
+async def index_panel_page(
+    request: Request,
+    user: Annotated[User | None, Depends(get_current_user_optional)],
+    lang: Annotated[str, Depends(get_lang)],
+):
+    if user is None:
+        return RedirectResponse("/login")
+    return _render(request, "index_panel.html", user, lang)
+
+
 @router.get("/v12", response_class=HTMLResponse)
 async def v12_page(
     request: Request,
