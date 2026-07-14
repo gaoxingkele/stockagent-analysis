@@ -560,12 +560,18 @@ async def _do_v12_update(factory, result_id: int, date: Optional[str]):
                 def cb_build(phase, pct, msg, data):
                     cb(phase, 55 + int(pct * 0.45), msg, data)
                 D = dr.update_data(date or None, cb=cb)
-                # 更新 stock_benchmark 数据 + 生成 SEMAS 推荐 (不阻塞主流程)
+                # 更新 stock_benchmark 数据 + 生成 SEMAS / 池E 外部推荐 (不阻塞主流程)
                 cb("semas", 56, "更新 SEMAS 外部推荐...", {})
                 try:
                     dd.update_and_generate_semas()
                 except Exception:
                     pass  # SEMAS 失败不影响主池
+                # 池E: 日线数据已由上一步更新, 只需重跑 final_best_combo 生成
+                cb("pool_e", 57, "生成池E 综合 Top30...", {})
+                try:
+                    dd.generate_pool_e_only()
+                except Exception:
+                    pass  # 池E 失败不影响主池
                 res = dd.build_pools(D, cb=cb_build, write_csv=True)
                 p = res["pools"]
                 return {

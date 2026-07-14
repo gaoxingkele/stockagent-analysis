@@ -96,39 +96,85 @@ def remove_from_b(code: str) -> list[str]:
     return save_watchlist_b([x for x in load_watchlist_b() if x != c])
 
 
-# ── 池E 外部信号: 调用外部策略脚本 (stock_benchmark) 取清单 ──
-# 每日固定调用: python <脚本> --date latest --top-n N --format json → unique_stocks[].ts_code
-# 成功 → 用结果并缓存到 config/pool_e.json (审计+离线回退); 失败 → 回退读缓存文件。
+# ── 池E 外部信号: stock_benchmark 综合 Top30 (final_best_combo) ──
+# 数据源: experiments/final_best_combo_stock_list/final_best_combo_unified_stock_list_*.csv
+#   (H5/H10/H20 多周期综合排名, 每日一个 CSV)。
+# 读取: 取日期最新的 CSV, 按 merged_rank 升序取前 POOL_E_TOPN 的 ts_code (快, 只读)。
+# 生成: update_and_generate_pool_e() 调 update_lingxi + generate_final_best_combo 重跑 (慢, 更新流程用)。
+# 成功 → 缓存到 config/pool_e.json (审计+离线回退); 无 stock_benchmark 时回退读缓存文件。
 import os, subprocess
 
 POOL_E_FILE = ROOT / "config" / "pool_e.json"
 # 可用环境变量覆盖 (换机器时改路径, 不动代码)
-POOL_E_SCRIPT = os.environ.get(
-    "POOL_E_SCRIPT", r"D:\aicoding\stock_benchmark\scripts\export_strategy_list.py")
-POOL_E_TOPN = os.environ.get("POOL_E_TOPN", "20")
+POOL_E_DIR = Path(os.environ.get(
+    "POOL_E_DIR",
+    r"D:\aicoding\stock_benchmark\experiments\final_best_combo_stock_list"))
+POOL_E_UPDATE_SCRIPT = Path(os.environ.get(
+    "POOL_E_UPDATE_SCRIPT",
+    r"D:\aicoding\stock_benchmark\scripts\update_lingxi_v2_cn_daily_latest.py"))
+POOL_E_GENERATE_SCRIPT = Path(os.environ.get(
+    "POOL_E_GENERATE_SCRIPT",
+    r"D:\aicoding\stock_benchmark\scripts\generate_final_best_combo_stock_list.py"))
+POOL_E_TOPN = int(os.environ.get("POOL_E_TOPN", "30"))
+
+
+def _latest_pool_e_csv() -> "Path | None":
+    """日期最新的 final_best_combo CSV (排除 *_meta.csv). 无则 None."""
+    if not POOL_E_DIR.exists():
+        return None
+    csvs = [p for p in POOL_E_DIR.glob("final_best_combo_unified_stock_list_*.csv")
+            if not p.name.endswith("_meta.csv")]
+    return max(csvs, key=lambda p: p.name) if csvs else None
 
 
 def _fetch_pool_e_external() -> list[str] | None:
-    """调用外部策略脚本 (--format json) 取 ts_code 列表. 任何失败返回 None."""
-    if not Path(POOL_E_SCRIPT).exists():
+    """读最新 final_best_combo CSV, 按 merged_rank 取前 POOL_E_TOPN 的 ts_code. 任何失败返回 None."""
+    latest = _latest_pool_e_csv()
+    if latest is None:
         return None
-    cmd = [sys.executable, POOL_E_SCRIPT,
-           "--date", "latest", "--top-n", str(POOL_E_TOPN), "--format", "json"]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True,
-                           encoding="utf-8", timeout=180)
-        if r.returncode != 0 or not (r.stdout or "").strip():
-            return None
-        data = _json.loads(r.stdout)
-        codes = [u.get("ts_code") for u in data.get("unique_stocks", [])]
-        codes = list(dict.fromkeys(_norm_code(c) for c in codes if c))
-        return codes or None
+        df = pd.read_csv(latest, dtype={"ts_code": str})
+        if "merged_rank" in df.columns:
+            df = df.sort_values("merged_rank")
+        codes = list(dict.fromkeys(
+            _norm_code(c) for c in df["ts_code"].tolist() if c and str(c).strip()))
+        return codes[:POOL_E_TOPN] or None
     except Exception:
         return None
 
 
+def generate_pool_e_only() -> bool:
+    """仅重跑 generate_final_best_combo (假设日线数据已最新, 供更新流程复用一次数据更新)."""
+    if not POOL_E_GENERATE_SCRIPT.exists():
+        return False
+    try:
+        r = subprocess.run(
+            [sys.executable, str(POOL_E_GENERATE_SCRIPT)],
+            cwd=str(POOL_E_GENERATE_SCRIPT.parents[1]),
+            capture_output=True, text=True, encoding="utf-8", timeout=300,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def update_and_generate_pool_e() -> bool:
+    """更新 stock_benchmark 日线到最新 + 生成 final_best_combo 综合 Top30. 返回是否成功."""
+    if not POOL_E_UPDATE_SCRIPT.exists() or not POOL_E_GENERATE_SCRIPT.exists():
+        return False
+    try:
+        subprocess.run(
+            [sys.executable, str(POOL_E_UPDATE_SCRIPT), "--sleep", "0.05"],
+            cwd=str(POOL_E_UPDATE_SCRIPT.parents[1]),
+            capture_output=True, text=True, encoding="utf-8", timeout=600,
+        )
+        return generate_pool_e_only()
+    except Exception:
+        return False
+
+
 def load_pool_e() -> list[str]:
-    """池E 外部信号: 优先调用外部脚本, 成功则缓存到 config/pool_e.json; 失败回退缓存文件.
+    """池E 外部信号: 优先读最新 final_best_combo CSV, 成功缓存到 config/pool_e.json; 失败回退缓存文件.
 
     换到没有 stock_benchmark 的机器上时, 自动用最近一次缓存的 config/pool_e.json。
     """
