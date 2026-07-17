@@ -1,6 +1,6 @@
 ﻿# 调用 stock_benchmark 生成每日股票推荐清单
 
-本项目需要从 `D:\aicoding\stock_benchmark` 获取每日最新股票推荐清单。调用流程是：先更新 A 股日线数据到最新可用交易日，再基于最新数据生成统一推荐 CSV。
+本项目需要从 `D:\aicoding\stock_benchmark` 获取每日最新股票推荐清单。行情更新和清单生成由来源项目的独立收盘后任务负责；本项目的评分流程只读取已完成的 CSV，不再同步拉取日线。
 
 ## 目标
 
@@ -45,13 +45,16 @@ python scripts\generate_final_best_combo_stock_list.py
 - 例如本地最新数据是 `2026-07-07`，则输出文件名中会包含 `2026-07-07`。
 - 生成的是收盘后信号清单，通常用于下一交易日开盘前后的外部评分、过滤或执行流程。
 
-## 一条命令完成每日更新和生成
+## 来源项目的一条命令每日更新和生成
 
-可由本项目或调度器直接执行：
+由 `stock_benchmark` 的 Windows Task Scheduler / cron 在收盘数据可用后执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "cd /d D:\aicoding\stock_benchmark; python scripts\update_lingxi_v2_cn_daily_latest.py --sleep 0.05; python scripts\generate_final_best_combo_stock_list.py"
+cd D:\aicoding\stock_benchmark
+python scripts\run_daily_final_best_combo_pipeline.py
 ```
+
+该入口使用单实例锁，并且只有增量行情更新成功后才生成清单。日常评分程序不要调用这个命令。
 
 ## 主要输出文件
 
@@ -139,6 +142,8 @@ H5;H10;H20
 ```
 
 ## 当前推荐组合
+
+正式候选域为全 A 股当前上市非 ST 股票。模型训练域暂保留历史验证使用的“沪深300代理 + 科技股”池，输出元信息中的 `universe_mode`、`universe_count`、`training_universe_mode` 和 `training_universe_count` 会明确记录两种口径。
 
 | Horizon | 方法 | TopK |
 |---|---|---:|

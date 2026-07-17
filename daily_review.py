@@ -243,14 +243,8 @@ def main():
         log("--no-update: 跳过数据更新")
     else:
         D = update_data(date_arg)
-        # 池E: 更新 stock_benchmark 日线 + 重跑 final_best_combo 综合 Top30 (失败不阻塞看板)
-        try:
-            import daily_dashboard as _dd
-            log("更新池E 外部信号 (final_best_combo 综合 Top30) ...")
-            ok = _dd.update_and_generate_pool_e()
-            log("池E 更新成功" if ok else "池E 更新跳过 (无 stock_benchmark 或生成失败, 回退缓存)")
-        except Exception as e:
-            log(f"池E 更新异常, 回退缓存: {e}")
+        # 池E 由 stock_benchmark 的独立收盘后任务生产；本流程只读最新 CSV/回退缓存。
+        log("池E 使用 stock_benchmark 已生成的最新 CSV（本流程不拉取全量日线）")
 
     log("出四池看板 ...\n")
     import importlib, daily_dashboard
