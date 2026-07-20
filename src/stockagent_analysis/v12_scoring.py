@@ -53,6 +53,27 @@ def _map_anchored(v, p5: float, p50: float, p95: float):
     return out
 
 
+def _live_anchors(v, min_stocks: int = 30, min_spread: float = 0.001):
+    """从当日实时数据计算 P5/P50/P95 动态锚点。
+
+    解决固定锚点在 regime 突变时大批量封顶/封底的问题:
+      - 大盘暴跌 → r20_pred 全线推高 → 固定 p95 被 41% 股票冲破 → 全得 100 分
+      - 改用当日实时百分位, 评分始终是当日相对排名, 天然有区分度
+
+    返回 (p5, p50, p95) 或 None (样本太少/分布过窄时, 调用方回退固定锚点).
+    """
+    v = np.asarray(v, dtype=float)
+    v = v[np.isfinite(v)]
+    if len(v) < min_stocks:
+        return None
+    p5 = float(np.percentile(v, 5))
+    p50 = float(np.percentile(v, 50))
+    p95 = float(np.percentile(v, 95))
+    if p95 - p50 < min_spread or p50 - p5 < min_spread:
+        return None
+    return (p5, p50, p95)
+
+
 def classify_quadrant(buy: float, sell: float) -> str:
     if buy >= 70 and sell <= 30: return "理想多"
     if buy >= 70 and sell >= 70: return "矛盾段"
@@ -268,16 +289,18 @@ class V12Scorer:
         df["sell_10_v6_prob"] = self.predict_one(df, "sell_10_v6")
         df["sell_20_v6_prob"] = self.predict_one(df, "sell_20_v6")
 
-        if cb: cb("anchor", 88, "锚定 0-100 分 (三层 r5/r10/r20)...", None)
-        s5 = _map_anchored(df["r5_pred"].values, *R5_ANCHOR)
-        s10 = _map_anchored(df["r10_pred"].values, *R10_ANCHOR)
-        s20 = _map_anchored(df["r20_pred"].values, *R20_ANCHOR)
+        if cb: cb("anchor", 88, "锚定 0-100 分 (实时百分位动态锚点)...", None)
+        # 动态锚点: 每日用当日实际 P5/P50/P95 做 0-100 映射
+        # 固定锚点作 fallback (样本不足或分布过窄时)
+        s5 = _map_anchored(df["r5_pred"].values, *(_live_anchors(df["r5_pred"].values) or R5_ANCHOR))
+        s10 = _map_anchored(df["r10_pred"].values, *(_live_anchors(df["r10_pred"].values) or R10_ANCHOR))
+        s20 = _map_anchored(df["r20_pred"].values, *(_live_anchors(df["r20_pred"].values) or R20_ANCHOR))
         df["buy_r5_score"] = s5
         df["buy_r10_score"] = s10
         df["buy_r20_score"] = s20
         df["buy_score"] = 0.5 * s10 + 0.5 * s20    # 向后兼容
-        s10s = _map_anchored(df["sell_10_v6_prob"].values, *SELL10_V6)
-        s20s = _map_anchored(df["sell_20_v6_prob"].values, *SELL20_V6)
+        s10s = _map_anchored(df["sell_10_v6_prob"].values, *(_live_anchors(df["sell_10_v6_prob"].values) or SELL10_V6))
+        s20s = _map_anchored(df["sell_20_v6_prob"].values, *(_live_anchors(df["sell_20_v6_prob"].values) or SELL20_V6))
         df["sell_score"] = 0.5 * s10s + 0.5 * s20s
 
         if cb: cb("zombie_filter", 88, "计算僵尸区过滤 (第 6 铁律)...", None)

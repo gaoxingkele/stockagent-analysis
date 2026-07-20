@@ -102,7 +102,7 @@
   <!-- 指标说明 -->
   <div class="card p-4 text-xs text-text-muted space-y-1">
     <div><strong>模型评分 (LightGBM, 训练 2010-2022, OOS 2023-2026):</strong></div>
-    <div>• <strong>r20分</strong> — 预测未来20日收益排名 (0-100, 高=看多); 映射自回归预测值</div>
+    <div>• <strong>r20分</strong> — 预测未来20日收益的滚动250日分位 (0-100, 高=相对自身近一年偏多)</div>
     <div>• <strong>pump↑</strong> — 未来20日涨&gt;3% 概率; <strong>pump↓</strong> — 跌&gt;3% 概率</div>
     <div>• <strong>ratio</strong> — pump↑ / pump↓; ≥2 偏多, &lt;1 偏空</div>
     <div>• <strong>预测20日</strong> — 回归模型直接输出的20日预测收益率 (%)</div>

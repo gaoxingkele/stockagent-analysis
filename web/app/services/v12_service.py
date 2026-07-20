@@ -921,6 +921,29 @@ def _score_index_features(c, o, h, l, v, pre_close):
     return np.array([feats.get(col, 0) for col in _INDEX_FEATURE_COLS]).reshape(1, -1)
 
 
+def _rolling_r20_score(c, o, h, l, v, pc, model, window: int = 250, min_hist: int = 60):
+    """滚动时序分位: 当日 r20_raw 在自身过去 window 天预测分布中的百分位 (0-100)。
+
+    解决固定 ±15% 线性映射在单边行情下饱和 (全 0 / 全 100) 的问题:
+    分数始终相对自身近期历史, 跨日可比且天然有区分度.
+
+    返回 (score, r20_raw) 或 None (历史不足 min_hist 天, 调用方回退固定映射).
+    """
+    import numpy as np
+    n = len(c)
+    start = max(120, n - window)   # 特征最多需要 ~120 天 lookback
+    if n - start < min_hist:
+        return None
+    X = np.vstack([
+        _score_index_features(c[:t + 1], o[:t + 1], h[:t + 1], l[:t + 1], v[:t + 1], pc[:t + 1])
+        for t in range(start, n)
+    ])
+    hist = model.predict(X)
+    cur = float(hist[-1])
+    pct = float((hist < cur).sum() / len(hist) * 100)
+    return pct, cur
+
+
 def _build_row(ts_code, name, asset_type, df, models) -> dict | None:
     """从日线 DataFrame 构建一行指标 + 模型评分."""
     import numpy as np
@@ -969,10 +992,15 @@ def _build_row(ts_code, name, asset_type, df, models) -> dict | None:
 
     if models and len(c) >= 120:
         X = _score_index_features(c, o, h, l, v, pc)
-        r20_raw = models["r20_reg"].predict(X)[0]
         pump_prob = models["pump_cls"].predict(X)[0]
         pump_down_prob = models["pump_down_cls"].predict(X)[0]
-        r20_score = max(0, min(100, (r20_raw + 0.15) / 0.30 * 100))
+        # r20_score: 滚动 250 日分位 (相对自身历史), 历史不足回退固定 ±15% 线性映射
+        res = _rolling_r20_score(c, o, h, l, v, pc, models["r20_reg"])
+        if res is not None:
+            r20_score, r20_raw = res
+        else:
+            r20_raw = models["r20_reg"].predict(X)[0]
+            r20_score = max(0, min(100, (r20_raw + 0.15) / 0.30 * 100))
         ratio = pump_prob / (pump_down_prob + 0.01)
         row["r20_score"] = round(r20_score, 0)
         row["pump_score"] = round(pump_prob * 100, 1)
@@ -995,7 +1023,8 @@ def compute_index_metrics(date: str = "") -> list[dict]:
         return []
 
     end_date = date or datetime.now().strftime("%Y%m%d")
-    start_date = str(int(end_date[:4]) - 1) + end_date[4:]
+    # 拉 2 年: 滚动 250 交易日分位窗口 + 特征 ~120 天 lookback
+    start_date = str(int(end_date[:4]) - 2) + end_date[4:]
     models = _load_index_models()
 
     results = []
