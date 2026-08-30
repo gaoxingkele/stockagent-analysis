@@ -1,0 +1,28 @@
+{
+  "contract_version": "r20-target-prob-v2-experiment",
+  "status": "research_only",
+  "production_baseline_commit": "0cff868",
+  "production_contract": "config/pool_a_r20_target_v1.json",
+  "production_impact": "none",
+  "market_universe": ["SH", "SZ"],
+  "horizon_sessions": 20,
+  "entry_price": "next_session_open",
+  "gain_thresholds_pct": [15.0, 20.0, 25.0],
+  "drawdown_floor_pct": -15.0,
+  "primary_index": "100 * P(max_gain_20 >= 25 AND max_dd_20 >= -15)",
+  "outputs": ["p15_safe", "p20_safe", "p25_safe", "p_close25_safe"],
+  "hard_style_filters": [],
+  "industry_cap": null,
+  "top_n": null,
+  "probability_order": "p15_safe >= p20_safe >= p25_safe",
+  "validation": {
+    "method": "four-way chronological walk-forward",
+    "acceptance": {
+      "ece_10_lte": 0.05,
+      "brier_skill_vs_constant_gt": 0.0,
+      "probability_deciles_monotonic": true,
+      "minimum_shadow_trading_days": 40
+    }
+  },
+  "promotion_policy": "Never replace or feed Pool A v1 without explicit user approval after offline and shadow reports."
+}

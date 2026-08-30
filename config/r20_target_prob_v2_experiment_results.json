@@ -1,0 +1,67 @@
+{
+  "experiment": "r20-target-prob-v2",
+  "run_date": "2026-08-30",
+  "status": "offline_confirmed_not_shadow_eligible",
+  "production_impact": "none",
+  "sample_bps": 5000,
+  "seed": 20260830,
+  "rows": 1200265,
+  "symbols": 4882,
+  "test_rows": 350608,
+  "date_range": ["20240102", "20260126"],
+  "feature_count": 176,
+  "current_st_rows_excluded": 20624,
+  "selected_candidate": {
+    "name": "ensemble_50_50",
+    "components": [
+      "ordinal_multiclass_isotonic",
+      "direct_binary_p15_p20_p25_platt"
+    ],
+    "weights": [0.5, 0.5]
+  },
+  "aggregate": {
+    "p15_safe": {
+      "event_rate": 0.27479407201204764,
+      "brier_skill_vs_constant": 0.024624307142193325,
+      "ece_10": 0.0187500648963384,
+      "roc_auc": 0.6290558309356473,
+      "pr_auc": 0.35321685432676375,
+      "top_decile_event_rate": 0.37974900171135195
+    },
+    "p20_safe": {
+      "event_rate": 0.18675272669191803,
+      "brier_skill_vs_constant": 0.024111748141763978,
+      "ece_10": 0.014994888908044818,
+      "roc_auc": 0.6307593108340008,
+      "pr_auc": 0.25699060668553375,
+      "top_decile_event_rate": 0.29244152880775814
+    },
+    "p25_safe": {
+      "event_rate": 0.12938951763793183,
+      "mean_probability": 0.11835074343500045,
+      "brier": 0.11016902196613755,
+      "brier_skill_vs_constant": 0.022005284158696403,
+      "ece_10": 0.012806944721615627,
+      "roc_auc": 0.6400567449565479,
+      "pr_auc": 0.19090416186390413,
+      "top_decile_event_rate": 0.225156873930405,
+      "top_decile_lift": 1.7401430700836573
+    }
+  },
+  "p25_fold_brier_skill": {
+    "wf1": 0.010324464624944407,
+    "wf2": 0.018379421750061353,
+    "wf3": 0.02263982982394952
+  },
+  "acceptance": {
+    "ece_10_lte_0_05": true,
+    "positive_brier_skill": true,
+    "positive_brier_skill_in_every_fold": true,
+    "aggregate_deciles_monotonic_with_1pp_tolerance": true,
+    "decile_monotonic_in_every_fold": false,
+    "ordered_probabilities": true,
+    "eligible_for_shadow_review": false
+  },
+  "artifact_directory": "output/experiments/r20_target_prob_v2",
+  "decision": "Keep R20/Pool-A v1 in production. Continue v2 research; do not add v2 to the web or 21:00 pipeline yet."
+}
