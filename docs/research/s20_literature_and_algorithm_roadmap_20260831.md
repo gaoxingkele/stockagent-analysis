@@ -76,6 +76,11 @@ Brier Skill 是否为正，再看 ECE、top-decile lift 和不同市场阶段的
 - S4：至少 60 个交易日影子运行；R20 与 S20 并排展示但互不影响。
 - S5：任何生产使用必须另行审批；本研究分支不得自动修改池 A 或每日 21:00 任务。
 
+截至 2026-08-31，S0 全量标签审计和 B1 竞争风险 LightGBM 已完成。B1 的路径排序信号
+成立，但静态校准未过逐折闸门，详细结果见
+`docs/research/s20_b1_competing_risk_report_20260831.md`。当前工作转入带标签成熟延迟的
+滚动校准与 B2 简单时序基线，尚未开始影子运行。
+
 机器可读契约位于 `config/s20_experiment_v1.json`，首次触达标签实现位于
 `src/stockagent_analysis/s20.py`。
 

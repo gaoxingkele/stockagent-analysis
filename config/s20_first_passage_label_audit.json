@@ -1,0 +1,45 @@
+{
+  "contract_version": "s20-first-passage-v1",
+  "rows": 3200156,
+  "symbols": 5299,
+  "signal_date_min": "20240102",
+  "signal_date_max": "20260731",
+  "horizon_end_date_max": "20260828",
+  "duplicate_keys": 0,
+  "thresholds": {
+    "15": {
+      "up_first_rate": 0.2828918340,
+      "down_first_rate": 0.1903469706,
+      "censored_rate": 0.5267518208,
+      "ambiguous_rate": 0.0000093745,
+      "window_safe_rate": 0.2711680306,
+      "late_down_after_up_rate": 0.0116375577
+    },
+    "20": {
+      "up_first_rate": 0.1987703099,
+      "down_first_rate": 0.1962729317,
+      "censored_rate": 0.6049542585,
+      "ambiguous_rate": 0.0000024999,
+      "window_safe_rate": 0.1926956061,
+      "late_down_after_up_rate": 0.0057184712
+    },
+    "25": {
+      "up_first_rate": 0.1439636068,
+      "down_first_rate": 0.1991140432,
+      "censored_rate": 0.6569211001,
+      "ambiguous_rate": 0.0000012499,
+      "window_safe_rate": 0.1410956216,
+      "late_down_after_up_rate": 0.0028786097
+    }
+  },
+  "legacy_compatibility": {
+    "overlap_rows": 2441863,
+    "max_absolute_differences": {
+      "entry_open": 0.0,
+      "max_gain_20": 0.00005,
+      "max_dd_20": 0.00005,
+      "r20_close": 0.00005
+    },
+    "compatible_with_legacy_precision": true
+  }
+}

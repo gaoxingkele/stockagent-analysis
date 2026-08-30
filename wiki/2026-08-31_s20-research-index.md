@@ -15,3 +15,11 @@ S20 已确定为 R20 之外的独立探索，不替代当前有效 R20，也不�
 完整文献矩阵与实验闸门见
 [`docs/research/s20_literature_and_algorithm_roadmap_20260831.md`](../docs/research/s20_literature_and_algorithm_roadmap_20260831.md)，
 机器契约见 [`config/s20_experiment_v1.json`](../config/s20_experiment_v1.json)。
+
+## B1 进度
+
+全量首次触达标签已经生成并与旧标签口径验证一致。50% 样本的三折实验显示 B1 能提高
+PR-AUC 和顶十分位命中率，但静态 Platt 校准在第一折出现负 Brier Skill，因此状态为
+`offline_completed_not_shadow_eligible`。测试后发现的 B1+B0 融合只能作为新时期的冻结
+验证线索，不能用本次结果晋级。详见
+[`docs/research/s20_b1_competing_risk_report_20260831.md`](../docs/research/s20_b1_competing_risk_report_20260831.md)。

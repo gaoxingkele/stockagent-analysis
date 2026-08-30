@@ -1,0 +1,66 @@
+{
+  "contract_version": "s20-b1-competing-risk-v1",
+  "run_date": "2026-08-31",
+  "status": "offline_completed_not_shadow_eligible",
+  "sample_bps": 5000,
+  "test_rows": 350608,
+  "walk_forward_folds": 3,
+  "intervals_sessions": [[1, 1], [2, 3], [4, 5], [6, 10], [11, 15], [16, 20]],
+  "target": "hit +25% before hit -15% by session 20",
+  "aggregate": {
+    "event_rate": 0.1311578743,
+    "b1_raw": {
+      "brier_skill": 0.016230,
+      "ece_10": 0.026833,
+      "roc_auc": 0.629486,
+      "pr_auc": 0.195608,
+      "top_decile_event_rate": 0.240702
+    },
+    "b1_platt": {
+      "brier_skill": 0.011100,
+      "ece_10": 0.017598,
+      "roc_auc": 0.656805,
+      "pr_auc": 0.202609,
+      "top_decile_event_rate": 0.239817
+    },
+    "b0_retargeted": {
+      "brier_skill": 0.021596,
+      "ece_10": 0.014244,
+      "roc_auc": 0.639010,
+      "pr_auc": 0.192590,
+      "top_decile_event_rate": 0.227353
+    }
+  },
+  "fold_brier_skill": {
+    "b1_raw": [0.016075, 0.010540, 0.013980],
+    "b1_platt": [-0.052048, 0.015521, 0.035327],
+    "b0_retargeted": [0.010485, 0.018919, 0.023007]
+  },
+  "posthoc_diagnostics_not_candidates": {
+    "b1_raw_b0_50": {
+      "aggregate_brier_skill": 0.024566,
+      "aggregate_pr_auc": 0.201251,
+      "aggregate_top_decile_event_rate": 0.239760
+    },
+    "b1_platt_b0_50": {
+      "aggregate_brier_skill": 0.028044,
+      "aggregate_ece_10": 0.012526,
+      "aggregate_roc_auc": 0.654225,
+      "aggregate_pr_auc": 0.202591,
+      "aggregate_top_decile_event_rate": 0.235396,
+      "fold_brier_skill": [0.023400, 0.019336, 0.030708]
+    },
+    "warning": "Weights were inspected after test results; these blends require a new untouched confirmation period."
+  },
+  "decision": {
+    "ranking_signal": "confirmed",
+    "absolute_probability": "not_confirmed",
+    "shadow_eligible": false,
+    "reasons": [
+      "Platt calibration has negative Brier skill in wf1",
+      "raw B1 aggregate Brier skill is below B0",
+      "calibration-to-test event-rate reversals invalidate a static calibrator",
+      "the strongest blend was discovered post-hoc"
+    ]
+  }
+}
