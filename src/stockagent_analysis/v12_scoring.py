@@ -41,26 +41,40 @@ SELL10_V6 = (0.18, 0.48, 0.78)
 SELL20_V6 = (0.05, 0.43, 0.87)
 
 
-def _map_anchored(v, p5: float, p50: float, p95: float):
+def _map_anchored(v, p5: float, p50: float, p95: float, p995: float | None = None):
+    """锚定 0-100 映射: p5→0, p50→50, p95→90, p995→100.
+
+    p995 缺省时退化为旧三段映射 (p95→100, 兼容固定锚点回退路径)。
+    p995 提供时顶部 5% 保留 90-100 梯度, 仅最顶部 ~0.5% 封顶 100,
+    解决顶部饱和 (池子视图一片 100 失去区分度) 的问题。
+    """
     v = np.asarray(v, dtype=float)
     out = np.full_like(v, 50.0)
     out = np.where(v <= p5, 0, out)
-    out = np.where(v >= p95, 100, out)
     mask_lo = (v > p5) & (v <= p50)
     out = np.where(mask_lo, (v - p5) / (p50 - p5) * 50, out)
-    mask_hi = (v > p50) & (v < p95)
-    out = np.where(mask_hi, 50 + (v - p50) / (p95 - p50) * 50, out)
+    if p995 is None:
+        out = np.where(v >= p95, 100, out)
+        mask_hi = (v > p50) & (v < p95)
+        out = np.where(mask_hi, 50 + (v - p50) / (p95 - p50) * 50, out)
+    else:
+        out = np.where(v >= p995, 100, out)
+        mask_hi = (v > p50) & (v <= p95)
+        out = np.where(mask_hi, 50 + (v - p50) / (p95 - p50) * 40, out)
+        mask_top = (v > p95) & (v < p995)
+        out = np.where(mask_top, 90 + (v - p95) / (p995 - p95) * 10, out)
     return out
 
 
 def _live_anchors(v, min_stocks: int = 30, min_spread: float = 0.001):
-    """从当日实时数据计算 P5/P50/P95 动态锚点。
+    """从当日实时数据计算 P5/P50/P95/P99.5 动态锚点。
 
     解决固定锚点在 regime 突变时大批量封顶/封底的问题:
       - 大盘暴跌 → r20_pred 全线推高 → 固定 p95 被 41% 股票冲破 → 全得 100 分
       - 改用当日实时百分位, 评分始终是当日相对排名, 天然有区分度
+      - 返回四点锚 (p95→90, p99.5→100), 顶部 5% 保留梯度不饱和
 
-    返回 (p5, p50, p95) 或 None (样本太少/分布过窄时, 调用方回退固定锚点).
+    返回 (p5, p50, p95, p995) 或 None (样本太少/分布过窄时, 调用方回退固定锚点).
     """
     v = np.asarray(v, dtype=float)
     v = v[np.isfinite(v)]
@@ -69,9 +83,10 @@ def _live_anchors(v, min_stocks: int = 30, min_spread: float = 0.001):
     p5 = float(np.percentile(v, 5))
     p50 = float(np.percentile(v, 50))
     p95 = float(np.percentile(v, 95))
-    if p95 - p50 < min_spread or p50 - p5 < min_spread:
+    p995 = float(np.percentile(v, 99.5))
+    if p95 - p50 < min_spread or p50 - p5 < min_spread or p995 - p95 < 1e-9:
         return None
-    return (p5, p50, p95)
+    return (p5, p50, p95, p995)
 
 
 def classify_quadrant(buy: float, sell: float) -> str:
@@ -95,6 +110,7 @@ class V12Scorer:
         self.regime_path = self.root / "output" / "regimes" / "daily_regime.parquet"
         self.regime_extra_path = self.root / "output" / "regime_extra" / "regime_extra.parquet"
         self._models: dict[str, tuple[lgb.Booster, dict]] = {}
+        self._maxgain_models: Optional[tuple[lgb.Booster, Optional[lgb.Booster], dict]] = None
         self._factor_cache: dict[str, pd.DataFrame] = {}  # date -> df
 
     @classmethod
@@ -144,6 +160,40 @@ class V12Scorer:
             if fc not in df.columns:
                 df[fc] = np.nan
         return booster.predict(df[feat_cols])
+
+    def predict_maxgain_risk(self, df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+        """Predict forward-20-day maximum gain and adverse excursion.
+
+        Both outputs are percentages. ``pred_max_dd_20`` is normally negative;
+        a value of -10 means the model expects the lowest price during the next
+        20 sessions to be about 10% below the next-session entry open.
+        """
+        if self._maxgain_models is None:
+            model_dir = self.root / "output" / "lgbm_maxgain"
+            gain_path = model_dir / "regressor_gain.txt"
+            dd_path = model_dir / "regressor_dd.txt"
+            meta_path = model_dir / "feature_meta.json"
+            if not gain_path.exists() or not dd_path.exists() or not meta_path.exists():
+                empty = np.full(len(df), np.nan, dtype=float)
+                return empty.copy(), empty
+            gain = lgb.Booster(model_str=gain_path.read_text(encoding="utf-8"))
+            dd = lgb.Booster(model_str=dd_path.read_text(encoding="utf-8"))
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            self._maxgain_models = (gain, dd, meta)
+
+        gain_model, dd_model, meta = self._maxgain_models
+        work = df.copy()
+        industry_map = meta.get("industry_map", {})
+        work["industry_id"] = work["industry"].fillna("unknown").astype(str).map(
+            lambda value: industry_map.get(value, -1)
+        )
+        feature_cols = meta["feature_cols"]
+        for col in feature_cols:
+            if col not in work.columns:
+                work[col] = np.nan
+        gain_pred = gain_model.predict(work[feature_cols])
+        dd_pred = dd_model.predict(work[feature_cols]) if dd_model is not None else np.full(len(df), np.nan)
+        return np.asarray(gain_pred, dtype=float), np.asarray(dd_pred, dtype=float)
 
     # ──────── 因子矩阵加载 ────────
     def load_factors_for_date(self, date: str, cb: ProgressCb = None,
@@ -288,6 +338,7 @@ class V12Scorer:
         df["r20_pred"] = self.predict_one(df, "r20_v16_all")
         df["sell_10_v6_prob"] = self.predict_one(df, "sell_10_v6")
         df["sell_20_v6_prob"] = self.predict_one(df, "sell_20_v6")
+        df["pred_max_gain_20"], df["pred_max_dd_20"] = self.predict_maxgain_risk(df)
 
         if cb: cb("anchor", 88, "锚定 0-100 分 (实时百分位动态锚点)...", None)
         # 动态锚点: 每日用当日实际 P5/P50/P95 做 0-100 映射
@@ -315,6 +366,9 @@ class V12Scorer:
         if cb: cb("classify", 92, "4 象限分类 + 6 铁律...", None)
         df["quadrant"] = [classify_quadrant(b, s) for b, s in
                            zip(df["buy_score"], df["sell_score"])]
+        # 先确定可参选集合，再在集合内计算相对排名。缺少铁律必需特征的
+        # 股票仍可保留在全市场评分结果中，但不得占用 top 5% 名额。
+        df["v7c_eligible"] = self._v7c_eligibility_mask(df)
         df["v7c_recommend"] = self._apply_v7c_rules(df)
 
         # 行业分散硬约束 (单行业 ≤ 30%)
@@ -359,6 +413,7 @@ class V12Scorer:
         df.attrs["regime_info"] = regime_info
 
         n_main = int(df["v7c_recommend"].sum())
+        n_eligible = int(df["v7c_eligible"].sum())
         n_r5filtered = int(df["v7c_recommend_r5filtered"].sum()) if "v7c_recommend_r5filtered" in df.columns else 0
         n_contra = int((df["quadrant"] == "矛盾段").sum())
         pos_ratio = regime_info.get("position_ratio", 1.0)
@@ -366,7 +421,9 @@ class V12Scorer:
                   f"完成: V7c 主推 {n_main} 股 (R5 反向过滤后 {n_r5filtered} 股), "
                   f"矛盾段 {n_contra} 股, "
                   f"建议仓位 {pos_ratio*100:.0f}% ({regime_info.get('dominant_regime_3d','?')})",
-                  {"main": n_main, "r5filtered": n_r5filtered, "contradiction": n_contra,
+                  {"main": n_main, "eligible": n_eligible,
+                   "ineligible": len(df) - n_eligible,
+                   "r5filtered": n_r5filtered, "contradiction": n_contra,
                    "total": len(df), "position_ratio": pos_ratio,
                    "regime": regime_info.get("dominant_regime_3d")})
         return df
@@ -389,6 +446,14 @@ class V12Scorer:
             "sell_20_v6_prob": float(r["sell_20_v6_prob"]),
             "quadrant": r["quadrant"],
             "v7c_recommend": bool(r["v7c_recommend"]),
+            "past_r5": float(r["past_r5"])
+                if "past_r5" in r and pd.notna(r["past_r5"]) else None,
+            "past_r20": float(r["past_r20"])
+                if "past_r20" in r and pd.notna(r["past_r20"]) else None,
+            "relative_r5": float(r["relative_r5"])
+                if "relative_r5" in r and pd.notna(r["relative_r5"]) else None,
+            "relative_r20": float(r["relative_r20"])
+                if "relative_r20" in r and pd.notna(r["relative_r20"]) else None,
             "pyr_velocity_20_60": float(r["pyr_velocity_20_60"])
                 if "pyr_velocity_20_60" in r and pd.notna(r["pyr_velocity_20_60"]) else None,
             "f1_neg1": float(r["f1_neg1"]) if "f1_neg1" in r and pd.notna(r["f1_neg1"]) else None,
@@ -631,6 +696,31 @@ class V12Scorer:
             df.loc[mask, "pump_score_rank_in_pool"] = ranks
         return df
 
+    @staticmethod
+    def _v7c_eligibility_mask(df: pd.DataFrame) -> pd.Series:
+        """Return rows with finite values for every active V7c hard-rule input.
+
+        LightGBM can score rows containing NaN, but a row that cannot pass a
+        downstream hard rule must not consume a percentile-ranking slot.  The
+        Pool A is the SH/SZ production universe.  BJ rows are intentionally
+        excluded here and ranked independently by Pool G because their market
+        rules and feature coverage differ.
+        """
+        eligible = pd.Series(True, index=df.index, dtype=bool)
+        if "ts_code" in df.columns:
+            eligible &= ~df["ts_code"].astype(str).str.endswith(".BJ")
+        required = ["r20_pred"]
+        if "pyr_velocity_20_60" in df.columns:
+            required.append("pyr_velocity_20_60")
+        if "f1_neg1" in df.columns and "f2_pos1" in df.columns:
+            required.extend(["f1_neg1", "f2_pos1"])
+        for col in required:
+            if col not in df.columns:
+                return pd.Series(False, index=df.index, dtype=bool)
+            values = pd.to_numeric(df[col], errors="coerce")
+            eligible &= values.notna() & np.isfinite(values)
+        return eligible
+
     def _apply_v7c_rules(self, df: pd.DataFrame, p_buy_top: float = 0.05,
                             industry_mom_excl: float = 0.10) -> pd.Series:
         """V7c 铁律 (v4 加行业 momentum 过滤).
@@ -653,15 +743,21 @@ class V12Scorer:
         4. NOT is_zombie
         5. industry_mom_60d_rank >= industry_mom_excl (默认 0.10, 排除最差 10% 行业)
         """
-        # 1. r20_pred 当日 top 5%
+        # 0. 可参选集合: 铁律必需特征必须完整且为有限数值。
+        eligible = self._v7c_eligibility_mask(df)
+
+        # 1. r20_pred 在可参选集合内取当日 top 5%。不能让后续必然因
+        # 缺失特征失败的股票先占据相对排名名额。
         if "r20_pred" not in df.columns:
             return ((df["buy_score"] >= 70) & (df["buy_score"] <= 85))
-        r20_rank = df["r20_pred"].rank(pct=True, method="first")
-        base = r20_rank >= (1 - p_buy_top)
+        r20_rank = pd.Series(np.nan, index=df.index, dtype=float)
+        r20_rank.loc[eligible] = df.loc[eligible, "r20_pred"].rank(
+            pct=True, method="first")
+        base = eligible & (r20_rank >= (1 - p_buy_top))
 
         # 2. pyr_velocity
         if "pyr_velocity_20_60" in df.columns:
-            p35 = df["pyr_velocity_20_60"].quantile(0.35)
+            p35 = df.loc[eligible, "pyr_velocity_20_60"].quantile(0.35)
             base = base & (df["pyr_velocity_20_60"] < p35)
 
         # 3. f1/f2
@@ -738,8 +834,16 @@ class V12Scorer:
             # past_r5: 过去 5 日累计涨幅 (方案 B 抑制 pump_down 上涨期内的误高)
             big["close_5d_ago"] = big.groupby("ts_code")["close"].shift(5)
             big["past_r5"] = big["close"] / big["close_5d_ago"] - 1
-            pr5 = big[big["trade_date"] == date][["ts_code", "past_r5"]]
-            df = df.merge(pr5, on="ts_code", how="left")
+            big["close_20d_ago"] = big.groupby("ts_code")["close"].shift(20)
+            big["past_r20"] = big["close"] / big["close_20d_ago"] - 1
+            past = big[big["trade_date"] == date][["ts_code", "past_r5", "past_r20"]]
+            df = df.merge(past, on="ts_code", how="left")
+            # 相对涨跌幅统一以沪深300为基准。mkt_ret_* 来自 daily_regime，
+            # 与个股收益都使用小数口径（0.01 = 1%）。
+            mkt5 = pd.to_numeric(df.get("mkt_ret_5d"), errors="coerce")
+            mkt20 = pd.to_numeric(df.get("mkt_ret_20d"), errors="coerce")
+            df["relative_r5"] = df["past_r5"] - mkt5
+            df["relative_r20"] = df["past_r20"] - mkt20
             # 行业内均值
             ind_avg = df.dropna(subset=["mom_60d"]).groupby("industry")["mom_60d"].mean()
             df["industry_mom_60d"] = df["industry"].map(ind_avg)
@@ -754,6 +858,9 @@ class V12Scorer:
             # 兜底: 若 daily cache 不够 60+1 天, 全 NaN, 铁律 5 不生效
             df["industry_mom_60d"] = np.nan
             df["industry_mom_60d_rank"] = np.nan
+            for col in ["past_r5", "past_r20", "relative_r5", "relative_r20"]:
+                if col not in df.columns:
+                    df[col] = np.nan
         return df
 
     def _get_regime_info(self, date: str) -> dict:

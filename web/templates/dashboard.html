@@ -27,24 +27,24 @@
     </div>
   </div>
 
-  <!-- 五池 完整列表 -->
+  <!-- 七池 完整列表 -->
   <div>
     <div class="flex items-center justify-between mb-3">
-      <h2 class="text-lg font-semibold">五池清单</h2>
+      <h2 class="text-lg font-semibold">七池清单</h2>
       <div class="text-xs text-text-muted flex items-center gap-3">
         <span x-show="date" x-text="'数据日 '+fmt(date)"></span>
-        <a href="/v12" class="text-accent hover:underline">五池看板 →</a>
+        <a href="/v12" class="text-accent hover:underline">七池看板 →</a>
       </div>
     </div>
 
     <template x-if="!pools && !loading">
       <div class="card p-8 text-center text-text-muted text-sm">
-        暂无五池数据 · <a href="/v12" class="text-accent">去五池看板点"跑全市场生成"</a>
+        暂无七池数据 · <a href="/v12" class="text-accent">去七池看板点"跑全市场生成"</a>
       </div>
     </template>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4" x-show="pools">
-      <template x-for="k in ['A','B','C','D','E']" :key="k">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4" x-show="pools">
+      <template x-for="k in ['A','B','C','D','E','F','G']" :key="k">
         <div class="card flex flex-col overflow-hidden">
           <!-- 池头 -->
           <div class="px-4 py-3 border-b border-line">
@@ -67,7 +67,8 @@
                   <th class="px-2 py-1.5 text-left">#</th>
                   <th class="px-2 py-1.5 text-left">名称</th>
                   <th class="px-2 py-1.5 text-right">ratio</th>
-                  <th class="px-2 py-1.5 text-right">past5</th>
+                  <th class="px-2 py-1.5 text-right" title="相对沪深300">5日相对</th>
+                  <th class="px-2 py-1.5 text-right" title="相对沪深300">20日相对</th>
                 </tr>
               </thead>
               <tbody>
@@ -78,16 +79,17 @@
                       <a :href="`/stock/${r.ts_code}/history`" class="hover:text-accent">
                         <span x-text="r.name||r.ts_code"></span>
                         <span class="text-text-dim text-xs ml-1" x-show="k==='C' && r.n_funds!=null" x-text="r.n_funds!=null?('('+r.n_funds+'基)'):''"></span>
-                        <span x-show="r.v7c" class="text-success ml-0.5">★</span>
+                        <span x-show="r.recommended || r.v7c" class="text-success ml-0.5">★</span>
                       </a>
                       <div class="text-text-dim text-xs font-mono" x-text="r.ts_code"></div>
                     </td>
                     <td class="px-2 py-1.5 text-right font-medium" :class="r.ratio>=5?'text-warn':'text-text'" x-text="r.ratio!=null?r.ratio.toFixed(1)+'x':'—'"></td>
-                    <td class="px-2 py-1.5 text-right" :class="(r.past5||0)>0?'up':'down'" x-text="r.past5!=null?((r.past5*100>=0?'+':'')+(r.past5*100).toFixed(1)+'%'):'—'"></td>
+                    <td class="px-2 py-1.5 text-right" :class="(r.relative5||0)>0?'up':'down'" x-text="r.relative5!=null?((r.relative5*100>=0?'+':'')+(r.relative5*100).toFixed(1)+'%'):'—'"></td>
+                    <td class="px-2 py-1.5 text-right" :class="(r.relative20||0)>0?'up':'down'" x-text="r.relative20!=null?((r.relative20*100>=0?'+':'')+(r.relative20*100).toFixed(1)+'%'):'—'"></td>
                   </tr>
                 </template>
                 <template x-if="pools && pools[k].items.length===0">
-                  <tr><td colspan="4" class="px-2 py-6 text-center text-text-dim text-xs">该池暂无股票</td></tr>
+                  <tr><td colspan="5" class="px-2 py-6 text-center text-text-dim text-xs">该池暂无股票</td></tr>
                 </template>
               </tbody>
             </table>
@@ -96,6 +98,7 @@
       </template>
     </div>
   </div>
+  <div class="text-xs text-text-dim -mt-2">相对涨跌幅 = 个股同期收益率 − 沪深300同期收益率。</div>
 </div>
 
 <script>
@@ -113,7 +116,7 @@ function homeApp() {
       } finally { this.loading = false; }
     },
     fmt(d){ return d ? `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}` : ''; },
-    poolBadge(k){ return ({A:'badge-success',B:'badge-accent',C:'badge-warn',D:'badge-danger',E:'badge-info'})[k]||'badge-accent'; },
+    poolBadge(k){ return ({A:'badge-success',B:'badge-accent',C:'badge-warn',D:'badge-danger',E:'badge-info',F:'badge-rose',G:'badge-warn'})[k]||'badge-accent'; },
   };
 }
 

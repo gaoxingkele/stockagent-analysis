@@ -49,6 +49,7 @@
     .badge-danger { background: rgba(235,84,84,.12); color: #eb5454; }
     .badge-accent { background: rgba(23,114,230,.10); color: #1772e6; }
     .badge-info { background: rgba(139,92,246,.12); color: #8b5cf6; }
+    .badge-rose { background: rgba(236,72,153,.12); color: #ec4899; }
     .progress { height: 4px; background: #e7eaf0; border-radius: 2px; overflow: hidden; }
     .progress > div { height: 100%; background: linear-gradient(90deg, #1772e6 0%, #3393ff 100%); transition: width .4s; }
     /* 中式 红涨绿跌 (雪球配色) — 用于价格/收益数字 */
@@ -67,15 +68,16 @@
       </a>
       <div class="flex items-center gap-1 text-sm">
         <a href="/" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.dashboard') }}</a>
-        <!-- 五池 顶级切换 -->
-        <div class="flex items-center gap-0.5 mx-1 px-1 py-0.5 rounded-lg bg-bg">
+        <!-- 七池 顶级切换 -->
+        <div class="flex items-center gap-0.5 mx-1 px-1 py-0.5 rounded-lg bg-bg overflow-x-auto">
           <a href="/v12?tab=A" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent font-medium">池A·系统</a>
           <a href="/v12?tab=B" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent font-medium">池B·自选</a>
           <a href="/v12?tab=C" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent font-medium">池C·基金重仓</a>
           <a href="/v12?tab=D" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent font-medium">池D·追高</a>
           <a href="/v12?tab=E" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent font-medium">池E·外部</a>
+          <a href="/v12?tab=F" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent font-medium">池F·SEMAS</a>
+          <a href="/v12?tab=G" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent font-medium">池G·北交所</a>
         </div>
-        <a href="/semas-panel" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">🎯 SEMAS</a>
         <a href="/index-panel" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">📊 指数</a>
         <a href="/me/jobs" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.jobs') }}</a>
         <a href="/share" class="px-3 py-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text">{{ t('nav.share') }}</a>

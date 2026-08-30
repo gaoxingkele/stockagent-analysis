@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""今日复盘 — 一条命令: 自动更新数据 + 出四池看板。
+"""今日复盘 — 一条命令: 自动更新数据 + 出七池看板。
 
 流程 (全自动):
   1. 检测最新可用交易日 D (Tushare 盘后数据)
@@ -246,7 +246,7 @@ def main():
         # 池E 由 stock_benchmark 的独立收盘后任务生产；本流程只读最新 CSV/回退缓存。
         log("池E 使用 stock_benchmark 已生成的最新 CSV（本流程不拉取全量日线）")
 
-    log("出四池看板 ...\n")
+    log("出七池看板 ...\n")
     import importlib, daily_dashboard
     sys.argv = ["daily_dashboard.py", D]
     importlib.reload(daily_dashboard)

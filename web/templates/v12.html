@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}V12.31 五池看板{% endblock %}
+{% block title %}V12.31 七池看板{% endblock %}
 
 {% block content %}
 <div x-data="poolsApp()" x-init="init()" class="space-y-6">
@@ -7,9 +7,9 @@
   <!-- Header: 日期 + 生成 + 单股 -->
   <div class="card p-5 flex flex-wrap items-center gap-4 justify-between">
     <div>
-      <div class="text-lg font-semibold">V12.31 五池看板</div>
+      <div class="text-lg font-semibold">V12.31 七池看板</div>
       <div class="text-xs text-text-muted mt-1">
-        池A 系统推荐(抄底回调) · 池B 自选 · 池C 基金重仓(机构抱团) · 池D 追高动量(对照) — ratio = pump↑ / (pump↓+ε)
+        池A R20目标池(R20或20日内最高涨幅≥25%、最大不利幅度不劣于-15%) · 池B 自选 · 池C 基金重仓 · 池D 追高动量
       </div>
     </div>
     <div class="flex items-center gap-3">
@@ -19,13 +19,13 @@
           <option :value="d" x-text="formatDate(d)"></option>
         </template>
       </select>
-      <button class="btn btn-ghost" @click="runUpdate()" :disabled="busy.update || busy.market" title="拉取最新交易日数据 + 重算特征 + 重跑五池">
+      <button class="btn btn-ghost" @click="runUpdate()" :disabled="busy.update || busy.market" title="拉取最新交易日数据 + 重算特征 + 重跑七池">
         <span x-show="!busy.update">🔄 更新数据</span>
         <span x-show="busy.update" class="text-text-muted">更新中...</span>
         <span class="text-text-dim text-xs">5 pt</span>
       </button>
       <button class="btn btn-primary" @click="runMarket()" :disabled="busy.market || busy.update">
-        <span x-show="!busy.market">🧮 跑全市场生成五池</span>
+        <span x-show="!busy.market">🧮 跑全市场生成七池</span>
         <span x-show="busy.market" class="text-text-muted">推理中...</span>
         <span class="text-text-dim text-xs">5 pt</span>
       </button>
@@ -59,7 +59,7 @@
     </div>
   </template>
 
-  <!-- 五池 Tab -->
+  <!-- 七池 Tab -->
   <template x-if="pools">
     <div class="card overflow-hidden">
       <!-- 大盘指数基准 -->
@@ -69,17 +69,19 @@
           <template x-for="idx in benchmark" :key="idx.ts_code">
             <span class="inline-flex items-center gap-1">
               <span class="text-text-muted" x-text="idx.name"></span>
-              <span class="font-mono" :class="idx.past_r5 > 0 ? 'text-success' : idx.past_r5 < 0 ? 'text-danger' : 'text-text-dim'"
-                x-text="idx.past_r5 !== null ? (idx.past_r5 > 0 ? '+' : '') + idx.past_r5.toFixed(1) + '%' : '-'"></span>
+              <span class="font-mono" :class="idx.past_r5 > 0 ? 'up' : idx.past_r5 < 0 ? 'down' : 'text-text-dim'"
+                x-text="'5日 '+(idx.past_r5 !== null ? (idx.past_r5 > 0 ? '+' : '') + idx.past_r5.toFixed(1) + '%' : '-')"></span>
+              <span class="font-mono" :class="idx.past_r20 > 0 ? 'up' : idx.past_r20 < 0 ? 'down' : 'text-text-dim'"
+                x-text="'20日 '+(idx.past_r20 !== null ? (idx.past_r20 > 0 ? '+' : '') + idx.past_r20.toFixed(1) + '%' : '-')"></span>
             </span>
           </template>
         </div>
       </template>
       <!-- tab 头 -->
-      <div class="flex border-b border-line">
-        <template x-for="k in ['A','B','C','D','E']" :key="k">
+      <div class="grid grid-cols-4 md:grid-cols-7 border-b border-line">
+        <template x-for="k in ['A','B','C','D','E','F','G']" :key="k">
           <button @click="tab=k"
-            class="px-5 py-3 text-sm font-medium border-b-2 transition"
+            class="px-2 md:px-3 py-3 text-xs md:text-sm font-medium border-b-2 transition text-center min-w-0"
             :class="tab===k ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text'">
             <span x-text="'池'+k+' '+pools[k].name"></span>
             <span class="ml-1 text-xs text-text-dim" x-text="'('+pools[k].count+')'"></span>
@@ -87,11 +89,17 @@
         </template>
       </div>
       <!-- tab 内容 -->
-      <template x-for="k in ['A','B','C','D','E']" :key="k">
+      <template x-for="k in ['A','B','C','D','E','F','G']" :key="k">
         <div x-show="tab===k">
           <div class="px-5 py-3 bg-bg flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             <span class="badge" :class="poolBadge(k)" x-text="pools[k].dna"></span>
             <span class="text-text-muted" x-text="pools[k].desc"></span>
+            <template x-if="k==='E' && pools[k].source_signal_date">
+              <span class="text-text-dim" x-text="'信号日 '+pools[k].source_signal_date+' · '+(pools[k].source_strategy_count || 0)+'策略'"></span>
+            </template>
+            <template x-if="k==='G'">
+              <span class="text-warn">北交所资金流衍生特征暂缺，采用独立降级观察规则</span>
+            </template>
             <span class="text-text-dim" x-text="pools[k].count+'股 · 入主推★ '+pools[k].n_star"></span>
             <span class="ml-auto flex items-center gap-2">
               <template x-if="k==='B'">
@@ -118,6 +126,9 @@
                   <th class="px-3 py-2 text-left">代码</th>
                   <th class="px-3 py-2 text-left">名称</th>
                   <th class="px-3 py-2 text-left">行业</th>
+                  <th class="px-3 py-2 text-right" x-show="k==='A'" title="模型预测第20日收盘收益">预测R20</th>
+                  <th class="px-3 py-2 text-right" x-show="k==='A'" title="模型预测未来20日内最高涨幅">预测最高涨幅</th>
+                  <th class="px-3 py-2 text-right" x-show="k==='A'" title="模型预测未来20日最低价相对入场价跌幅">预测回撤</th>
                   <th class="px-3 py-2 text-right" x-show="k==='C'">持有基金</th>
                   <th class="px-3 py-2 text-right cursor-pointer select-none hover:text-accent" @click="setSort('r20')"
                       :class="sortKey==='r20'?'text-accent':''">r20<span x-text="sortArrow('r20')"></span></th>
@@ -125,8 +136,10 @@
                   <th class="px-3 py-2 text-right">pump↓</th>
                   <th class="px-3 py-2 text-right cursor-pointer select-none hover:text-accent" @click="setSort('ratio')"
                       :class="sortKey==='ratio'?'text-accent':''">ratio<span x-text="sortArrow('ratio')"></span></th>
-                  <th class="px-3 py-2 text-right cursor-pointer select-none hover:text-accent" @click="setSort('past5')"
-                      :class="sortKey==='past5'?'text-accent':''">past5<span x-text="sortArrow('past5')"></span></th>
+                  <th class="px-3 py-2 text-right cursor-pointer select-none hover:text-accent" @click="setSort('relative5')"
+                      :class="sortKey==='relative5'?'text-accent':''" title="相对沪深300">5日相对<span x-text="sortArrow('relative5')"></span></th>
+                  <th class="px-3 py-2 text-right cursor-pointer select-none hover:text-accent" @click="setSort('relative20')"
+                      :class="sortKey==='relative20'?'text-accent':''" title="相对沪深300">20日相对<span x-text="sortArrow('relative20')"></span></th>
                   <th class="px-3 py-2 text-center">主推</th>
                 </tr>
               </thead>
@@ -140,6 +153,13 @@
                     </td>
                     <td class="px-3 py-2" x-text="r.name || '—'"></td>
                     <td class="px-3 py-2 text-text-muted" x-text="r.industry || '—'"></td>
+                    <td class="px-3 py-2 text-right text-success font-medium" x-show="k==='A'"
+                        x-text="r.r20_pred!=null ? ('+'+r.r20_pred.toFixed(1)+'%') : '—'"></td>
+                    <td class="px-3 py-2 text-right text-success font-medium" x-show="k==='A'"
+                        x-text="r.pred_max_gain_20!=null ? ('+'+r.pred_max_gain_20.toFixed(1)+'%') : '—'"></td>
+                    <td class="px-3 py-2 text-right" x-show="k==='A'"
+                        :class="r.pred_max_dd_20>=-15 ? 'text-success' : 'text-danger'"
+                        x-text="r.pred_max_dd_20!=null ? r.pred_max_dd_20.toFixed(1)+'%' : '—'"></td>
                     <td class="px-3 py-2 text-right" x-show="k==='C'"
                         :class="(r.n_funds||0)>=10 ? 'text-accent font-medium' : 'text-text-muted'"
                         x-text="r.n_funds!=null ? r.n_funds : '—'"></td>
@@ -155,16 +175,19 @@
                       <span x-show="r.ratio_dir==='up'" class="up">↑</span><span x-show="r.ratio_dir==='down'" class="down">↓</span>
                     </td>
                     <td class="px-3 py-2 text-right"
-                        :class="(r.past5||0)>0 ? 'up' : 'down'"
-                        x-text="r.past5!=null ? ((r.past5*100>=0?'+':'')+(r.past5*100).toFixed(1)+'%') : '—'"></td>
+                        :class="(r.relative5||0)>0 ? 'up' : 'down'"
+                        x-text="r.relative5!=null ? ((r.relative5*100>=0?'+':'')+(r.relative5*100).toFixed(1)+'%') : '—'"></td>
+                    <td class="px-3 py-2 text-right"
+                        :class="(r.relative20||0)>0 ? 'up' : 'down'"
+                        x-text="r.relative20!=null ? ((r.relative20*100>=0?'+':'')+(r.relative20*100).toFixed(1)+'%') : '—'"></td>
                     <td class="px-3 py-2 text-center">
-                      <span x-show="r.v7c" class="badge badge-success">★</span>
-                      <span x-show="!r.v7c" class="text-text-dim">—</span>
+                      <span x-show="r.recommended || r.v7c" class="badge badge-success">★</span>
+                      <span x-show="!(r.recommended || r.v7c)" class="text-text-dim">—</span>
                     </td>
                   </tr>
                 </template>
                 <template x-if="pools[k].items.length===0">
-                  <tr><td colspan="11" class="px-3 py-8 text-center text-text-muted text-sm">该池无数据</td></tr>
+                  <tr><td colspan="15" class="px-3 py-8 text-center text-text-muted text-sm">该池无数据</td></tr>
                 </template>
               </tbody>
             </table>
@@ -172,15 +195,15 @@
         </div>
       </template>
       <div class="px-5 py-3 text-xs text-text-dim border-t border-line">
-        提示: 池A=系统抄底回调; 池C≈池D=机构/市场追高动量, 两套逻辑对立, 谁对取决当下 regime。ratio 是强度确认非买入信号。
+        提示: 池A仅沪深市场，预测R20或20日内最高涨幅任一达到+25%，且预测最大不利幅度≥-15%即纳入；不限反弹/趋势、不设行业上限。池G仅北交所并独立排名。
       </div>
     </div>
   </template>
 
   <template x-if="pools===null && !busy.market">
     <div class="card p-8 text-center text-text-muted">
-      <div class="text-sm">该日期无五池数据</div>
-      <div class="text-xs mt-2">点击上方"跑全市场生成五池"按钮启动 (约 1-2 分钟)</div>
+        <div class="text-sm">该日期无七池数据</div>
+        <div class="text-xs mt-2">点击上方"跑全市场生成七池"按钮启动 (约 1-2 分钟)</div>
     </div>
   </template>
 
@@ -199,7 +222,8 @@
         <div><div class="text-xs text-text-muted">pump↓</div><div x-text="num(singleResult.pump_down_score)"></div></div>
         <div><div class="text-xs text-text-muted">r20 分</div><div x-text="num(singleResult.buy_r20_score,0)"></div></div>
         <div><div class="text-xs text-text-muted">V7c 主推</div><div x-text="singleResult.v7c_recommend ? '✓ 入池' : '× 未入'"></div></div>
-        <div><div class="text-xs text-text-muted">past_r5</div><div x-text="singleResult.past_r5!=null ? (singleResult.past_r5*100).toFixed(1)+'%' : '—'"></div></div>
+        <div><div class="text-xs text-text-muted">5日相对沪深300</div><div x-text="singleResult.relative_r5!=null ? ((singleResult.relative_r5>=0?'+':'')+(singleResult.relative_r5*100).toFixed(1)+'%') : '—'"></div></div>
+        <div><div class="text-xs text-text-muted">20日相对沪深300</div><div x-text="singleResult.relative_r20!=null ? ((singleResult.relative_r20>=0?'+':'')+(singleResult.relative_r20*100).toFixed(1)+'%') : '—'"></div></div>
         <div><div class="text-xs text-text-muted">pyr_velocity</div><div x-text="num(singleResult.pyr_velocity_20_60,4)"></div></div>
         <div><div class="text-xs text-text-muted">行业</div><div x-text="singleResult.industry || '—'"></div></div>
       </div>
@@ -219,14 +243,14 @@ function poolsApp() {
 
     async init() {
       const t = new URLSearchParams(location.search).get('tab');
-      if (['A','B','C','D','E'].includes(t)) this.tab = t;
+      if (['A','B','C','D','E','F','G'].includes(t)) this.tab = t;
       await this.loadDates();
       if (this.dates.length) { this.date = this.dates[this.dates.length-1]; await this.loadPools(); }
     },
     async loadDates() {
       const r = await api('/api/v12/pool-dates'); if (!r) return;
       const j = await r.json(); this.dates = j.dates || [];
-      // 若无五池日期, 退回 v12 dates (可生成)
+      // 若无七池日期, 退回 v12 dates (可生成)
       if (!this.dates.length) { const r2 = await api('/api/v12/dates'); if (r2) { const j2 = await r2.json(); this.dates = j2.dates || []; } }
     },
     async loadPools() {
@@ -237,7 +261,7 @@ function poolsApp() {
       const j = await r.json(); this.pools = j.pools; this.benchmark = j.benchmark || [];
     },
     formatDate(d){ return `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`; },
-    poolBadge(k){ return ({A:'badge-success',B:'badge-accent',C:'badge-warn',D:'badge-danger',E:'badge-info'})[k]||'badge-accent'; },
+    poolBadge(k){ return ({A:'badge-success',B:'badge-accent',C:'badge-warn',D:'badge-danger',E:'badge-info',F:'badge-rose',G:'badge-warn'})[k]||'badge-accent'; },
     setSort(key){ if(this.sortKey===key){ this.sortDir = this.sortDir==='desc'?'asc':'desc'; } else { this.sortKey=key; this.sortDir='desc'; } },
     sortArrow(key){ if(this.sortKey!==key) return ' ⇅'; return this.sortDir==='desc'?' ↓':' ↑'; },
     sortedItems(k){
@@ -312,18 +336,18 @@ function poolsApp() {
         const r = await api('/api/v12/jobs/market', {method:'POST', body:JSON.stringify({date:this.date})});
         if (!r.ok) { alert('启动失败: ' + (await r.text()).slice(0,200)); this.busy.market=false; return; }
         const j = await r.json();
-        this._attachSse(j.result_id, `V12 全市场生成五池 (${this.formatDate(this.date)})`,
+        this._attachSse(j.result_id, `V12 全市场生成七池 (${this.formatDate(this.date)})`,
           async ()=>{ this.busy.market=false; await this.loadDates(); await this.loadPools(); });
       } catch(e){ alert('错误: '+e.message); this.busy.market=false; }
     },
     async runUpdate() {
       this.busy.update = true;
       try {
-        // date 缺省 → 后端自动检测最新交易日, 拉数据 + 重算特征 + 重跑五池
+        // date 缺省 → 后端自动检测最新交易日, 拉数据 + 重算特征 + 重跑七池
         const r = await api('/api/v12/jobs/update', {method:'POST', body:JSON.stringify({})});
         if (!r.ok) { alert('启动失败: ' + (await r.text()).slice(0,200)); this.busy.update=false; return; }
         const j = await r.json();
-        this._attachSse(j.result_id, '🔄 更新数据 + 重跑五池 (最新交易日)',
+        this._attachSse(j.result_id, '🔄 更新数据 + 重跑七池 (最新交易日)',
           async ()=>{
             this.busy.update=false;
             await this.loadDates();

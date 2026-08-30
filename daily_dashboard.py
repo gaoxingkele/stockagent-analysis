@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""每日四池看板 (收盘后跑) — 系统抄底 vs 自选/基金/动量追高 一图对照。
+"""每日七池看板 (收盘后跑) — 沪深系统池、北交所独立池与对照池统一展示。
 
-池A 系统推荐: V12.31 (v7c 6铁律 → ratio=P_up/(P_down+ε) 排序 → 行业 cap 4 → Top N)
+池A R20目标池: 预测第20日收益或20日内最高涨幅≥25%，且预测最大不利幅度≥-15%，不分反弹/趋势、不设行业上限
 池B 自选 / 池C 基金重仓: 给系统打分看排名/是否入池 (WATCHLISTS 可编辑)
 池D ratio>=5.0: 全市场高决断度 (=追高动量股, 与系统DNA对立, 对照用)
+池G 北交所: 北交所内部独立 r20 相对排名观察池，不参与池A沪深排名
 
 用法: python daily_dashboard.py [YYYYMMDD]   (默认=daily cache 最新交易日)
 前置: 该日 factor_lab + 衍生特征已就绪 (见 update_factor_lab / update_features 脚本)。
@@ -12,6 +13,7 @@
 from __future__ import annotations
 import sys
 from pathlib import Path
+import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent
@@ -19,8 +21,12 @@ sys.path.insert(0, str(ROOT / "src"))
 from stockagent_analysis.v12_scoring import V12Scorer
 
 # ───────── 可编辑配置 ─────────
-TOP_N_A = 20          # 池A 取前 N
-IND_CAP = 4           # 池A 单行业上限
+POOL_A_R20_MIN = 25.0  # 预测第20日收盘收益率下限（百分比）
+POOL_A_MAX_GAIN_MIN = 25.0  # 预测未来20日内最高涨幅下限（百分比）
+POOL_A_DD_MIN = -15.0  # 预测未来20日最低点相对入场价跌幅下限（百分比）
+TOP_N_G = 10          # 池G 北交所独立观察池上限
+BJ_TOP_PCT = 0.05     # 池G 在北交所内部取 r20 前 5%
+BJ_IND_CAP = 4        # 池G 单行业上限
 RATIO_D = 5.0         # 池D 阈值
 CROWD_MIN = 2         # 池C 动态: 被 >=N 只高收益基金持有 (好基金优选池, ~70-80只)
 FUND_PORT = ROOT / "research/cache/fund_portfolio_cache.parquet"  # top70高收益基金持仓
@@ -96,94 +102,138 @@ def remove_from_b(code: str) -> list[str]:
     return save_watchlist_b([x for x in load_watchlist_b() if x != c])
 
 
-# ── 池E 外部信号: stock_benchmark 综合 Top30 (final_best_combo) ──
-# 数据源: experiments/final_best_combo_stock_list/final_best_combo_unified_stock_list_*.csv
-#   (H5/H10/H20 多周期综合排名, 每日一个 CSV)。
-# 读取: 取日期最新的 CSV, 按 merged_rank 升序取前 POOL_E_TOPN 的 ts_code (快, 只读)。
-# 生成: update_and_generate_pool_e() 调 update_lingxi + generate_final_best_combo 重跑 (慢, 更新流程用)。
-# 成功 → 缓存到 config/pool_e.json (审计+离线回退); 无 stock_benchmark 时回退读缓存文件。
+# ── 池E 外部信号: stock_benchmark 每日 Top100 多策略推荐 ──
+# 数据源: export_daily_top100_list.py --group strategy --format json
+#   (15 策略 H5/H10/H20 去重合并 100 只；导出器先读取权威发布指针)。
+# 本项目再次校验: 100 只唯一、配额 30/35/35、15 策略、有效 signal_date。
+# 读取: 按 overall_rank 升序取前 POOL_E_TOPN 的 ts_code。
+# 触发: generate_pool_e_only() 调 run_daily_top100_pipeline.py (幂等, 已生成则跳过;
+#   首次约 30 分钟, timeout 7200；完成后仍通过稳定 JSON 导出接口验收）。
+# 成功 → 缓存代码和发布元数据 (审计+离线回退); 无 stock_benchmark 时回退读缓存文件。
 import os, subprocess
 
 POOL_E_FILE = ROOT / "config" / "pool_e.json"
+POOL_E_META_FILE = ROOT / "config" / "pool_e_meta.json"
 # 可用环境变量覆盖 (换机器时改路径, 不动代码)
-POOL_E_DIR = Path(os.environ.get(
-    "POOL_E_DIR",
-    r"D:\aicoding\stock_benchmark\experiments\final_best_combo_stock_list"))
-POOL_E_UPDATE_SCRIPT = Path(os.environ.get(
-    "POOL_E_UPDATE_SCRIPT",
-    r"D:\aicoding\stock_benchmark\scripts\update_lingxi_v2_cn_daily_latest.py"))
-POOL_E_GENERATE_SCRIPT = Path(os.environ.get(
-    "POOL_E_GENERATE_SCRIPT",
-    r"D:\aicoding\stock_benchmark\scripts\generate_final_best_combo_stock_list.py"))
+POOL_E_EXPORT_SCRIPT = Path(os.environ.get(
+    "POOL_E_EXPORT_SCRIPT",
+    r"D:\aicoding\stock_benchmark\scripts\export_daily_top100_list.py"))
+POOL_E_PIPELINE_SCRIPT = Path(os.environ.get(
+    "POOL_E_PIPELINE_SCRIPT",
+    r"D:\aicoding\stock_benchmark\scripts\run_daily_top100_pipeline.py"))
 POOL_E_TOPN = int(os.environ.get("POOL_E_TOPN", "30"))
+POOL_E_UNIQUE_N = 100   # 发布校验: unique_recommendations 应为 100
+POOL_E_STRATEGY_N = 15
+POOL_E_HORIZON_QUOTAS = {"H5": 30, "H10": 35, "H20": 35}
 
 
-def _latest_pool_e_csv() -> "Path | None":
-    """日期最新的 final_best_combo CSV (排除 *_meta.csv). 无则 None."""
-    if not POOL_E_DIR.exists():
-        return None
-    csvs = [p for p in POOL_E_DIR.glob("final_best_combo_unified_stock_list_*.csv")
-            if not p.name.endswith("_meta.csv")]
-    return max(csvs, key=lambda p: p.name) if csvs else None
+def _validate_pool_e_payload(payload: dict) -> tuple[list[str], dict]:
+    """Validate the stock_benchmark JSON contract and return ranked codes + audit metadata."""
+    if not isinstance(payload, dict) or payload.get("result_group") != "strategy":
+        raise ValueError("pool E payload must be the strategy result group")
+    signal_date = str(payload.get("signal_date") or "").replace("-", "")
+    if len(signal_date) != 8 or not signal_date.isdigit():
+        raise ValueError("pool E payload has no valid signal_date")
+    if payload.get("unique_count") != POOL_E_UNIQUE_N:
+        raise ValueError("pool E payload must contain 100 unique recommendations")
+    if payload.get("horizon_quotas") != POOL_E_HORIZON_QUOTAS:
+        raise ValueError("pool E horizon quotas must be H5/H10/H20 = 30/35/35")
+    strategies = payload.get("strategies")
+    if not isinstance(strategies, list) or len(strategies) != POOL_E_STRATEGY_N:
+        raise ValueError("pool E payload must describe all 15 strategies")
+    strategy_ids = {str(row.get("strategy_id") or "") for row in strategies}
+    strategy_weights = payload.get("strategy_weights")
+    if ("" in strategy_ids or not isinstance(strategy_weights, dict)
+            or set(strategy_weights) != strategy_ids):
+        raise ValueError("pool E payload must include a weight for each strategy")
+    stocks = payload.get("stocks")
+    if not isinstance(stocks, list) or len(stocks) != POOL_E_UNIQUE_N:
+        raise ValueError("pool E payload stocks must contain exactly 100 rows")
+    ranked = sorted(stocks, key=lambda row: int(row.get("overall_rank", 10**9)))
+    if [int(row.get("overall_rank", 0)) for row in ranked] != list(range(1, 101)):
+        raise ValueError("pool E overall_rank must be the complete range 1..100")
+    codes = [_norm_code(row.get("ts_code", "")) for row in ranked]
+    if (any(not code or len(code) != 9 or code[6:] not in {".SZ", ".SH", ".BJ"}
+            or not code[:6].isdigit() for code in codes)
+            or len(set(codes)) != POOL_E_UNIQUE_N):
+        raise ValueError("pool E payload contains blank or duplicate stock codes")
+    meta = {
+        "result_group": "strategy",
+        "signal_date": signal_date,
+        "published_at": payload.get("published_at"),
+        "publication_policy": payload.get("publication_policy"),
+        "unique_count": payload["unique_count"],
+        "selected_count": min(POOL_E_TOPN, len(codes)),
+        "horizon_quotas": payload["horizon_quotas"],
+        "strategy_count": len(strategies),
+        "strategy_weight_count": len(strategy_weights),
+    }
+    return codes[:POOL_E_TOPN], meta
 
 
-def _fetch_pool_e_external() -> list[str] | None:
-    """读最新 final_best_combo CSV, 按 merged_rank 取前 POOL_E_TOPN 的 ts_code. 任何失败返回 None."""
-    latest = _latest_pool_e_csv()
-    if latest is None:
+def _fetch_pool_e_external() -> "tuple[list[str], dict] | None":
+    """Call stock_benchmark's stable JSON export contract. Any failure uses the local cache."""
+    if not POOL_E_EXPORT_SCRIPT.exists():
         return None
     try:
-        df = pd.read_csv(latest, dtype={"ts_code": str})
-        if "merged_rank" in df.columns:
-            df = df.sort_values("merged_rank")
-        codes = list(dict.fromkeys(
-            _norm_code(c) for c in df["ts_code"].tolist() if c and str(c).strip()))
-        return codes[:POOL_E_TOPN] or None
+        result = subprocess.run(
+            [sys.executable, str(POOL_E_EXPORT_SCRIPT),
+             "--group", "strategy", "--format", "json"],
+            cwd=str(POOL_E_EXPORT_SCRIPT.parents[1]),
+            capture_output=True, text=True, encoding="utf-8", timeout=60,
+        )
+        if result.returncode != 0:
+            return None
+        return _validate_pool_e_payload(_json.loads(result.stdout))
     except Exception:
         return None
 
 
-def generate_pool_e_only() -> bool:
-    """仅重跑 generate_final_best_combo (假设日线数据已最新, 供更新流程复用一次数据更新)."""
-    if not POOL_E_GENERATE_SCRIPT.exists():
+def generate_pool_e_only(end: str | None = None, force: bool = False) -> bool:
+    """触发 stock_benchmark 每日 Top100 流水线 (幂等, 已生成当天则跳过). 返回是否成功.
+
+    校验 (与 stock_benchmark 约定): 退出码 0 + 状态 JSON status=ok + unique_recommendations=100.
+    end: 固定补算交易日 (如 "20260720"); force: 同一天强制重算。
+    """
+    if not POOL_E_PIPELINE_SCRIPT.exists():
         return False
+    cmd = [sys.executable, str(POOL_E_PIPELINE_SCRIPT)]
+    if end:
+        cmd += ["--end", end]
+    if force:
+        cmd.append("--force")
     try:
         r = subprocess.run(
-            [sys.executable, str(POOL_E_GENERATE_SCRIPT)],
-            cwd=str(POOL_E_GENERATE_SCRIPT.parents[1]),
-            capture_output=True, text=True, encoding="utf-8", timeout=300,
+            cmd,
+            cwd=str(POOL_E_PIPELINE_SCRIPT.parents[1]),
+            capture_output=True, text=True, encoding="utf-8", timeout=7200,
         )
-        return r.returncode == 0
+        if r.returncode != 0:
+            return False
+        return _fetch_pool_e_external() is not None
     except Exception:
         return False
 
 
 def update_and_generate_pool_e() -> bool:
-    """更新 stock_benchmark 日线到最新 + 生成 final_best_combo 综合 Top30. 返回是否成功."""
-    if not POOL_E_UPDATE_SCRIPT.exists() or not POOL_E_GENERATE_SCRIPT.exists():
-        return False
-    try:
-        subprocess.run(
-            [sys.executable, str(POOL_E_UPDATE_SCRIPT), "--sleep", "0.05"],
-            cwd=str(POOL_E_UPDATE_SCRIPT.parents[1]),
-            capture_output=True, text=True, encoding="utf-8", timeout=600,
-        )
-        return generate_pool_e_only()
-    except Exception:
-        return False
+    """兼容旧接口: 新流水线自带数据更新, 直接触发完整流水线."""
+    return generate_pool_e_only()
 
 
 def load_pool_e() -> list[str]:
-    """池E 外部信号: 优先读最新 final_best_combo CSV, 成功缓存到 config/pool_e.json; 失败回退缓存文件.
+    """池E 外部信号: 优先调用稳定 JSON 导出接口，成功后缓存；失败回退缓存文件.
 
     换到没有 stock_benchmark 的机器上时, 自动用最近一次缓存的 config/pool_e.json。
     """
-    codes = _fetch_pool_e_external()
-    if codes:
+    fetched = _fetch_pool_e_external()
+    if fetched:
+        codes, meta = fetched
         try:
             POOL_E_FILE.parent.mkdir(parents=True, exist_ok=True)
             POOL_E_FILE.write_text(_json.dumps(codes, ensure_ascii=False, indent=2),
                                    encoding="utf-8")
+            POOL_E_META_FILE.write_text(
+                _json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception:
             pass
         return codes
@@ -196,6 +246,17 @@ def load_pool_e() -> list[str]:
         except Exception:
             pass
     return []
+
+
+def load_pool_e_meta() -> dict:
+    """Return source publication metadata, including the external signal date."""
+    if POOL_E_META_FILE.exists():
+        try:
+            meta = _json.loads(POOL_E_META_FILE.read_text(encoding="utf-8"))
+            return meta if isinstance(meta, dict) else {}
+        except Exception:
+            pass
+    return {}
 
 
 # ── SEMAS 最优组合推荐 (stock_benchmark 另一个项目的输出) ──
@@ -258,7 +319,9 @@ WATCHLISTS = {        # 自定义池 (代码可加减/新增池)
     "E 外部": load_pool_e(),        # 外部程序每日覆写 config/pool_e.json
 }
 COLS = ["ts_code", "name", "industry", "buy_r20_score", "pump_score",
-        "pump_down_score", "ratio", "past_r5", "v7c_recommend"]
+        "pump_down_score", "ratio", "past_r5", "past_r20",
+        "relative_r5", "relative_r20", "r20_pred", "pred_max_gain_20",
+        "pred_max_dd_20", "a_recommend", "v7c_recommend"]
 
 # 大盘指数基准 (每个池子底部附一行做比较)
 _INDEX_CODES = [
@@ -312,18 +375,19 @@ def latest_date() -> str:
 
 def fmt_table(d: pd.DataFrame, with_rank=False):
     w(f"  {'#' if with_rank else ' ':3s}{'代码':11s}{'名称':9s}{'行业':9s}"
-      f"{'r20':>5s}{'pump↑':>7s}{'pump↓':>7s}{'↑/↓':>6s}{'past5':>8s}{' 主推'}")
+      f"{'r20':>5s}{'pump↑':>7s}{'pump↓':>7s}{'↑/↓':>6s}{'相对5':>8s}{'相对20':>8s}{' 主推'}")
     for i, (_, p) in enumerate(d.iterrows(), 1):
         rec = "★" if p.get("v7c_recommend") else ""
         rk = f"{i:>2d}." if with_rank else "   "
         w(f"  {rk}{p['ts_code']:11s}{str(p.get('name', ''))[:8]:9s}{str(p.get('industry', ''))[:8]:9s}"
           f"{p.get('buy_r20_score', 0):>5.0f} {p['pump_score']:.3f}  {p['pump_down_score']:.3f}  "
-          f"{p['ratio']:>4.1f}x {p.get('past_r5', 0) * 100:>+6.1f}%  {rec}")
+          f"{p['ratio']:>4.1f}x {p.get('relative_r5', 0) * 100:>+6.1f}% "
+          f"{p.get('relative_r20', 0) * 100:>+6.1f}%  {rec}")
 
 
 POOL_META = {
-    "A": {"key": "A", "name": "系统推荐", "dna": "抄底回调 (系统自营)",
-          "desc": "V12.31 v7c主推 → r20排名(3分内ratio优先) → 行业cap → TopN"},
+    "A": {"key": "A", "name": "R20目标池", "dna": "未来20日绝对收益 / 回撤约束",
+          "desc": "预测R20或20日内最高涨幅≥+25%，且预测最大不利幅度≥-15%；不限反弹/趋势，不设行业cap和TopN"},
     "B": {"key": "B", "name": "自选", "dna": "用户关注", "desc": "自选清单打分排名"},
     "C": {"key": "C", "name": "基金重仓", "dna": "机构抱团 (动量追高)",
           "desc": "好基金优选池 (被≥2只高收益基金持有)"},
@@ -331,6 +395,10 @@ POOL_META = {
           "desc": f"全市场 ratio≥{RATIO_D}"},
     "E": {"key": "E", "name": "外部信号", "dna": "外部程序 (每日固定调用)",
           "desc": "外部清单打分排名 (config/pool_e.json)"},
+    "F": {"key": "F", "name": "SEMAS组合", "dna": "多策略最优组合 (stock_benchmark)",
+          "desc": "SEMAS 统一清单按 merged_rank 打分排名"},
+    "G": {"key": "G", "name": "北交所", "dna": "北交所独立相对排名 (观察池)",
+          "desc": "北交所内部 r20前5% → 非僵尸 → 行业动量过滤 → 行业cap → Top10"},
 }
 
 
@@ -348,16 +416,107 @@ def _items(df: pd.DataFrame) -> list[dict]:
             "pump_down": float(p.get("pump_down_score", 0) or 0),
             "ratio": float(p["ratio"]) if pd.notna(p.get("ratio")) else None,
             "past5": float(p.get("past_r5", 0) or 0),
+            "past20": float(p.get("past_r20", 0) or 0),
+            "relative5": float(p["relative_r5"]) if pd.notna(p.get("relative_r5")) else None,
+            "relative20": float(p["relative_r20"]) if pd.notna(p.get("relative_r20")) else None,
+            "r20_pred": float(p["r20_pred"]) if pd.notna(p.get("r20_pred")) else None,
+            "pred_max_gain_20": float(p["pred_max_gain_20"]) if pd.notna(p.get("pred_max_gain_20")) else None,
+            "pred_max_dd_20": float(p["pred_max_dd_20"]) if pd.notna(p.get("pred_max_dd_20")) else None,
+            "recommended": bool(p.get("a_recommend", False) or p.get("v7c_recommend", False)),
             "v7c": bool(p.get("v7c_recommend", False)),
             "n_funds": int(p["n_funds"]) if pd.notna(p.get("n_funds")) else None,
         })
     return out
 
 
-def build_pools(date: str, cb=None, write_csv: bool = True) -> dict:
-    """四池统一构建: score_market → A系统/B自选/C基金重仓/D追高 → 写CSV + 返回结构化数据.
+def _build_pool_a(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Build the SH/SZ absolute-target R20 pool without style or industry caps.
 
-    CLI 与 web 共用此函数 (单一真相, 避免逻辑漂移)。返回 {date, pools:{A,B,C,D}, ...}。
+    Live inference cannot observe the future.  The thresholds therefore apply
+    to two forward models trained on historical labels: T+20 closing return and
+    the lowest price versus next-session entry open during those 20 sessions.
+    """
+    r20 = pd.to_numeric(df.get("r20_pred"), errors="coerce")
+    pred_gain = pd.to_numeric(df.get("pred_max_gain_20"), errors="coerce")
+    pred_dd = pd.to_numeric(df.get("pred_max_dd_20"), errors="coerce")
+    sh_sz = df["ts_code"].astype(str).str.endswith((".SH", ".SZ"))
+    eligible = (sh_sz & r20.notna() & np.isfinite(r20)
+                & pred_gain.notna() & np.isfinite(pred_gain)
+                & pred_dd.notna() & np.isfinite(pred_dd))
+    return_target = r20 >= POOL_A_R20_MIN
+    intrawindow_target = pred_gain >= POOL_A_MAX_GAIN_MIN
+    selected = eligible & (return_target | intrawindow_target) & (pred_dd >= POOL_A_DD_MIN)
+
+    df["a_eligible"] = eligible
+    df["a_recommend"] = selected
+    df["a_target_score"] = np.maximum(r20, pred_gain)
+    pool = df[selected].copy().sort_values(["a_target_score", "ratio"], ascending=[False, False])
+    return pool, {
+        "universe": int(sh_sz.sum()),
+        "eligible": int(eligible.sum()),
+        "n_pool": int(selected.sum()),
+        "r20_min": POOL_A_R20_MIN,
+        "max_gain_min": POOL_A_MAX_GAIN_MIN,
+        "dd_min": POOL_A_DD_MIN,
+        "rule": "pred_r20_or_max_gain_ge_25_and_pred_max_dd_ge_neg15_v1",
+    }
+
+
+def _build_bj_pool(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Build Pool G in a BJ-only ranking universe.
+
+    BJ money-flow derived features are currently unavailable, so Pool G does
+    not pretend to satisfy Pool A's V7c hard rules.  It is an explicitly
+    labelled observation pool using BJ-relative r20 rank plus the available
+    zombie and industry-momentum risk gates.
+    """
+    df["g_eligible"] = False
+    df["g_rank_pct"] = np.nan
+    df["g_recommend"] = False
+    bj = df["ts_code"].astype(str).str.endswith(".BJ")
+    r20 = pd.to_numeric(df.get("r20_pred"), errors="coerce")
+    ratio = pd.to_numeric(df.get("ratio"), errors="coerce")
+    eligible = bj & r20.notna() & np.isfinite(r20) & ratio.notna() & np.isfinite(ratio)
+    df.loc[eligible, "g_eligible"] = True
+    if eligible.any():
+        df.loc[eligible, "g_rank_pct"] = r20.loc[eligible].rank(pct=True, method="first")
+    selected = eligible & (df["g_rank_pct"] >= 1 - BJ_TOP_PCT)
+    if "is_zombie" in df.columns:
+        selected &= ~df["is_zombie"].fillna(False).astype(bool)
+    if "industry_mom_60d_rank" in df.columns:
+        selected &= (df["industry_mom_60d_rank"].isna()
+                     | (df["industry_mom_60d_rank"] >= 0.10))
+    df.loc[selected, "g_recommend"] = True
+
+    candidates = df[selected].copy()
+    candidates["_r20_bucket"] = (candidates["buy_r20_score"] // 3).astype(int)
+    candidates = candidates.sort_values(
+        ["_r20_bucket", "ratio"], ascending=[False, False]
+    ).drop(columns=["_r20_bucket"])
+    picks, industries = [], {}
+    for _, row in candidates.iterrows():
+        industry = str(row.get("industry") or "?")
+        if industries.get(industry, 0) >= BJ_IND_CAP:
+            continue
+        industries[industry] = industries.get(industry, 0) + 1
+        picks.append(row)
+        if len(picks) >= TOP_N_G:
+            break
+    pool = pd.DataFrame(picks) if picks else candidates.head(0).copy()
+    # Reuse the established CSV/API recommendation field for the selected G rows.
+    pool["v7c_recommend"] = pool["g_recommend"].astype(bool)
+    return pool, {
+        "universe": int(bj.sum()),
+        "eligible": int(eligible.sum()),
+        "pre_cap": int(selected.sum()),
+        "rule": "bj_r20_top5_not_zombie_industry_mom_v1",
+    }
+
+
+def build_pools(date: str, cb=None, write_csv: bool = True) -> dict:
+    """七池统一构建: score_market → A-G 独立选池 → 写CSV + 返回结构化数据.
+
+    CLI 与 web 共用此函数 (单一真相, 避免逻辑漂移)。
     """
     out = ROOT / "output/daily_pick" / f"dashboard_{date}"
     if write_csv:
@@ -371,27 +530,17 @@ def build_pools(date: str, cb=None, write_csv: bool = True) -> dict:
             df = df.merge(basic[["ts_code", c]], on="ts_code", how="left")
     df["ratio"] = df["pump_score"] / (df["pump_down_score"] + 0.01)
 
-    # 池A 系统推荐: v7c主推 → r20排名(3分一档) + ratio优先 → 行业cap → TopN
-    main_pool = df[df["v7c_recommend"] == True].copy()
-    main_pool["_r20_bucket"] = (main_pool["buy_r20_score"] // 3).astype(int)
-    main_pool = main_pool.sort_values(
-        ["_r20_bucket", "ratio"], ascending=[False, False]).drop(columns=["_r20_bucket"])
-    picks, ind = [], {}
-    for _, r in main_pool.iterrows():
-        k = str(r.get("industry") or "?")
-        if ind.get(k, 0) >= IND_CAP:
-            continue
-        ind[k] = ind.get(k, 0) + 1
-        picks.append(r)
-        if len(picks) >= TOP_N_A:
-            break
-    A = pd.DataFrame(picks)
+    # Pool A: absolute forward target, independent of reversal/trend style.
+    # No industry cap and no TopN truncation: every stock meeting both model
+    # thresholds is published.  BJ stocks remain isolated in Pool G.
+    A, a_stats = _build_pool_a(df)
 
     # 池B/C/E 自定义 watchlist — 调用时实时取 (web 长驻进程不 reload 模块,
     # 若读模块级 WATCHLISTS 会冻结在进程启动那一刻; 这里实时加载保证每日刷新)
     b_codes = load_watchlist_b()
     c_codes = build_c_pool()
     e_codes = load_pool_e()
+    e_meta = load_pool_e_meta()
     B = df[df["ts_code"].isin(b_codes)].sort_values("ratio", ascending=False)
     Cdf = df[df["ts_code"].isin(c_codes)].sort_values("ratio", ascending=False)
     # 池C 附加 持有基金数 (从 fund_portfolio_cache)
@@ -416,13 +565,21 @@ def build_pools(date: str, cb=None, write_csv: bool = True) -> dict:
         semas_scored = semas_scored.merge(semas_df[merge_cols], on="ts_code", how="left", suffixes=("", "_semas"))
         semas_scored = semas_scored.sort_values("merged_rank")
 
+    # 池G: 北交所使用独立市场域与降级规则，不参与池A沪深分位排名。
+    G, g_stats = _build_bj_pool(df)
+
     # 大盘指数基准
     idx_rows = _fetch_index_benchmark(date)
 
     if write_csv:
         # 全量评分快照 (供次日 r20/ratio 涨跌对比, 含全市场所有评分股)
-        snap = [c for c in ["ts_code", "name", "buy_r20_score", "pump_score",
-                            "pump_down_score", "ratio", "past_r5", "v7c_recommend"] if c in df.columns]
+        snap = [c for c in ["ts_code", "name", "buy_r20_score", "r20_pred",
+                            "pred_max_gain_20", "pred_max_dd_20", "a_eligible", "a_recommend",
+                            "a_target_score", "pump_score",
+                            "pump_down_score", "ratio", "past_r5", "past_r20",
+                            "relative_r5", "relative_r20", "v7c_eligible",
+                            "v7c_recommend", "g_eligible", "g_rank_pct",
+                            "g_recommend"] if c in df.columns]
         df[snap].to_parquet(ROOT / "output/daily_pick" / f"scores_{date}.parquet", index=False)
         A[COLS].to_csv(out / "poolA_system.csv", index=False, encoding="utf-8-sig")
         B[COLS].to_csv(out / "pool_B.csv", index=False, encoding="utf-8-sig")
@@ -430,6 +587,17 @@ def build_pools(date: str, cb=None, write_csv: bool = True) -> dict:
         Cdf[ccols].to_csv(out / "pool_C.csv", index=False, encoding="utf-8-sig")
         D[COLS].to_csv(out / "poolD_ratio_ge5.csv", index=False, encoding="utf-8-sig")
         E[COLS].to_csv(out / "pool_E.csv", index=False, encoding="utf-8-sig")
+        (out / "pool_E_meta.json").write_text(
+            _json.dumps({**e_meta, "dashboard_date": date}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        # 池F SEMAS 最优组合 (stock_benchmark 外部推荐, merged_rank 序)
+        if len(semas_scored) > 0:
+            fcols = [c for c in COLS + ["merged_rank", "recommended_horizons", "hit_count"]
+                     if c in semas_scored.columns]
+            semas_scored[fcols].to_csv(out / "pool_F_semas.csv", index=False, encoding="utf-8-sig")
+        gcols = [c for c in COLS + ["g_rank_pct", "g_recommend"] if c in G.columns]
+        G[gcols].to_csv(out / "pool_G_bj.csv", index=False, encoding="utf-8-sig")
         # SEMAS 推荐 (带 r20/ratio 评分)
         if len(semas_scored) > 0:
             semas_cols = [c for c in COLS + ["merged_rank", "stock_name", "recommended_horizons",
@@ -438,7 +606,8 @@ def build_pools(date: str, cb=None, write_csv: bool = True) -> dict:
         # 指数基准单独写 (各池通用)
         if idx_rows:
             idx_df = pd.DataFrame(idx_rows)
-            idx_df[COLS].to_csv(out / "benchmark_indices.csv", index=False, encoding="utf-8-sig")
+            idx_cols = ["ts_code", "name", "industry", "past_r5", "_past_r20", "_close"]
+            idx_df[idx_cols].to_csv(out / "benchmark_indices.csv", index=False, encoding="utf-8-sig")
 
     d_pos = float((D["past_r5"] > 0).mean() * 100) if len(D) else 0.0
     # SEMAS 结构化数据
@@ -456,6 +625,9 @@ def build_pools(date: str, cb=None, write_csv: bool = True) -> dict:
                 "pump_down": float(r.get("pump_down_score", 0) or 0),
                 "ratio": float(r.get("ratio", 0) or 0),
                 "past5": float(r.get("past_r5", 0) or 0),
+                "past20": float(r.get("past_r20", 0) or 0),
+                "relative5": float(r["relative_r5"]) if pd.notna(r.get("relative_r5")) else None,
+                "relative20": float(r["relative_r20"]) if pd.notna(r.get("relative_r20")) else None,
                 "v7c": bool(r.get("v7c_recommend", False)),
             })
     return {
@@ -463,13 +635,19 @@ def build_pools(date: str, cb=None, write_csv: bool = True) -> dict:
         "benchmark": idx_rows,
         "semas": {"count": len(semas_items), "items": semas_items},
         "pools": {
-            "A": {**POOL_META["A"], "n_pool": int(len(main_pool)), "items": _items(A)},
+            "A": {**POOL_META["A"], **a_stats, "items": _items(A)},
             "B": {**POOL_META["B"], "n_codes": len(b_codes), "items": _items(B)},
             "C": {**POOL_META["C"], "n_codes": len(c_codes), "items": _items(Cdf)},
             "D": {**POOL_META["D"], "n_total": int(len(D)),
                   "past5_pos_pct": round(d_pos, 0),
                   "items": _items(D.head(30))},
-            "E": {**POOL_META["E"], "n_codes": len(e_codes), "items": _items(E)},
+            "E": {**POOL_META["E"], "n_codes": len(e_codes),
+                  "source_signal_date": e_meta.get("signal_date"),
+                  "source_published_at": e_meta.get("published_at"),
+                  "source_strategy_count": e_meta.get("strategy_count"),
+                  "items": _items(E)},
+            "F": {**POOL_META["F"], "n_codes": int(len(semas_scored)), "items": _items(semas_scored)},
+            "G": {**POOL_META["G"], **g_stats, "items": _items(G)},
         },
     }
 
@@ -488,7 +666,7 @@ def _attach_fund_count(cdf: pd.DataFrame) -> pd.DataFrame:
 
 def main():
     date = sys.argv[1] if len(sys.argv) > 1 else latest_date()
-    w(f"\n############ 每日五池看板 {date} ############")
+    w(f"\n############ 每日七池看板 {date} ############")
     res = build_pools(date)
     # 指数基准
     benchmark = res.get("benchmark", [])
@@ -499,7 +677,7 @@ def main():
         for idx in benchmark:
             r20 = idx.get("_past_r20", 0)
             w(f"  {idx['ts_code']}  {idx['name']:<8}  收盘 {idx['_close']:>10.2f}  5日 {idx['past_r5']:>+6.1f}%  20日 {r20:>+6.1f}%")
-    for k in ["A", "B", "C", "D", "E"]:
+    for k in ["A", "B", "C", "D", "E", "F", "G"]:
         p = res["pools"][k]
         w(f"\n===== 池{k} {p['name']} ({p['dna']}; {len(p['items'])}股) — {p['desc']} =====")
         df = pd.DataFrame([{
@@ -507,10 +685,12 @@ def main():
             "buy_r20_score": it["r20"], "pump_score": it["pump_up"],
             "pump_down_score": it["pump_down"], "ratio": it["ratio"],
             "past_r5": it["past5"], "v7c_recommend": it["v7c"],
+            "past_r20": it["past20"], "relative_r5": it["relative5"],
+            "relative_r20": it["relative20"],
         } for it in p["items"]])
-        fmt_table(df, with_rank=(k in ("A", "D")))
+        fmt_table(df, with_rank=(k in ("A", "D", "F")))
     w(f"\n[saved] output/daily_pick/dashboard_{date}/")
-    w("提示: 池A=抄底回调(系统), 池C≈池D=动量追高(基金/高ratio), 两套逻辑对立; 谁对取决当下 regime。")
+    w("提示: 池A=R20绝对目标(预测第20日收益或期内最高涨幅≥25%，回撤不劣于-15%)，不限制反弹/趋势或行业；池G仍为北交所独立池。")
 
 
 if __name__ == "__main__":

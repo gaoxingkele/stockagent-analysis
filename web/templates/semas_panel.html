@@ -34,13 +34,14 @@
           <th @click="toggleSort('pump_up')" class="px-3 py-3 text-right font-medium text-success cursor-pointer hover:text-success" x-text="'pump↑'+sortIcon('pump_up')"></th>
           <th @click="toggleSort('pump_down')" class="px-3 py-3 text-right font-medium text-danger cursor-pointer hover:text-danger" x-text="'pump↓'+sortIcon('pump_down')"></th>
           <th @click="toggleSort('ratio')" class="px-3 py-3 text-right font-medium text-accent cursor-pointer hover:text-accent" x-text="'ratio'+sortIcon('ratio')"></th>
-          <th @click="toggleSort('past5')" class="px-3 py-3 text-right font-medium text-text-muted cursor-pointer hover:text-text" x-text="'5日'+sortIcon('past5')"></th>
+          <th @click="toggleSort('relative5')" class="px-3 py-3 text-right font-medium text-text-muted cursor-pointer hover:text-text" title="相对沪深300" x-text="'5日相对'+sortIcon('relative5')"></th>
+          <th @click="toggleSort('relative20')" class="px-3 py-3 text-right font-medium text-text-muted cursor-pointer hover:text-text" title="相对沪深300" x-text="'20日相对'+sortIcon('relative20')"></th>
           <th class="px-3 py-3 text-center font-medium text-text-muted">★</th>
         </tr>
       </thead>
       <tbody>
         <template x-if="!items.length && !busy">
-          <tr><td colspan="11" class="px-4 py-8 text-center text-text-muted">该日期无 SEMAS 推荐数据</td></tr>
+          <tr><td colspan="12" class="px-4 py-8 text-center text-text-muted">该日期无 SEMAS 推荐数据</td></tr>
         </template>
         <template x-for="it in sortedItems" :key="it.ts_code">
           <tr class="border-b border-line hover:bg-bg-hover">
@@ -63,8 +64,11 @@
               :class="it.ratio >= 2 ? 'text-success' : it.ratio < 1 ? 'text-danger' : ''"
               x-text="it.ratio.toFixed(2)+'x'"></td>
             <td class="px-3 py-3 text-right font-mono"
-              :class="it.past5 > 0 ? 'text-success' : it.past5 < 0 ? 'text-danger' : ''"
-              x-text="(it.past5 > 0 ? '+' : '') + (it.past5*100).toFixed(1) + '%'"></td>
+              :class="it.relative5 > 0 ? 'up' : it.relative5 < 0 ? 'down' : ''"
+              x-text="it.relative5!=null ? (it.relative5 > 0 ? '+' : '') + (it.relative5*100).toFixed(1) + '%' : '—'"></td>
+            <td class="px-3 py-3 text-right font-mono"
+              :class="it.relative20 > 0 ? 'up' : it.relative20 < 0 ? 'down' : ''"
+              x-text="it.relative20!=null ? (it.relative20 > 0 ? '+' : '') + (it.relative20*100).toFixed(1) + '%' : '—'"></td>
             <td class="px-3 py-3 text-center" x-text="it.v7c ? '★' : ''"></td>
           </tr>
         </template>
@@ -78,6 +82,7 @@
     <div>• <strong>命中</strong> — 被几个周期同时推荐 (H5/H10/H20), ≥3 最佳</div>
     <div>• <strong>#</strong> — 合并排名 (hit_count 降序 → avg_rank 升序 → score_z 降序)</div>
     <div>• <strong>r20/pump/ratio</strong> — 本项目 V12.31 模型对同一只股的评分, 可交叉验证</div>
+    <div>• <strong>5日相对/20日相对</strong> — 个股同期收益率减去沪深300同期收益率</div>
     <div>• <strong>★</strong> — V12.31 v7c 六铁律主推</div>
   </div>
 

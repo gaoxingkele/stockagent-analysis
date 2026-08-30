@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -138,14 +139,82 @@ def list_pool_dates() -> list[str]:
 
 
 _POOL_FILES = {"A": "poolA_system.csv", "B": "pool_B.csv", "C": "pool_C.csv",
-               "D": "poolD_ratio_ge5.csv", "E": "pool_E.csv"}
+               "D": "poolD_ratio_ge5.csv", "E": "pool_E.csv", "F": "pool_F_semas.csv",
+               "G": "pool_G_bj.csv"}
 _POOL_META = {
-    "A": {"name": "系统推荐", "dna": "抄底回调 (系统自营)", "desc": "V12.31 v7c主推 → ratio排序 → 行业cap → Top20"},
+    "A": {"name": "R20目标池", "dna": "未来20日绝对收益 / 回撤约束", "desc": "预测R20或20日内最高涨幅≥+25%，且预测最大不利幅度≥-15%；不分反弹/趋势，不设行业cap和TopN"},
     "B": {"name": "自选", "dna": "用户关注", "desc": "自选清单打分排名"},
     "C": {"name": "基金重仓", "dna": "机构抱团 (动量追高)", "desc": "好基金优选池 (被≥2只高收益基金持有)"},
     "D": {"name": "追高动量", "dna": "高决断度 (与系统对立, 对照)", "desc": "全市场 ratio≥5"},
     "E": {"name": "外部信号", "dna": "外部程序 (每日固定调用)", "desc": "外部策略清单打分排名 (stock_benchmark)"},
+    "F": {"name": "SEMAS组合", "dna": "多策略最优组合 (stock_benchmark)", "desc": "SEMAS 统一清单按 merged_rank 打分排名"},
+    "G": {"name": "北交所", "dna": "北交所独立相对排名 (观察池)", "desc": "北交所内部 r20前5% → 非僵尸 → 行业动量过滤 → Top10"},
 }
+
+
+_return_cache: dict[str, dict[str, dict[str, float]]] = {}
+
+
+def _return_map(date: str) -> dict[str, dict[str, float]]:
+    """计算指定交易日个股 5/20 日收益及相对沪深300收益。
+
+    新看板 CSV 会直接携带这些字段；这里为历史看板和即时加入自选提供兜底。
+    所有收益字段均为小数口径（0.01 = 1%）。
+    """
+    if date in _return_cache:
+        return _return_cache[date]
+    daily_dir = settings.project_root / "output" / "tushare_cache" / "daily"
+    files = sorted(p for p in daily_dir.glob("*.parquet") if p.stem <= date)[-25:]
+    if not files:
+        _return_cache[date] = {}
+        return {}
+    parts = [pd.read_parquet(p, columns=["ts_code", "trade_date", "close"]) for p in files]
+    prices = pd.concat(parts, ignore_index=True)
+    prices["trade_date"] = prices["trade_date"].astype(str)
+    prices = prices.sort_values(["ts_code", "trade_date"])
+    grouped = prices.groupby("ts_code")["close"]
+    prices["past_r5"] = prices["close"] / grouped.shift(5) - 1
+    prices["past_r20"] = prices["close"] / grouped.shift(20) - 1
+    target = prices[prices["trade_date"] == date]
+
+    mkt5 = mkt20 = 0.0
+    try:
+        regime = pd.read_parquet(settings.project_root / "output" / "regimes" / "daily_regime.parquet")
+        regime["trade_date"] = regime["trade_date"].astype(str)
+        row = regime[regime["trade_date"] == date]
+        if not row.empty:
+            mkt5 = float(row.iloc[0]["ret_5d"])
+            mkt20 = float(row.iloc[0]["ret_20d"])
+    except Exception:
+        pass
+
+    out = {}
+    for _, row in target.iterrows():
+        p5 = float(row["past_r5"]) if pd.notna(row["past_r5"]) else None
+        p20 = float(row["past_r20"]) if pd.notna(row["past_r20"]) else None
+        out[str(row["ts_code"])] = {
+            "past_r5": p5,
+            "past_r20": p20,
+            "relative_r5": p5 - mkt5 if p5 is not None else None,
+            "relative_r20": p20 - mkt20 if p20 is not None else None,
+        }
+    _return_cache[date] = out
+    return out
+
+
+def _ensure_return_columns(df: pd.DataFrame, date: str) -> pd.DataFrame:
+    """为新旧看板统一补齐原始及相对 5/20 日收益列。"""
+    df = df.copy()
+    values = _return_map(date)
+    for col in ["past_r5", "past_r20", "relative_r5", "relative_r20"]:
+        fallback = df["ts_code"].astype(str).map(
+            lambda code: values.get(code, {}).get(col)
+        )
+        if col not in df.columns:
+            df[col] = fallback
+        else:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(fallback)
+    return df
 
 
 def _pool_items(df) -> list[dict]:
@@ -161,6 +230,16 @@ def _pool_items(df) -> list[dict]:
             "pump_down": float(p["pump_down_score"]) if pd.notna(p.get("pump_down_score")) else None,
             "ratio": float(ratio) if pd.notna(ratio) else None,
             "past5": float(p["past_r5"]) if pd.notna(p.get("past_r5")) else None,
+            "past20": float(p["past_r20"]) if pd.notna(p.get("past_r20")) else None,
+            "relative5": float(p["relative_r5"]) if pd.notna(p.get("relative_r5")) else None,
+            "relative20": float(p["relative_r20"]) if pd.notna(p.get("relative_r20")) else None,
+            "r20_pred": float(p["r20_pred"]) if pd.notna(p.get("r20_pred")) else None,
+            "pred_max_gain_20": float(p["pred_max_gain_20"]) if pd.notna(p.get("pred_max_gain_20")) else None,
+            "pred_max_dd_20": float(p["pred_max_dd_20"]) if pd.notna(p.get("pred_max_dd_20")) else None,
+            "recommended": bool(
+                (bool(p["a_recommend"]) if pd.notna(p.get("a_recommend")) else False)
+                or (bool(p["v7c_recommend"]) if pd.notna(p.get("v7c_recommend")) else False)
+            ),
             "v7c": bool(p["v7c_recommend"]) if pd.notna(p.get("v7c_recommend")) else False,
             "n_funds": int(p["n_funds"]) if pd.notna(p.get("n_funds")) else None,
         })
@@ -219,8 +298,21 @@ def read_four_pools(date: str) -> dict:
     for key, fname in _POOL_FILES.items():
         fp = d / fname
         meta = dict(_POOL_META[key], key=key)
+        if key == "E":
+            source_meta_file = d / "pool_E_meta.json"
+            if source_meta_file.exists():
+                try:
+                    source_meta = json.loads(source_meta_file.read_text(encoding="utf-8"))
+                    meta.update({
+                        "source_signal_date": source_meta.get("signal_date"),
+                        "source_published_at": source_meta.get("published_at"),
+                        "source_strategy_count": source_meta.get("strategy_count"),
+                    })
+                except Exception:
+                    pass
         if fp.exists():
             df = pd.read_csv(fp, dtype={"ts_code": str})
+            df = _ensure_return_columns(df, date)
             if "ratio" not in df.columns and "pump_score" in df.columns:
                 df["ratio"] = df["pump_score"] / (df["pump_down_score"] + 0.01)
             items = _pool_items(df)
@@ -238,10 +330,28 @@ def read_four_pools(date: str) -> dict:
     bm_fp = d / "benchmark_indices.csv"
     if bm_fp.exists():
         bm_df = pd.read_csv(bm_fp, dtype={"ts_code": str})
+        # 旧版 benchmark CSV 只保存了 5 日涨跌；从 regime 文件补齐 20 日。
+        fallback20 = {}
+        try:
+            regime = pd.read_parquet(settings.project_root / "output" / "regimes" / "daily_regime.parquet")
+            regime["trade_date"] = regime["trade_date"].astype(str)
+            rg = regime[regime["trade_date"] == date]
+            if not rg.empty:
+                rr = rg.iloc[0]
+                fallback20 = {
+                    "000300.SH": float(rr["ret_20d"]) * 100,
+                    "000905.SH": float(rr["zz500_ret_20d"]) * 100,
+                    "399006.SZ": float(rr["cyb_ret_20d"]) * 100,
+                }
+        except Exception:
+            pass
         for _, r in bm_df.iterrows():
+            code = str(r["ts_code"])
+            p20 = r.get("_past_r20")
             benchmark.append({
-                "ts_code": r["ts_code"], "name": r["name"], "industry": r.get("industry", "指数"),
+                "ts_code": code, "name": r["name"], "industry": r.get("industry", "指数"),
                 "past_r5": float(r["past_r5"]) if pd.notna(r.get("past_r5")) else None,
+                "past_r20": float(p20) if pd.notna(p20) else fallback20.get(code),
             })
     return {"date": date, "total": total, "pools": pools, "benchmark": benchmark,
             "exists": total > 0, "prev_compared": bool(prev)}
@@ -274,6 +384,7 @@ def score_pool_item(date: str, code: str) -> Optional[dict]:
     if not fp.exists():
         return None
     df = pd.read_parquet(fp)
+    df = _ensure_return_columns(df, date)
     row = df[df["ts_code"] == code]
     if row.empty:
         return None
@@ -292,7 +403,9 @@ def score_pool_item(date: str, code: str) -> Optional[dict]:
         "industry": industry,
         "r20": f("buy_r20_score") or 0.0, "pump_up": f("pump_score") or 0.0,
         "pump_down": f("pump_down_score") or 0.0, "ratio": f("ratio"),
-        "past5": f("past_r5") or 0.0, "v7c": bool(r.get("v7c_recommend")), "n_funds": None,
+        "past5": f("past_r5"), "past20": f("past_r20"),
+        "relative5": f("relative_r5"), "relative20": f("relative_r20"),
+        "v7c": bool(r.get("v7c_recommend")), "n_funds": None,
     }
 
 
@@ -503,7 +616,7 @@ async def _do_v12_market(factory, result_id: int, date: str):
 async def submit_v12_update(
     db: AsyncSession, user: User, date: Optional[str] = None,
 ) -> AnalysisResult:
-    """创建 v12_update job: 拉最新交易日数据 + 重算特征 + 重跑五池 (异步)."""
+    """创建 v12_update job: 拉最新交易日数据 + 重算特征 + 重跑七池 (异步)."""
     pts = POINTS_V12_MARKET
     if user.points < pts:
         from .points_service import InsufficientPointsError
@@ -525,7 +638,7 @@ async def submit_v12_update(
     await deduct_points(db, user, pts,
                          reason=TransactionReason.analyze_quant,
                          related_result_id=rec.id,
-                         note=f"V12 更新数据+重跑五池 {date or 'latest'}", auto_commit=False)
+                         note=f"V12 更新数据+重跑七池 {date or 'latest'}", auto_commit=False)
     await db.commit()
 
     factory = get_session_factory()
@@ -534,7 +647,7 @@ async def submit_v12_update(
 
 
 async def _do_v12_update(factory, result_id: int, date: Optional[str]):
-    """拉最新交易日数据 → 增量算特征 → build_pools 五池 (复用 daily_review.update_data)."""
+    """拉最新交易日数据 → 增量算特征 → build_pools 七池 (复用 daily_review.update_data)."""
     async with factory() as db:
         rs = await db.execute(select(AnalysisResult).where(AnalysisResult.id == result_id))
         rec = rs.scalar_one_or_none()
@@ -566,8 +679,8 @@ async def _do_v12_update(factory, result_id: int, date: Optional[str]):
                     dd.update_and_generate_semas()
                 except Exception:
                     pass  # SEMAS 失败不影响主池
-                # 池E: 日线数据已由上一步更新, 只需重跑 final_best_combo 生成
-                cb("pool_e", 57, "生成池E 综合 Top30...", {})
+                # 池E: 触发 stock_benchmark 每日 Top100 流水线 (幂等, 自带数据更新)
+                cb("pool_e", 57, "生成池E 外部 Top100 推荐...", {})
                 try:
                     dd.generate_pool_e_only()
                 except Exception:
@@ -579,6 +692,8 @@ async def _do_v12_update(factory, result_id: int, date: Optional[str]):
                     "n_pool_A": len(p["A"]["items"]), "n_A_universe": p["A"].get("n_pool", 0),
                     "n_pool_B": len(p["B"]["items"]), "n_pool_C": len(p["C"]["items"]),
                     "n_pool_D": len(p["D"]["items"]), "n_pool_E": len(p["E"]["items"]),
+                    "n_pool_F": len(p["F"]["items"]),
+                    "n_pool_G": len(p["G"]["items"]),
                     "n_main": len(p["A"]["items"]),
                 }
             stats = await asyncio.to_thread(_run)
@@ -752,6 +867,7 @@ def read_semas_stocks(date: str) -> dict:
     if not fp.exists():
         return {"date": date, "exists": False, "count": 0, "items": []}
     df = pd.read_csv(fp, dtype={"ts_code": str})
+    df = _ensure_return_columns(df, date)
     items = []
     for _, r in df.iterrows():
         items.append({
@@ -767,6 +883,9 @@ def read_semas_stocks(date: str) -> dict:
             "pump_down": float(r.get("pump_down_score", 0) or 0),
             "ratio": float(r.get("ratio", 0) or 0),
             "past5": float(r.get("past_r5", 0) or 0),
+            "past20": float(r["past_r20"]) if pd.notna(r.get("past_r20")) else None,
+            "relative5": float(r["relative_r5"]) if pd.notna(r.get("relative_r5")) else None,
+            "relative20": float(r["relative_r20"]) if pd.notna(r.get("relative_r20")) else None,
             "v7c": bool(r.get("v7c_recommend", False)),
         })
     return {"date": date, "exists": True, "count": len(items), "items": items}

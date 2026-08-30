@@ -175,7 +175,7 @@ async def run_update(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """更新数据: 拉最新交易日 daily/moneyflow + 重算特征 + 重跑五池 (异步). date 缺省=自动最新."""
+    """更新数据: 拉最新交易日 daily/moneyflow + 重算特征 + 重跑七池 (异步). date 缺省=自动最新."""
     try:
         rec = await v12_service.submit_v12_update(db, user, body.date)
     except InsufficientPointsError as e:
@@ -185,7 +185,7 @@ async def run_update(
     return V12JobResponse(
         job_id=rec.job_id, result_id=rec.id, status=rec.status.value,
         points_charged=rec.points_charged,
-        message=f"更新数据+重跑五池已启动, 通过 /api/results/{rec.id}/stream 监听进度",
+        message=f"更新数据+重跑七池已启动, 通过 /api/results/{rec.id}/stream 监听进度",
     )
 
 

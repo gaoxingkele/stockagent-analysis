@@ -1,10 +1,6 @@
-﻿# 调用 stock_benchmark 生成每日股票推荐清单
+# 调用 stock_benchmark 生成每日股票推荐清单（池E）
 
-本项目需要从 `D:\aicoding\stock_benchmark` 获取每日最新股票推荐清单。行情更新和清单生成由来源项目的独立收盘后任务负责；本项目的评分流程只读取已完成的 CSV，不再同步拉取日线。
-
-## 目标
-
-每天在最后一个交易日收盘数据拉取完成后，生成最新股票排序清单。本项目只需要读取生成后的 CSV 文件，并按 `merged_rank` 升序使用。
+本项目池E需要从 `D:\aicoding\stock_benchmark` 获取每日 Top100 多策略推荐清单。清单由来源项目的独立收盘后任务生产；本项目通过稳定导出 CLI 读取权威发布指针，不扫描目录猜测 latest。
 
 ## 来源项目
 
@@ -12,207 +8,94 @@
 D:\aicoding\stock_benchmark
 ```
 
-## 每日调用流程
+## 调用入口（由 stock_benchmark 侧调度执行）
 
-### 1. 进入来源项目目录
-
-```powershell
-cd /d D:\aicoding\stock_benchmark
-```
-
-### 2. 更新 A 股日线数据到最新
+触发完整流水线（幂等，当天已生成则跳过）：
 
 ```powershell
-python scripts\update_lingxi_v2_cn_daily_latest.py --sleep 0.05
+D:\Python314\python.exe D:\aicoding\stock_benchmark\scripts\run_daily_top100_pipeline.py
 ```
 
-说明：
-
-- 该步骤会调用 Tushare / 本地数据更新流程。
-- 目标是把研究股票池的日线数据更新到当前可获得的最新交易日。
-- 建议在 A 股收盘且数据源完成更新后执行。
-- 如果数据源当天尚未发布完整数据，后续推荐会继续使用本地最新可用交易日。
-
-### 3. 生成当前全量最优组合统一股票清单
+固定补算某个交易日：
 
 ```powershell
-python scripts\generate_final_best_combo_stock_list.py
+D:\Python314\python.exe D:\aicoding\stock_benchmark\scripts\run_daily_top100_pipeline.py --end 20260720
 ```
 
-说明：
-
-- 该脚本会自动使用本地数据中的最新可用交易日作为 `signal_date`。
-- 例如本地最新数据是 `2026-07-07`，则输出文件名中会包含 `2026-07-07`。
-- 生成的是收盘后信号清单，通常用于下一交易日开盘前后的外部评分、过滤或执行流程。
-
-## 来源项目的一条命令每日更新和生成
-
-由 `stock_benchmark` 的 Windows Task Scheduler / cron 在收盘数据可用后执行：
+同一天强制重新计算：
 
 ```powershell
-cd D:\aicoding\stock_benchmark
-python scripts\run_daily_final_best_combo_pipeline.py
+D:\Python314\python.exe D:\aicoding\stock_benchmark\scripts\run_daily_top100_pipeline.py --end 20260720 --force
 ```
 
-该入口使用单实例锁，并且只有增量行情更新成功后才生成清单。日常评分程序不要调用这个命令。
+首次生成可能耗时约 30 分钟，外部调用超时建议设置为至少 7200 秒。
 
-## 主要输出文件
+Python 外部调用示例：
 
-统一推荐清单：
+```python
+import subprocess
+
+result = subprocess.run(
+    [
+        r"D:\Python314\python.exe",
+        r"D:\aicoding\stock_benchmark\scripts\run_daily_top100_pipeline.py",
+    ],
+    cwd=r"D:\aicoding\stock_benchmark",
+    timeout=7200,
+    check=True,
+)
+```
+
+## 发布状态检查
+
+触发后先检查两个状态文件：
 
 ```text
-D:\aicoding\stock_benchmark\experiments\final_best_combo_stock_list\final_best_combo_unified_stock_list_YYYY-MM-DD.csv
+D:\aicoding\stock_benchmark\experiments\daily_top100_multi_strategy\latest_manifest.json
+D:\aicoding\stock_benchmark\experiments\data_update\latest_daily_top100_pipeline.json
 ```
 
-分周期原始清单：
+调用方应要求：
 
-```text
-D:\aicoding\stock_benchmark\experiments\final_best_combo_stock_list\final_best_combo_per_horizon_stock_list_YYYY-MM-DD.csv
-```
-
-元信息文件：
-
-```text
-D:\aicoding\stock_benchmark\experiments\final_best_combo_stock_list\final_best_combo_unified_stock_list_YYYY-MM-DD_meta.json
-```
-
-其中 `YYYY-MM-DD` 是信号日期，也就是本地数据中的最新可用交易日。
+- 进程退出码为 0。
+- 状态 JSON 中 `status` 为 `ok`。
+- `unique_recommendations` 为 100。
+- `signal_date` 是预期交易日。
 
 ## 本项目读取方式
 
-1. 进入输出目录：
+稳定读取入口：
 
-```text
-D:\aicoding\stock_benchmark\experiments\final_best_combo_stock_list
+```powershell
+D:\Python314\python.exe D:\aicoding\stock_benchmark\scripts\export_daily_top100_list.py --group strategy --format json
 ```
 
-2. 查找最新日期的文件：
+读取规则（`daily_dashboard.py::load_pool_e` 已实现）：
 
-```text
-final_best_combo_unified_stock_list_*.csv
-```
-
-3. 选择日期最新的 CSV。
-
-4. 按 `merged_rank` 升序读取。
-
-5. 使用 `ts_code` 作为股票唯一代码。
-
-6. 如只需要前 N 只股票，直接取：
-
-```text
-merged_rank <= N
-```
+1. 导出器先读取权威 `latest_manifest.json`，再返回其指向的完整 JSON 快照。
+2. 本项目复验：100只唯一股票、H5/H10/H20配额30/35/35、15个策略及15份权重、有效 `signal_date`。
+3. 按 `overall_rank` 升序排序，使用 `ts_code` 作为唯一代码，取前 `POOL_E_TOPN` 只（默认30）。
+4. 成功后同时覆写 `config/pool_e.json` 和 `config/pool_e_meta.json`；任何校验失败都回退最近一份已知良好缓存。
 
 ## 关键字段
 
 | 字段 | 含义 |
 |---|---|
-| `merged_rank` | 最终合并排序，`1` 表示最高优先级 |
-| `ts_code` | Tushare 股票代码，例如 `688121.SH` |
-| `symbol` | 来源项目内部 symbol |
+| `overall_rank` | 去重合并后的总排名，`1` 表示最高优先级 |
+| `ts_code` | Tushare 股票代码，例如 `688059.SH` |
 | `stock_name` | 股票名称 |
-| `signal_date` | 推荐信号日期，通常应等于最新可用交易日 |
-| `recommended_horizons` | 该股票由哪些周期推荐 |
-| `strategy_horizons` | 该股票落入哪些周期的回测 TopK；空值表示只是 Top30 候选补位 |
-| `hit_count` | 命中的周期数量，越高表示多周期共同推荐 |
-| `strategy_hit_count` | 命中回测 TopK 的周期数量，排序时优先级最高 |
-| `rank_h5` | 该股票在 H5 推荐列表中的排名，空值表示 H5 未推荐 |
-| `rank_h10` | 该股票在 H10 推荐列表中的排名，空值表示 H10 未推荐 |
-| `rank_h20` | 该股票在 H20 推荐列表中的排名，空值表示 H20 未推荐 |
-| `score_z_h5` | H5 标准化得分 |
-| `score_z_h10` | H10 标准化得分 |
-| `score_z_h20` | H20 标准化得分 |
-| `avg_rank` | 命中周期内的平均排名，越小越好 |
-| `rank_score` | 基于排名的综合得分 |
-| `score_z_sum` | 多个周期 `score_z` 的合计值 |
-| `in_strategy_topk_h5` | 是否进入 H5 回测 TopK |
-| `in_strategy_topk_h10` | 是否进入 H10 回测 TopK |
-| `in_strategy_topk_h20` | 是否进入 H20 回测 TopK |
+| `signal_date` | 推荐信号日期，应等于最新已完成数据更新的交易日 |
+| `assigned_horizon` | 该股票分配到的周期（H5/H10/H20，配额 30/35/35） |
+| `top100_strategy_votes` | 命中 Top100 的策略数量（共15个策略） |
+| `assignment_score` | 周期分配得分 |
+| `overall_consensus` | 多策略一致性得分 |
+| `composite_h5/h10/h20` | 各周期综合得分 |
 
-## recommended_horizons 可能值
+## 环境变量
 
-```text
-H5
-H10
-H20
-H5;H10
-H10;H20
-H5;H10;H20
-```
-
-## 当前推荐组合
-
-正式候选域为全 A 股当前上市非 ST 股票。模型训练域暂保留历史验证使用的“沪深300代理 + 科技股”池，输出元信息中的 `universe_mode`、`universe_count`、`training_universe_mode` 和 `training_universe_count` 会明确记录两种口径。
-
-| Horizon | 方法 | TopK |
-|---|---|---:|
-| H5 | DDG-DA + AlphaAgent imported factors + FAMA seed formulas + AutoAlpha Top seeds + QuantaAlpha Top seeds | 10 |
-| H10 | LSR-IGRU + AlphaAgent imported factors + FAMA seed formulas + AutoAlpha Top seeds | 5 |
-| H20 | LSR-IGRU + AlphaAgent imported factors + FAMA seed formulas + AutoAlpha Top seeds | 5 |
-
-说明：
-
-- 回测策略 TopK 分别是 10 / 5 / 5。
-- 当前最佳回测结果：H5 Sharpe 3.07008697，H10 Sharpe 3.51814110，H20 Sharpe 3.47011189。
-- 为了给外部软件稳定提供 TOP30 评分清单，每个周期会取候选 Top30 合并。
-- `strategy_horizons` 和 `in_strategy_topk_h5/h10/h20` 用于识别是否属于回测 TopK 内的强推荐。
-
-## 最终排序规则
-
-统一清单按以下规则排序：
-
-1. `strategy_hit_count` 降序
-2. `hit_count` 降序
-3. `avg_rank` 升序
-4. `score_z_sum` 降序
-
-## 数据新鲜度校验
-
-生成完成后，本项目应读取最新的 `*_meta.json`，检查：
-
-```text
-signal_date
-data_max_date
-```
-
-正常情况下：
-
-```text
-signal_date == data_max_date
-```
-
-并且该日期应等于最近一个已完成数据更新的交易日。
-
-如果 `signal_date` / `data_max_date` 不是预期的最近交易日，说明数据源尚未更新或本地更新失败，此时不应把该清单当作最新推荐。
-
-## Python 读取示例
-
-```python
-from pathlib import Path
-import json
-import pandas as pd
-
-out_dir = Path(r"D:\aicoding\stock_benchmark\experiments\final_best_combo_stock_list")
-
-csv_files = sorted(out_dir.glob("final_best_combo_unified_stock_list_*.csv"))
-csv_files = [p for p in csv_files if not p.name.endswith("_meta.csv")]
-if not csv_files:
-    raise FileNotFoundError("No stock recommendation CSV found")
-
-latest_csv = csv_files[-1]
-date_part = latest_csv.stem.replace("final_best_combo_unified_stock_list_", "")
-meta_path = out_dir / f"final_best_combo_unified_stock_list_{date_part}_meta.json"
-
-df = pd.read_csv(latest_csv)
-df = df.sort_values("merged_rank")
-
-if meta_path.exists():
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    if meta.get("signal_date") != meta.get("data_max_date"):
-        raise RuntimeError(f"stale or inconsistent data: {meta}")
-
-top20 = df[df["merged_rank"] <= 20]
-stocks = top20[["merged_rank", "ts_code", "stock_name", "recommended_horizons", "strategy_horizons", "hit_count", "strategy_hit_count"]]
-print(stocks)
-```
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `POOL_E_EXPORT_SCRIPT` | `D:\aicoding\stock_benchmark\scripts\export_daily_top100_list.py` | 权威稳定导出入口 |
+| `POOL_E_PIPELINE_SCRIPT` | `D:\aicoding\stock_benchmark\scripts\run_daily_top100_pipeline.py` | 触发入口 |
+| `POOL_E_STATUS_FILE` | `D:\aicoding\stock_benchmark\experiments\data_update\latest_daily_top100_pipeline.json` | 状态 JSON |
+| `POOL_E_TOPN` | `30` | 池E取前 N 只（源文件共 100 只） |

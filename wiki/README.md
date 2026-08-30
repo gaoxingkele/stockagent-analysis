@@ -24,6 +24,7 @@
 
 | 日期 | 条目 | 思想来源 (出处) | 裁决 | 一句话 |
 |------|------|----------------|------|--------|
+| 2026-08-29 | [[2026-08-29_pool-e-published-contract]] | Pact Consumer-Driven Contracts / POSIX atomic rename / stock_benchmark 稳定导出契约 | ✅落地 | 池E只消费权威完整快照，下游复验100只/配额/15策略并用真实signal_date守住最近良好版本 |
 | 2026-06-25 | [[2026-06-25_worldquant-brain-pipeline]] | WorldQuant BRAIN platform / FASTEXPR / 内生 anti-overfitting | 🧩 框架 | 跨到未枯竭美股空间, 管道 live, 借平台checks当gate; analyst4三批: EPS修正动量峰Sharpe0.93@120d<1.25门槛=优质building block非独立alpha |
 | 2026-06-24 | [[2026-06-24_improvement-loop-methodology]] | Ralph Wiggum (Carson) / Sakana AI Scientist / 内生 anti-overfitting | 🧩 框架 | loop 在枯竭空间只跑工程+累积+复检, 不跑挖矿; 每轮选→执行→评估→总结→提下一步 |
 | 2026-06-24 | [[2026-06-24_anti-overfitting-scaffold]] | ICBINB / Sakana AI Scientist / Bailey PBO·CSCV / ARA paper | 🧩 框架 | 用"reviewer+gate+walk-forward+PBO"的反过拟合脚手架做研究，吞吐不是目标、证伪才是 |

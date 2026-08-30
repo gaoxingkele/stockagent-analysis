@@ -1,0 +1,34 @@
+{
+  "contract_version": "pool-a-r20-target-v1",
+  "frozen_at": "2026-08-30T12:40:00+08:00",
+  "market_universe": ["SH", "SZ"],
+  "selection": {
+    "any_of": {
+      "predicted_t20_close_return_pct_gte": 25.0,
+      "predicted_max_gain_within_20d_pct_gte": 25.0
+    },
+    "and": {
+      "predicted_max_adverse_excursion_20d_pct_gte": -15.0
+    }
+  },
+  "industry_cap": null,
+  "top_n": null,
+  "st_excluded_at_factor_source": true,
+  "bj_market_policy": "excluded_from_pool_a_and_routed_to_pool_g",
+  "ranking": ["max(predicted_t20_close_return_pct,predicted_max_gain_within_20d_pct) desc", "ratio desc"],
+  "models": {
+    "r20": {
+      "path": "output/production/r20_v16_all_nost/classifier.txt",
+      "sha256": "5828A15BD25E47F7C7664135D53094B46DEA55932CD3617AD23E5ACCE79F4156"
+    },
+    "max_gain_20": {
+      "path": "output/lgbm_maxgain/regressor_gain.txt",
+      "sha256": "7222E5DFECCFEFA5615F51B676CEC447D78DF66D292D8EA39B6B88667D3121C4"
+    },
+    "max_adverse_excursion_20": {
+      "path": "output/lgbm_maxgain/regressor_dd.txt",
+      "sha256": "DD5BD6E54A4FB49C0EB591709CD27638D55B904CB13696052B881185E4F24C42"
+    }
+  },
+  "change_policy": "Any threshold, model, universe, cap, TopN, or OR/AND change requires a new contract version and tests."
+}

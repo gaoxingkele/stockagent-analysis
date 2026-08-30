@@ -1,0 +1,15 @@
+{
+  "result_group": "strategy",
+  "signal_date": "20260828",
+  "published_at": "2026-08-29T21:00:48+08:00",
+  "publication_policy": "two independent groups; no strategy-SEMAS fusion",
+  "unique_count": 100,
+  "selected_count": 30,
+  "horizon_quotas": {
+    "H5": 30,
+    "H10": 35,
+    "H20": 35
+  },
+  "strategy_count": 15,
+  "strategy_weight_count": 15
+}

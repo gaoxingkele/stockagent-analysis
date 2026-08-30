@@ -20,6 +20,10 @@ class V12ScoreResponse(BaseModel):
     sell_20_v6_prob: float
     quadrant: str
     v7c_recommend: bool
+    past_r5: Optional[float] = None
+    past_r20: Optional[float] = None
+    relative_r5: Optional[float] = None
+    relative_r20: Optional[float] = None
     pyr_velocity_20_60: Optional[float] = None
     f1_neg1: Optional[float] = None
     f2_pos1: Optional[float] = None
@@ -74,7 +78,7 @@ class RunMarketRequest(BaseModel):
 
 
 class RunUpdateRequest(BaseModel):
-    # date 可选: 缺省则自动检测最新交易日 (拉数据 + 重算特征 + 重跑五池)
+    # date 可选: 缺省则自动检测最新交易日 (拉数据 + 重算特征 + 重跑七池)
     date: Optional[str] = Field(None, pattern=r"^\d{8}$")
 
 
