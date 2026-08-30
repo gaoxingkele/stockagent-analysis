@@ -1,0 +1,56 @@
+{
+  "contract_version": "s20-first-passage-v1",
+  "status": "research_only",
+  "relationship_to_r20": "independent challenger; never replaces or feeds R20 without explicit promotion",
+  "production_impact": "none",
+  "market_universe": ["SH", "SZ"],
+  "horizon_sessions": 20,
+  "entry_price": "next_session_open",
+  "upside_barriers_pct": [15.0, 20.0, 25.0],
+  "downside_barrier_pct": -15.0,
+  "primary_index": "100 * P(hit +25% before hit -15% by session 20)",
+  "secondary_outputs": [
+    "p_up15_first_by20",
+    "p_up20_first_by20",
+    "p_up25_first_by20",
+    "p_down15_first_by20",
+    "median_sessions_to_upside",
+    "conformal_lower_bound_p_up25"
+  ],
+  "same_day_double_touch_policy": "ambiguous_exclude_from_binary_loss",
+  "hard_style_filters": [],
+  "industry_cap": null,
+  "top_n": null,
+  "baseline_history": {
+    "name": "B0-window-extrema-probability",
+    "contract": "config/r20_target_prob_v2_experiment.json",
+    "result": "config/r20_target_prob_v2_experiment_results.json",
+    "limitation": "uses window extrema and does not identify barrier order"
+  },
+  "candidate_ladder": [
+    "B1 discrete-time competing-risk LightGBM",
+    "B2 DLinear path baseline",
+    "B3 TFT multi-horizon quantile model",
+    "B4 TRA regime-routed mixture of experts",
+    "B5 DoubleAdapt incremental adaptation",
+    "B6 MASTER market and cross-sectional context",
+    "B7 TACTiS or diffusion joint-path distribution only if simpler models justify it"
+  ],
+  "calibration": "rolling adaptive conformal or Conformal PID after raw probability calibration",
+  "validation": {
+    "method": "purged chronological walk-forward with fit, tune, calibration and test windows",
+    "primary_metrics": [
+      "integrated_brier_score",
+      "cause_specific_log_loss",
+      "ece_10",
+      "top_decile_lift",
+      "calibration_by_market_regime"
+    ],
+    "acceptance": {
+      "all_test_folds_brier_skill_vs_constant_gt": 0.0,
+      "ece_10_lte": 0.05,
+      "top_decile_lift_gt": 1.5,
+      "minimum_shadow_trading_days": 60
+    }
+  }
+}
