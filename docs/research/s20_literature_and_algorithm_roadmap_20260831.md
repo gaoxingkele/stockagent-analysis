@@ -78,3 +78,22 @@ Brier Skill 是否为正，再看 ECE、top-decile lift 和不同市场阶段的
 
 机器可读契约位于 `config/s20_experiment_v1.json`，首次触达标签实现位于
 `src/stockagent_analysis/s20.py`。
+
+## mylib 实跑复核（2026-08-31）
+
+`D:/aicoding/mylib` 更新至 `e3b5eaa` 后，使用其 `paper_search` 统一检索器，对
+2021-2026 年的首次触达、最大回撤和股票概念漂移做了三组联合检索。稳定来源
+OpenAlex、arXiv、Crossref、DBLP 共返回 40 篇去重记录；完整表和错误披露见仓库根目录
+`allinone.md`。
+
+检索重新找回了 DoubleAdapt，并补充了
+[金融专用概念漂移检测](https://doi.org/10.48550/arxiv.2103.14079)、
+[金融概念漂移的超平面角度量](https://doi.org/10.1007/s10489-025-06292-w)、
+[离散时间最大回撤约束](https://doi.org/10.1007/978-3-030-98519-6_5)以及
+[FinTSBridge](http://arxiv.org/abs/2503.06928v2)。这些结果加强了 B1 离散时间基线、
+B5 漂移适配和分阶段校准的必要性，但没有推翻当前实验阶梯。
+
+本次还确认了一个检索风险：`first passage` 会命中大量物理学、结构安全和渗流论文，
+不能因数学术语相同就直接迁移到股票任务。S20 后续只接受经过金融数据、严格时间外验证
+或可复现实验支持的方法。Semantic Scholar 无密钥请求触发 429；OpenReview 的 Python
+3.14 依赖未安装成功，因此本轮完整结果明确限定为上述四个来源。
