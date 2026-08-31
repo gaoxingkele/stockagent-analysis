@@ -194,3 +194,48 @@ def cumulative_incidence(
         downside += survival * probability[:, 2]
         survival *= probability[:, 0]
     return {"upside": upside, "downside": downside, "survival": survival}
+
+
+def daily_topk_metrics(
+    frame: pd.DataFrame,
+    *,
+    probability_col: str,
+    target_col: str,
+    k: int,
+    date_col: str = "trade_date",
+) -> dict[str, float | int]:
+    """Evaluate a stock score as a daily high-confidence selector."""
+    required = {date_col, probability_col, target_col}
+    missing = required.difference(frame.columns)
+    if missing:
+        raise ValueError(f"missing evaluation columns: {sorted(missing)}")
+    if k <= 0:
+        raise ValueError("k must be positive")
+    data = frame[list(required)].dropna().copy()
+    if data.empty:
+        raise ValueError("no valid rows for daily top-k evaluation")
+    data[target_col] = pd.to_numeric(data[target_col], errors="raise")
+    data[probability_col] = pd.to_numeric(data[probability_col], errors="raise")
+    if not data[target_col].isin([0, 1]).all():
+        raise ValueError("target must be binary")
+    selected = (
+        data.sort_values(
+            [date_col, probability_col], ascending=[True, False], kind="mergesort"
+        )
+        .groupby(date_col, sort=True)
+        .head(k)
+    )
+    daily = selected.groupby(date_col)[target_col].mean()
+    base_rate = float(data[target_col].mean())
+    precision = float(selected[target_col].mean())
+    return {
+        "k": k,
+        "dates": int(daily.size),
+        "selected_rows": int(len(selected)),
+        "base_rate": base_rate,
+        "precision": precision,
+        "lift": precision / base_rate if base_rate > 0 else float("nan"),
+        "mean_daily_precision": float(daily.mean()),
+        "median_daily_precision": float(daily.median()),
+        "positive_pick_days_rate": float((daily > 0).mean()),
+    }

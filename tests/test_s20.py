@@ -12,6 +12,7 @@ from stockagent_analysis.s20 import (
     build_daily_first_passage_labels,
     build_first_passage_labels,
     cumulative_incidence,
+    daily_topk_metrics,
     s20_score,
 )
 
@@ -99,3 +100,20 @@ def test_competing_risk_probabilities_combine_with_survival_weighting():
     np.testing.assert_allclose(result["upside"], [0.34])
     np.testing.assert_allclose(result["downside"], [0.26])
     np.testing.assert_allclose(result["survival"], [0.40])
+
+
+def test_daily_topk_measures_stock_selection_instead_of_global_deciles():
+    frame = pd.DataFrame(
+        {
+            "trade_date": ["20250101"] * 3 + ["20250102"] * 3,
+            "probability": [0.9, 0.2, 0.1, 0.8, 0.7, 0.1],
+            "target": [1, 0, 0, 0, 1, 0],
+        }
+    )
+    result = daily_topk_metrics(
+        frame, probability_col="probability", target_col="target", k=1
+    )
+    assert result["dates"] == 2
+    assert result["selected_rows"] == 2
+    assert result["precision"] == 0.5
+    assert result["lift"] == 1.5

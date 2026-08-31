@@ -23,3 +23,7 @@ PR-AUC 和顶十分位命中率，但静态 Platt 校准在第一折出现负 Br
 `offline_completed_not_shadow_eligible`。测试后发现的 B1+B0 融合只能作为新时期的冻结
 验证线索，不能用本次结果晋级。详见
 [`docs/research/s20_b1_competing_risk_report_20260831.md`](../docs/research/s20_b1_competing_risk_report_20260831.md)。
+
+S20 的首要业务指标现已明确为每日高置信选股：Precision@10/20/50、相对全市场 lift、
+最差阶段表现和正命中交易日比例。B1 在 50% 实验样本的每日 Top20 命中率为 26.41%，
+约为总体基准的 2.01 倍，但最早测试折低于 B0，故仍不能上线。

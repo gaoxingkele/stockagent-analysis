@@ -8,7 +8,8 @@
   "entry_price": "next_session_open",
   "upside_barriers_pct": [15.0, 20.0, 25.0],
   "downside_barrier_pct": -15.0,
-  "primary_index": "100 * P(hit +25% before hit -15% by session 20)",
+  "primary_objective": "select a small daily stock set with the highest reliable upside-target confidence",
+  "primary_index": "100 * calibrated P(hit +25% before hit -15% by session 20)",
   "secondary_outputs": [
     "p_up15_first_by20",
     "p_up20_first_by20",
@@ -40,13 +41,20 @@
   "validation": {
     "method": "purged chronological walk-forward with fit, tune, calibration and test windows",
     "primary_metrics": [
+      "daily_precision_at_10_20_50",
+      "daily_lift_at_10_20_50",
+      "worst_fold_and_regime_precision",
+      "positive_pick_days_rate",
+      "top_decile_lift",
+      "ece_within_selected_tail",
       "integrated_brier_score",
       "cause_specific_log_loss",
-      "ece_10",
-      "top_decile_lift",
+      "ece_10_global",
       "calibration_by_market_regime"
     ],
     "acceptance": {
+      "daily_top20_lift_each_fold_gt": 1.5,
+      "daily_top20_precision_no_fold_regression_vs_b0_pp_lt": 2.0,
       "all_test_folds_brier_skill_vs_constant_gt": 0.0,
       "ece_10_lte": 0.05,
       "top_decile_lift_gt": 1.5,
