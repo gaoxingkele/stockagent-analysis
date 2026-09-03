@@ -1,0 +1,17 @@
+{
+  "contract_version": "s20-v2-five-target-20260903",
+  "generated_at_data_date": "20260902",
+  "rows": 3215747,
+  "symbols": 5300,
+  "signal_date_range": ["20240102", "20260805"],
+  "duplicate_keys": 0,
+  "legacy_entry_open_exact": true,
+  "targets": {
+    "15": {"drawdown_floor_pct": -8.0, "positive_rate": 0.1920443368, "ambiguous_rows": 30183},
+    "20": {"drawdown_floor_pct": -10.0, "positive_rate": 0.1585612923, "ambiguous_rows": 5908},
+    "25": {"drawdown_floor_pct": -12.0, "positive_rate": 0.1261532701, "ambiguous_rows": 459},
+    "30": {"drawdown_floor_pct": -12.0, "positive_rate": 0.0961291420, "ambiguous_rows": 71},
+    "35": {"drawdown_floor_pct": -12.0, "positive_rate": 0.0729286228, "ambiguous_rows": 29}
+  },
+  "local_full_audit": "output/experiments/s20_v2_labels/audit.json"
+}

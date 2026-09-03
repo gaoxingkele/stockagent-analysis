@@ -1,0 +1,44 @@
+{
+  "contract_version": "s20-v2-five-target-20260903",
+  "status": "offline_completed_not_shadow_eligible",
+  "sample_bps": 5000,
+  "sample_seed": 20260830,
+  "model_seeds": [20260903, 20260917, 20261001],
+  "feature_count": 176,
+  "primary_target_pct": 20,
+  "aggregate_top20": {
+    "test_dates": 145,
+    "base_rate": 0.1603285480,
+    "precision": 0.2117241379,
+    "lift": 1.3205641829,
+    "positive_pick_days_rate": 0.8896551724
+  },
+  "aggregate_top20_by_target": {
+    "15": {"precision": 0.1896551724, "lift": 0.899112},
+    "20": {"precision": 0.2117241379, "lift": 1.3205641829},
+    "25": {"precision": 0.1786206897, "lift": 1.509912},
+    "30": {"precision": 0.1296551724, "lift": 1.510654},
+    "35": {"precision": 0.1065517241, "lift": 1.670807}
+  },
+  "primary_target_folds": {
+    "wf1": {"precision": 0.1833333333, "lift": 1.5112328917, "b0_precision": 0.2142857143, "precision_delta_vs_b0": -0.0309523810},
+    "wf2": {"precision": 0.2431818182, "lift": 1.2762104694, "b0_precision": 0.2045454545, "precision_delta_vs_b0": 0.0386363636},
+    "wf3": {"precision": 0.2084745763, "lift": 1.2601929000, "b0_precision": 0.1745762712, "precision_delta_vs_b0": 0.0338983051}
+  },
+  "calibrated_primary_target_folds": {
+    "wf1": {"brier_skill": -0.0834354122, "ece": 0.1145243988, "selected_tail_error": 0.0128113002},
+    "wf2": {"brier_skill": -0.0350049790, "ece": 0.0797127975, "selected_tail_error": 0.0087594136},
+    "wf3": {"brier_skill": -0.0122272880, "ece": 0.0484976784, "selected_tail_error": 0.0974848942}
+  },
+  "promotion_checks": {
+    "daily_top20_lift_each_fold_gt_1_5": false,
+    "single_fold_precision_regression_vs_b0_lte_2pp": false,
+    "brier_skill_positive_each_fold": false,
+    "global_ece_each_fold_lte_0_05": false,
+    "selected_tail_error_each_fold_lte_0_05": false
+  },
+  "full_universe_confirmation_run": false,
+  "shadow_run_started": false,
+  "production_impact": "none",
+  "local_full_report": "output/experiments/s20_v2_multitarget/report.json"
+}

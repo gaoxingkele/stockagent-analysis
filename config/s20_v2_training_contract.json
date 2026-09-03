@@ -1,0 +1,75 @@
+{
+  "contract_version": "s20-v2-five-target-20260903",
+  "status": "frozen_research_only",
+  "production_impact": "none",
+  "relationship_to_r20": "independent; R20 remains the effective production index",
+  "signal_time": "D close after all D features are available",
+  "entry_price": "D+1 open",
+  "horizon_sessions": 20,
+  "market_universe": ["SH", "SZ"],
+  "target_drawdown_pct": {
+    "15": -8.0,
+    "20": -10.0,
+    "25": -12.0,
+    "30": -12.0,
+    "35": -12.0
+  },
+  "positive_rule": "first target hit within D+1..D+20; no pre-target breach of target-specific drawdown floor; after target day no low below D+1 open",
+  "classes": {
+    "0": "positive",
+    "1": "N1 target missed and drawdown floor not breached",
+    "2": "N2 drawdown floor breached before target or target never reached after breach",
+    "3": "N3 target reached then a later session fell below D+1 open",
+    "-1": "ambiguous: target-day low below D+1 open, intraday order unknown"
+  },
+  "ambiguous_policy": "exclude from binary and reason-model losses",
+  "primary_ranking_target": 20,
+  "outputs": [
+    "S20-15",
+    "S20-20",
+    "S20-25",
+    "S20-30",
+    "S20-35",
+    "N1_probability",
+    "N2_probability",
+    "N3_probability"
+  ],
+  "hard_style_filters": [],
+  "industry_cap": null,
+  "data_split": {
+    "method": "purged chronological walk-forward",
+    "purge_rule": "training horizon_end_date must be earlier than the next segment start",
+    "fold_adjustment": "retain B0 test windows; use two-month calibration windows so matured 20-session labels exist before each test starts",
+    "folds": [
+      {"name": "wf1", "tune": ["20241101", "20241231"], "calibration": ["20250101", "20250228"], "test": ["20250301", "20250430"]},
+      {"name": "wf2", "tune": ["20250301", "20250430"], "calibration": ["20250501", "20250630"], "test": ["20250701", "20250831"]},
+      {"name": "wf3", "tune": ["20250701", "20250831"], "calibration": ["20250901", "20251031"], "test": ["20251101", "20260126"]}
+    ],
+    "random_split": false,
+    "smote": false
+  },
+  "model_stage_1": {
+    "validation_sample_bps": 5000,
+    "binary_models": "five independent LightGBM classifiers",
+    "reason_models": "one four-class model per target after ambiguous exclusion",
+    "seed_ensemble": [20260903, 20260917, 20261001],
+    "class_weight": "none for probability models"
+  },
+  "primary_metrics": [
+    "daily_precision_at_10_20_50",
+    "daily_lift_at_10_20_50",
+    "worst_fold_precision",
+    "positive_pick_days_rate",
+    "selected_tail_ece"
+  ],
+  "probability_constraints": [
+    "brier_skill_vs_constant_positive_in_every_fold",
+    "global_and_selected_tail_ece_lte_0.05"
+  ],
+  "promotion_gate": {
+    "daily_top20_lift_each_fold_gt": 1.5,
+    "single_fold_precision_regression_vs_baseline_pp_lte": 2.0,
+    "full_universe_confirmation_required": true,
+    "minimum_forward_shadow_sessions": 60
+  }
+}
