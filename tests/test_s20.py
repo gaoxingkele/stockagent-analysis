@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from stockagent_analysis.s20 import (
     S20_V2_TARGET_DRAWDOWN,
+    anchored_residual_probability,
     build_daily_first_passage_labels,
     build_daily_s20_v2_labels,
     build_first_passage_labels,
@@ -36,6 +37,20 @@ def test_s20_v2_contract_freezes_five_target_risk_budgets():
         "35": -12.0,
     }
     assert contract["industry_cap"] is None
+
+
+def test_s20_20r_contract_separates_rank_from_r20_reference_probability():
+    root = Path(__file__).parents[1]
+    contract = json.loads(
+        (root / "config/s20_20r_training_contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert contract["production_impact"] == "none"
+    assert contract["feature_mode"]["name"] == "portable"
+    assert "not a probability" in contract["usable_output"]["selection_score"]
+    assert contract["usable_output"]["confidence_reference"].startswith("R20-P20")
+    assert contract["new_confirmation"]["state"].startswith("opened once")
 
 
 def test_s20_contract_is_independent_and_research_only():
@@ -228,3 +243,14 @@ def test_purged_masks_require_labels_to_mature_before_next_segment():
     assert masks["tune"].tolist() == [False, False, True, False, False, False]
     assert masks["calibration"].tolist() == [False, False, False, False, True, False]
     assert masks["test"].tolist() == [False, False, False, False, False, True]
+
+
+def test_anchored_residual_probability_is_bounded_in_log_odds():
+    result = anchored_residual_probability(
+        [0.2, 0.2, 0.5], [-10.0, 10.0, 0.0], max_absolute_residual=1.0
+    )
+    assert result[0] == pytest.approx(0.0842238, rel=1e-5)
+    assert result[1] == pytest.approx(0.4046097, rel=1e-5)
+    assert result[2] == pytest.approx(0.5)
+    with pytest.raises(ValueError):
+        anchored_residual_probability([0.2], [0.1, 0.2])

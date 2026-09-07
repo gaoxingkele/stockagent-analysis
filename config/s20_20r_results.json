@@ -1,0 +1,72 @@
+{
+  "contract_version": "s20-20r-r20-anchor-v1.4-20260907",
+  "status": "confirmation_completed_not_shadow_eligible",
+  "production_impact": "none",
+  "development": {
+    "sample_bps": 5000,
+    "feature_mode": "portable",
+    "feature_count": 166,
+    "dates": 145,
+    "stage1_residual_top20": {
+      "precision": 0.227931,
+      "lift": 1.421650
+    },
+    "stage2_fixed_hybrid_top20": {
+      "precision": 0.235862,
+      "lift": 1.471117,
+      "fold_precision": [0.210714, 0.286364, 0.216102]
+    },
+    "r20_b0_top20": {
+      "precision": 0.195172,
+      "lift": 1.217328
+    },
+    "learned_absolute_probability_head": "rejected: negative Brier Skill and excessive fold calibration error",
+    "usable_output": "S20-20R rank plus separately labeled R20-P20 reference probability"
+  },
+  "confirmation": {
+    "window": ["20260127", "20260805"],
+    "open_count": 1,
+    "rows": 613500,
+    "symbols": 4882,
+    "dates": 126,
+    "s20_20r_top20": {
+      "precision": 0.225,
+      "lift": 1.759314,
+      "positive_pick_days_rate": 0.817460
+    },
+    "r20_reference_top20": {
+      "precision": 0.166270,
+      "lift": 1.300092
+    },
+    "precision_improvement_vs_r20_pp": 5.8730,
+    "selected_r20_reference_mean_probability": 0.273963,
+    "selected_actual_event_rate": 0.225,
+    "selected_probability_absolute_error": 0.048963,
+    "worst_month_precision_delta_vs_r20_pp": -26.6667,
+    "monthly_s20_top20_precision": {
+      "202601": 0.025000,
+      "202602": 0.067857,
+      "202603": 0.165909,
+      "202604": 0.469048,
+      "202605": 0.236111,
+      "202606": 0.328571,
+      "202607": 0.084783,
+      "202608": 0.233333
+    },
+    "checks": {
+      "aggregate_top20_precision_improvement_vs_r20_reference_pp_gte_2": true,
+      "aggregate_top20_lift_gte_1_5": true,
+      "positive_pick_days_rate_gte_0_9": false,
+      "worst_month_precision_regression_vs_r20_reference_pp_lte_2": false,
+      "r20_reference_probability_error_on_selected_top20_lte_0_05": true
+    },
+    "passed": false
+  },
+  "decision": "Retain as rank-only research challenger; do not start shadow or alter R20/Pool-A/web/daily pipeline.",
+  "local_artifacts": {
+    "development_stage1": "output/experiments/s20_20r_residual_portable",
+    "development_stage2": "output/experiments/s20_20r_ranker_portable",
+    "calibration": "output/experiments/s20_20r_calibration_portable",
+    "confirmation": "output/experiments/s20_20r_confirmation/run_v1"
+  }
+}

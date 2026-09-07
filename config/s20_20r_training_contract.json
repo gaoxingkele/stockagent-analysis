@@ -1,0 +1,91 @@
+{
+  "contract_version": "s20-20r-r20-anchor-v1.4-20260907",
+  "status": "confirmation_completed_not_shadow_eligible",
+  "production_impact": "none",
+  "primary_target": "S20-20 positive under s20-v2-five-target-20260903",
+  "reference": "R20-P/B0 safe +20% probability",
+  "architecture": {
+    "formula": "logit(P_S20-20R) = logit(P_R20_anchor) + clipped_delta_path",
+    "max_absolute_delta_logit": 1.0,
+    "anchor": "one binary LightGBM trained on R20 target_p20_safe",
+    "residual": "three-seed strongly regularized LightGBM ensemble trained with R20 logit as init_score",
+    "hard_r20_filter": false,
+    "posthoc_blend": false
+  },
+  "nested_time_training": {
+    "rule": "Every R20 anchor score is out-of-fold for the row it scores: an early anchor scores residual-fit rows; a fixed-iteration refit on all matured outer-fit rows scores residual-tune, calibration, and test rows",
+    "label_maturity": "horizon_end_date must precede the next segment start",
+    "outer_test_windows": [
+      ["20250301", "20250430"],
+      ["20250701", "20250831"],
+      ["20251101", "20260126"]
+    ],
+    "residual_fit_starts": ["20240701", "20241101", "20250301"]
+  },
+  "development_sample_bps": 5000,
+  "sample_seed": 20260830,
+  "model_seeds": [20260907, 20260921, 20261005],
+  "feature_mode": {
+    "name": "portable",
+    "reason": "confirmation and daily inference must reconstruct every feature without stale historical snapshots",
+    "excluded": ["winner_rate", "holder_pct", "total_mv", "pe", "pe_ttm", "pb", "market_score_adj", "mf_divergence", "mf_strength", "mf_consecutive"]
+  },
+  "stage_1_gate": {
+    "aggregate_top20_precision_gt_r20_b0": true,
+    "each_fold_precision_regression_vs_r20_b0_pp_lte": 1.0,
+    "aggregate_top20_lift_gte": 1.3
+  },
+  "stage_2": {
+    "state": "frozen_after_stage_1_pass",
+    "model": "three-seed LightGBM LambdaRank",
+    "group": "trade_date",
+    "relevance": {"positive": 3, "N1": 1, "N2": 0, "N3": 0},
+    "cross_sectional_features": "percentile ranks of the top 32 anchor features selected on anchor training data only",
+    "rank_features": ["176 raw factors", "R20 OOF anchor", "32 daily percentile ranks"],
+    "hybrid": "fixed 50% daily percentile rank of S20-20R residual probability plus 50% daily percentile rank of LambdaRank score",
+    "gate": {
+      "aggregate_top20_precision_gt_stage_1": true,
+      "aggregate_top20_precision_gt_s20_v2": true,
+      "each_fold_precision_regression_vs_r20_b0_pp_lte": 1.0
+    }
+  },
+  "stage_3_calibration": {
+    "state": "frozen_after_stage_2_pass",
+    "method": "bounded logistic probability head on stage-1 logit and stage-2 hybrid-rank logit",
+    "coefficient_bounds": [0.0, 3.0],
+    "intercept_bounds": [-5.0, 5.0],
+    "update_frequency_sessions": 5,
+    "rolling_window_sessions": 250,
+    "maturity_rule": "a row may enter calibration only when horizon_end_date is earlier than prediction date",
+    "gate": {
+      "brier_skill_positive_each_fold": true,
+      "ece_each_fold_lte": 0.05,
+      "selected_top20_probability_error_each_fold_lte": 0.05
+    }
+  },
+  "usable_output": {
+    "selection_score": "S20-20R hybrid daily percentile rank, 0-100, not a probability",
+    "confidence_reference": "R20-P20 probability, explicitly labeled as the broader R20 event probability",
+    "rejected_output": "learned S20-20R absolute probability from stage 3",
+    "reason": "R20 reference probability error on S20-selected Top20 stayed below 5pp in every development fold"
+  },
+  "new_confirmation": {
+    "window": ["20260127", "20260805"],
+    "state": "opened once and closed after failed stability gates; must not be reused for promotion",
+    "required_factor_refresh": true,
+    "universe": "all SH/SZ non-ST rows with complete 20-session labels",
+    "gate": {
+      "aggregate_top20_precision_improvement_vs_r20_reference_pp_gte": 2.0,
+      "aggregate_top20_lift_gte": 1.5,
+      "positive_pick_days_rate_gte": 0.9,
+      "worst_month_precision_regression_vs_r20_reference_pp_lte": 2.0,
+      "r20_reference_probability_error_on_selected_top20_lte": 0.05
+    }
+  },
+  "production_training_mode_if_promoted": {
+    "inference": "daily after factor refresh",
+    "main_model_retrain": "monthly",
+    "calibration_update": "weekly using only matured D+20 labels",
+    "shadow_sessions_minimum": 60
+  }
+}

@@ -408,3 +408,33 @@ def purged_walk_forward_masks(
         & (horizon_end < fold.test_start),
         "test": dates.between(fold.test_start, fold.test_end),
     }
+
+
+def anchored_residual_probability(
+    anchor_probability: Iterable[float],
+    residual_logit: Iterable[float],
+    *,
+    max_absolute_residual: float = 1.0,
+) -> np.ndarray:
+    """Apply a bounded log-odds correction to an anchor probability.
+
+    The bound keeps an experimental S20 correction from overwhelming the
+    established R20 reference when the market regime changes.
+    """
+    anchor = np.asarray(list(anchor_probability), dtype=float)
+    residual = np.asarray(list(residual_logit), dtype=float)
+    if anchor.shape != residual.shape:
+        raise ValueError("anchor_probability and residual_logit must have equal shape")
+    if max_absolute_residual <= 0:
+        raise ValueError("max_absolute_residual must be positive")
+    if not np.isfinite(anchor).all() or not np.isfinite(residual).all():
+        raise ValueError("anchor probabilities and residuals must be finite")
+    if ((anchor < 0) | (anchor > 1)).any():
+        raise ValueError("anchor probabilities must lie in [0, 1]")
+    clipped_anchor = np.clip(anchor, 1e-6, 1 - 1e-6)
+    anchor_logit = np.log(clipped_anchor / (1 - clipped_anchor))
+    correction = np.clip(
+        residual, -max_absolute_residual, max_absolute_residual
+    )
+    combined_logit = np.clip(anchor_logit + correction, -30, 30)
+    return 1 / (1 + np.exp(-combined_logit))
