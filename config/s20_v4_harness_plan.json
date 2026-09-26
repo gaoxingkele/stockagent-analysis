@@ -1,0 +1,242 @@
+{
+  "plan_id": "s20-safe-v4-harness-20260913",
+  "schema_version": "0.1-planning",
+  "status": "planned_not_executed",
+  "created_date": "2026-09-13",
+  "timezone": "Asia/Shanghai",
+  "objective": "Maximize validated safe net-profit precision at disclosed recommendation coverage, penalizing dangerous-upside and downside paths; no zero-loss guarantee",
+  "discussion_method": "SmartGoal independent A/B/C proposals, cross-critique, D engineering integration",
+  "document": "docs/research/s20_v4_harness_plan_20260913.md",
+  "current_baseline_commit": "3368b6b",
+  "current_dirty_sources_must_be_snapshotted": true,
+  "runner": {
+    "module": "research.s20_harness.cli",
+    "implemented": false,
+    "reuse": "design patterns only from local mylib paper_harness and HarnessBank; no upstream runtime invoked",
+    "planned_commands": ["validate-plan", "audit", "run-stage", "status", "resume", "report"],
+    "state_store": "SQLite trial registry plus append-only events and atomic artifact manifests",
+    "run_states": ["PLANNED", "READY", "RUNNING", "VERIFYING", "COMPLETED", "FAILED_INFRA", "FAILED_VALIDITY", "WAITING_MATURITY"],
+    "science_states": ["PROMISING", "TRADEOFF", "NO_GAIN", "INSUFFICIENT_EVIDENCE", "REJECTED"],
+    "infra_retry_limit": 2,
+    "parameter_change_requires_new_trial": true,
+    "cache_key_fields": ["data_hash", "label_hash", "feature_hash", "split_hash", "code_hash", "environment_hash", "config_hash"],
+    "production_actions_allowed": false,
+    "real_orders_allowed": false
+  },
+  "write_scope": {
+    "planned_research_paths": ["research/s20_harness/", "tests/s20_harness/", "config/s20_v4_*", "docs/research/s20_v4_*", "wiki/smartgoal/", "output/experiments/s20_safe_v4/"],
+    "protected": ["config/pool_e.json", "config/pool_e_meta.json", "production model aliases", "production pool builders", "web payload", "daily 21:00 scheduler", "existing frozen R20/S20 source"],
+    "dirty_worktree_policy": "capture relevant source files and patch hashes; preserve unrelated user edits; no implicit stash/reset/commit",
+    "prediction_history": "append-only; corrections create revision records without replacing original predictions"
+  },
+  "label_tracks": {
+    "opportunity_v3_compat": {
+      "role": "legacy reproducibility, unchanged label meaning",
+      "source": "config/s20_v3_training_contract.json",
+      "not_trading_profit": true
+    },
+    "opportunity_calendar_pit_v4": {
+      "role": "calendar/PIT/corporate-action corrected opportunity research",
+      "requires_label_transfer_matrix": true,
+      "requires_recomputed_baselines": true
+    },
+    "safe_profit_20d_research": {
+      "role": "new research hypothesis; not a silent replacement for opportunity_v3",
+      "decision_time_local": "21:00",
+      "decision_on_stale_data": "reject_or_defer_with_record; never backdate prediction",
+      "entry": "market-calendar D+1 open reference, separate fill status",
+      "horizon": "market-calendar D+20; suspension does not extend forecast horizon",
+      "up_event": "fixed-cost net terminal return > 0",
+      "primary_down_event": "economic holding value below entry economic cost by more than 5% anywhere in the full window",
+      "secondary_down_floors_pct": [-3, -8, -10],
+      "secondary_up_thresholds_pct": [3, 5, 10, 15, 20],
+      "classes": {"A": "up and not down5", "B": "up and down5", "C": "not up and not down5", "D": "not up and down5"},
+      "unfilled": "keep recommendation record; do not assign a realized success label or postpone entry using hindsight",
+      "unresolved_exit": "retain pending status and bounds; extend actual position risk until legal exit",
+      "ambiguous_ohlc": "retain ex-ante candidate; report bounds and conservative execution; do not filter using future path",
+      "availability": "actual label_available_at, including data latency and unresolved outcomes"
+    },
+    "execution_book_v4": {
+      "role": "executable profit, episodes and portfolio ledger",
+      "primary_exit": "fixed horizon; alternative stops/profit taking are separate trials",
+      "rules": "exchange/board/status/effective-date table verified against official sources during implementation",
+      "costs": "frozen before experiments; explicit units, minimums, slippage and stress cases",
+      "duplicate_recommendations": "log signal, no automatic new position while already held",
+      "market_slices": ["SH_SZ audited initial universe", "BJ separate later configuration and evaluation"],
+      "industry_four_stock_cap": false
+    }
+  },
+  "selection": {
+    "top_n_caps": [1, 3, 5, 10, 20],
+    "allow_abstain": true,
+    "zero_selection_metrics": "null precision/risk; zero coverage",
+    "utility": "pA - lambda*pB - mu*pD - nu*pC",
+    "weight_constraint": "mu > lambda > nu >= 0; finite inner-development candidates only",
+    "comparators": ["pA", "p_up - beta*p_down5", "legacy ranking plus risk gate"],
+    "risk_gate_separate_from_score": true,
+    "joint_probability": "direct joint head or P(up)*P(down|up); never assume marginal independence",
+    "probability_is_not_rank": true,
+    "policy_fit_segment": "selection-policy segment only; strict chronological cross-fitting if necessary"
+  },
+  "validation": {
+    "inner_segments": ["fit", "tune", "calibration", "selection-policy", "outer-test"],
+    "purge": "label_available_at precedes next segment prediction time",
+    "anchor_training_predictions": "strict OOF or earlier-model predictions",
+    "evaluation_universe": "same complete ex-ante stock/date universe for all candidates; any subset is fixed and shared",
+    "known_exposed_window": ["20260127", "20260805"],
+    "other_exposed_dates": "inventory into exposure ledger; absence from this window does not make a date unseen",
+    "sealed_start": "first valid prediction after final model/policy freeze; not a fixed August date",
+    "sealed_champions_max": 1,
+    "sealed_updates": "only preregistered mature-label algorithm, no manual retuning",
+    "sealed_feedback_access": "only restricted evaluator and manifest-allowlisted frozen online updater may read matured sealed records; human research and tuning components cannot",
+    "sealed_model_weights": "static champion immutable; online champion updates only under frozen algorithm/window/rate/frequency policy with a snapshot per update",
+    "primary_confirmatory_gate": "G3",
+    "confirmatory_gate_order": ["G3", "G4", "G5"],
+    "gatekeeping": "formal later-gate claims only after prior gate passes; otherwise descriptive or a separate new sealed protocol; never any-gate-wins",
+    "holdout_access_log_required": true,
+    "minimum_mature_signal_days_for_first_review": 60,
+    "minimum_days_not_sufficient_evidence": true,
+    "feedback_delay": "default use complete matured labels; early negative feedback requires a separate survival/delayed-feedback trial",
+    "bootstrap": {"unit": "paired whole trading-date blocks", "block_lengths": [20, 40, 60], "sensitivity": "stock recommendation episodes"},
+    "rare_event_boundary": "no zero-width bootstrap risk guarantee; if defensible bound is unavailable return INSUFFICIENT_EVIDENCE",
+    "counts_to_report": ["signals", "unique_stocks", "trading_dates", "episodes", "nonoverlapping_cohorts", "fills", "unfilled", "unresolved_exits"],
+    "comparison_views": ["all_calendar_days", "predefined_common_active_dates", "matched_coverage", "cost_and_execution_stress"],
+    "constant_baseline": "matured historical frequency; test-frequency constant is diagnostic oracle only",
+    "conformal_claim_boundary": "coverage does not imply selected-stock conditional safety or zero loss"
+  },
+  "gates": {
+    "G0": {"kind": "validity", "rule": "all time/data/label/execution/ledger/reproducibility checks pass"},
+    "G1": {"kind": "development", "rule": "non-dominated risk/return/coverage frontier against simple and legacy baselines"},
+    "G2": {"kind": "candidate", "rule": "consistent fold/seed direction and robustness; no advantage solely from optimistic fills, data filtering, or isolated regime"},
+    "G3": {"kind": "relative_promotion_research", "safe_profit_delta_ci95_lower_gt": 0, "risk10_delta_ci95_upper_lt": 0, "matched_coverage": true},
+    "G4": {"kind": "aspirational_high_precision", "net_profit_rate_one_sided95_lower_gte": 0.8, "risk10_one_sided95_upper_lte": 0.05, "active_signal_day_coverage_gte": 0.3, "not_promised": true},
+    "G5": {"kind": "aspirational_long_term", "net_profit_rate_one_sided95_lower_gte": 0.9, "risk10_one_sided95_upper_lte": 0.01, "active_signal_day_coverage_gte": 0.3, "not_promised": true}
+  },
+  "budget_proposal": {
+    "active_in_this_turn": false,
+    "initial_model_config_slots": 12,
+    "initial_slot_allocation": ["r20_reference", "old_s20", "v3_full", "mature_frequency", "logistic_safe_profit", "shallow_tree", "atr_liquidity", "anchor_shallow_risk", "anchor_gbdt_risk", "joint_four", "conditional_three_head", "cost_sensitive_joint"],
+    "nontrainable_controls": "record trials but consume no actual fit; 72 is an upper bound",
+    "initial_seeds_per_config": 2,
+    "outer_folds": 3,
+    "initial_model_level_fit_cap": 72,
+    "count_underlying_boosters_separately": true,
+    "finalist_max": 3,
+    "finalist_total_seeds": 3,
+    "calibration_candidates_per_finalist_max": 3,
+    "selection_policies_per_finalist_max": 6,
+    "advanced_config_cap": 6,
+    "advanced_families_concurrent_max": 2,
+    "training_jobs_initial_max": 1,
+    "training_jobs_after_memory_probe_max": 2,
+    "runtime_limits": "bind from H00 pilot before training; account CPU/GPU/memory/walltime; no unbounded search",
+    "trial_definition": "every selectable model, feature set, label variant, calibration, weight, threshold, N, exit policy and universe configuration is registered"
+  },
+  "experiment_catalog": [
+    {"id": "E00", "name": "legacy_reproduction_and_matched_labels", "tier": "required"},
+    {"id": "E01", "name": "constant_linear_shallow_atr_baselines", "tier": "required"},
+    {"id": "E02", "name": "old_s20_oof_anchor_risk_residual", "tier": "first"},
+    {"id": "E03", "name": "safe_profit_binary_vs_joint_four_class", "tier": "first"},
+    {"id": "E04", "name": "conditional_downside_given_upside", "tier": "first"},
+    {"id": "E05", "name": "cost_sensitive_and_pairwise_ranking", "tier": "first_bounded"},
+    {"id": "E06", "name": "multithreshold_quantile_tail_models", "tier": "second"},
+    {"id": "E07", "name": "discrete_hazard_and_multistate_path", "tier": "second"},
+    {"id": "E08", "name": "matured_feedback_calibration", "tier": "required"},
+    {"id": "E09", "name": "selective_prediction_and_risk_gate", "tier": "required"},
+    {"id": "E10", "name": "conditional_feature_group_increment", "tier": "required"},
+    {"id": "E11", "name": "regime_soft_gate_and_group_robustness", "tier": "conditional"},
+    {"id": "E12", "name": "rolling_retraining_and_doubleadapt", "tier": "conditional"},
+    {"id": "E13", "name": "sequence_summary_mlp_tcn_patch", "tier": "conditional_expensive"},
+    {"id": "E14", "name": "market_relations_master_graph", "tier": "conditional_expensive"},
+    {"id": "E15", "name": "mature_history_retrieval", "tier": "conditional"},
+    {"id": "E16", "name": "small_sample_tabpfn_tabular_neural", "tier": "conditional"},
+    {"id": "E17", "name": "joint_paths_copula_diffusion", "tier": "last_only"},
+    {"id": "E18", "name": "causal_entry_exit_policy", "tier": "execution_separate"},
+    {"id": "E19", "name": "portfolio_exposure_and_correlation", "tier": "execution_separate"}
+  ],
+  "stages": [
+    {
+      "id": "H00", "depends_on": [], "state": "PLANNED", "title": "Snapshot and freeze research protocol",
+      "instructions": ["Inventory committed and uncommitted research sources without altering user changes", "Record data exposure history, resource pilot and proposed budget", "Implement minimal plan/manifest validation and durable run registry", "Freeze task definitions, metrics and candidate accounting before model selection"],
+      "experiments": [], "outputs": ["protocol.json", "source_snapshot.json", "environment.json", "exposure_ledger.json", "budget.json"],
+      "acceptance": ["source recoverable including untracked S20-v3 files", "protected paths unchanged", "DAG and schema checks pass", "hardware/runtime limits measured not invented"],
+      "failure_action": "FAILED_VALIDITY or FAILED_INFRA; preserve evidence"
+    },
+    {
+      "id": "H01", "depends_on": ["H00"], "state": "PLANNED", "title": "Audit calendar, price, corporate actions and point-in-time universe",
+      "instructions": ["Verify availability timestamps, market calendar and historical stock status", "Quantify price discontinuities and stock-session versus market-session differences", "Audit delisted/ST coverage and market rule data", "Freeze an auditable universe; disclose exclusions and unavailable fields"],
+      "experiments": [], "outputs": ["dataset_manifest.json", "data_audit.json", "anomaly_ledger.parquet", "coverage_report.md"],
+      "acceptance": ["G0 data checks", "no unexplained future features or silent current-metadata substitution", "no silent economic-price discontinuities"],
+      "failure_action": "block dependent formal training; continue only isolated diagnostics"
+    },
+    {
+      "id": "H02", "depends_on": ["H01"], "state": "PLANNED", "title": "Dual label tracks and causal execution foundation",
+      "instructions": ["Implement compatibility opportunity and new safe-profit research contracts separately", "Use market calendar D+1/D+20 and actual label availability", "Keep ambiguous/unfilled/unresolved recommendations in the ex-ante ledger", "Build fixed-horizon execution with date-effective board rules and cash ledger"],
+      "experiments": [], "outputs": ["label_contracts.json", "labels.parquet", "label_transfer.csv", "execution_contract.json", "golden_cases.json"],
+      "acceptance": ["G0 labels and execution", "corporate-action/suspension/T+1/gap/dual-touch tests", "exact horizon not 80-percent approximation", "cash and position conservation", "no final-day pct_chg used as known-at-open input"],
+      "failure_action": "FAILED_VALIDITY; no executable-performance claims"
+    },
+    {
+      "id": "H03", "depends_on": ["H02"], "state": "PLANNED", "title": "Reproduce and establish matched baselines",
+      "instructions": ["Reproduce original-label metrics with source/version attribution", "Recompute legacy algorithms and simple risk baselines on each new label track", "Create chronological fit/tune/calibration/selection/test manifests", "Enforce OOF anchors and identical evaluation universes"],
+      "experiments": ["E00", "E01"], "outputs": ["split_manifest.json", "baseline_metrics.csv", "baseline_oof.parquet", "baseline_bundle.json"],
+      "acceptance": ["G0 splits and reproducibility", "legacy differences explained", "no direct 50-percent-universe versus full-universe TopN comparison"],
+      "failure_action": "audit discrepancy before model search"
+    },
+    {
+      "id": "H04", "depends_on": ["H03"], "state": "PLANNED", "title": "Bounded anchor/joint/conditional competition",
+      "instructions": ["Register every configuration before its evaluation", "Run within the model-fit budget and shared folds", "Save all seeds/failures/OOF predictions", "Retain at most three non-dominated candidates including simple controls"],
+      "experiments": ["E02", "E03", "E04", "E05"], "outputs": ["trial_registry.sqlite", "oof_predictions.parquet", "model_cards.json", "development_frontier.csv"],
+      "acceptance": ["G1", "no in-sample anchor leakage", "scientific failures recorded as NO_GAIN not retried with hidden new parameters"],
+      "failure_action": "NO_GAIN is valid completion; do not invent a promotable winner"
+    },
+    {
+      "id": "H05", "depends_on": ["H04"], "state": "PLANNED", "title": "Delayed calibration and selective recommendations",
+      "instructions": ["Compare raw/expanding/rolling or decay within calibration budget", "Use complete mature feedback unless a separate delayed-event model is registered", "Fit finite selection policies in their own chronological segment", "Audit selected-subset calibration and risk/coverage with nullable empty-selection metrics"],
+      "experiments": ["E08", "E09"], "outputs": ["calibration_states.jsonl", "policy_candidates.json", "risk_coverage.csv", "selected_reliability.csv"],
+      "acceptance": ["G1/G2 calibrated selection evidence", "no marginal-independence product for joint events", "unvalidated probabilities explicitly marked"],
+      "failure_action": "retain rank-only diagnosis or INSUFFICIENT_EVIDENCE; no confidence claim"
+    },
+    {
+      "id": "H06", "depends_on": ["H05"], "state": "PLANNED", "title": "Conditional increments and guarded advanced algorithms",
+      "instructions": ["Test factor-group increments controlling ATR/liquidity/market state", "Use tail/hazard methods only against adequate simple baselines", "Activate expensive families only with documented residual error and budget", "Any new model must regenerate its own chronological calibration/selection pipeline"],
+      "experiments": ["E06", "E07", "E10", "E11", "E12", "E13", "E14", "E15", "E16", "E17"],
+      "outputs": ["ablation.csv", "factor_cards.json", "advanced_activation_decisions.json", "advanced_oof.parquet"],
+      "acceptance": ["G2 conditional increment", "random/time-shuffle controls", "document skipped families; not all catalog routes are mandatory"],
+      "failure_action": "reject costly branches without evidence; preserve simpler candidate"
+    },
+    {
+      "id": "H07", "depends_on": ["H06"], "state": "PLANNED", "title": "Locked development evaluation and execution stress",
+      "instructions": ["Compare shortlisted pipelines at fixed and matched coverage", "Stress costs/gaps/liquidity/unfilled orders/held-stock repeats", "Separate signal, episode and portfolio results", "Compute paired block and episode sensitivity intervals"],
+      "experiments": ["E18", "E19"], "outputs": ["locked_development_report.json", "stress.csv", "episodes.parquet", "nav.parquet", "paired_intervals.json"],
+      "acceptance": ["G2", "no hidden leverage or extra cash", "rare-event interval guard", "no relabeling known development data as unseen"],
+      "failure_action": "TRADEOFF, NO_GAIN or INSUFFICIENT_EVIDENCE; no forced promotion"
+    },
+    {
+      "id": "H08", "depends_on": ["H07"], "state": "PLANNED", "title": "Freeze champion and prospective evaluation policy",
+      "instructions": ["Select at most one champion plus frozen baselines without prospective labels", "Bind model/calibration-update/selection/execution hashes", "Set review times, coverage and power requirements", "Initialize holdout access isolation and ledger"],
+      "experiments": [], "outputs": ["champion_manifest.json", "sealing_manifest.json", "power_plan.json", "holdout_access.jsonl"],
+      "acceptance": ["G0 hashes and access isolation", "G2 research eligibility", "no pending human policy decisions silently assumed"],
+      "failure_action": "complete research negative report if no eligible champion"
+    },
+    {
+      "id": "H09", "depends_on": ["H08"], "state": "PLANNED", "title": "Collect genuinely future predictions and delayed outcomes",
+      "instructions": ["Start with first valid decision after champion freeze", "Append predictions before outcomes and never backfill as prospective evidence", "Apply only frozen mature-label update algorithm", "Track fill failure, unresolved exit and actual portfolio exposure"],
+      "experiments": [], "outputs": ["daily_predictions.parquet", "orders.parquet", "fills.parquet", "matured_queue.parquet", "events.jsonl"],
+      "acceptance": ["immutable prediction timestamps and hashes", "operations checks without premature performance peeking", "real orders remain disabled"],
+      "failure_action": "WAITING_MATURITY for expected delay; suspend on validity incident with preserved evidence"
+    },
+    {
+      "id": "H10", "depends_on": ["H09"], "state": "PLANNED", "title": "One-time review and scientific decision",
+      "instructions": ["Open at preregistered review only with sufficient mature blocks/episodes", "Evaluate G3 relative improvement and separately G4/G5 challenge claims", "Report all failures, unresolved records and coverage", "Publish internal evidence report; do not modify production automatically"],
+      "experiments": [], "outputs": ["final_report.md", "risk_coverage.csv", "paired_intervals.json", "promotion_decision.json", "checkpoint.json"],
+      "acceptance": ["explicit supported/rejected/insufficient claim states", "no threshold relaxation reusing the same holdout", "production change requires a separate task"],
+      "failure_action": "REJECTED or INSUFFICIENT_EVIDENCE is a valid final result"
+    }
+  ],
+  "required_run_artifacts": ["manifest.json", "split_manifest.json", "trial.json", "source_snapshot.json", "data_audit.json", "label_audit.json", "oof_predictions.parquet", "calibration_state.json", "selection_policy.json", "daily_predictions.parquet", "orders.parquet", "fills.parquet", "episodes.parquet", "nav.parquet", "risk_coverage.csv", "paired_intervals.json", "holdout_access.jsonl", "events.jsonl", "checkpoint.json", "decision.json"],
+  "failure_taxonomy": {
+    "where": ["data", "labels", "split", "model", "calibration", "selection", "execution", "portfolio", "runtime"],
+    "why": ["availability_leak", "stale_cache", "target_mismatch", "dual_high", "safe_but_flat", "drift", "dependence", "optimistic_fill", "oversearch", "insufficient_sample"]
+  }
+}

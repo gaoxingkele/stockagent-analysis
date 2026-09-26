@@ -1,0 +1,79 @@
+{
+  "schema_version": "1-scoped-execution-decision",
+  "decision_id": "DATA-EXIT-20260914-123734Z",
+  "checked_at": "2026-09-14T12:37:34.9043816+00:00",
+  "protocol_hash": "ca386ceef1c6dcd21958db97af5b6eef222a60775719711019fd627f9c8ebaaf",
+  "role": "research work-order disposition; not stage authorization or a runtime binding",
+  "scope": {
+    "signal_dates": ["20240624", "20240701"],
+    "daily_dependency_dates": ["20240524", "20240527", "20240528", "20240529", "20240530", "20240531", "20240603", "20240604", "20240605", "20240606", "20240607", "20240611", "20240612", "20240613", "20240614", "20240617", "20240618", "20240619", "20240620", "20240621", "20240624", "20240625", "20240626", "20240627", "20240628", "20240701"],
+    "universe_policy": "retain existing complete candidate batches; no outcome-dependent removal",
+    "not_claimed": ["all historical datasets audited", "all external archives searched", "all label dependencies revalidated", "current supplier bytes equal historical supplier bytes"]
+  },
+  "evidence": {
+    "registry": {
+      "path": "config/s20_v4_data_sources.json",
+      "sha256": "c6dd37f9c72e414dc9e67368dd1ff36e3219cf4dbfe2ecd3dd3277a266d901f9"
+    },
+    "receipt_inventory": {
+      "path": "output/experiments/s20_safe_v4/sources/acquisition-inventory-c382a05c3b064c82bd52bee0f1f428e6/inventory.json",
+      "sha256": "3d937ce4efd75a0d2c656e9392c72ed7c3ce9a8b48798a85a676faeef68ea315",
+      "registry_pin_matches": true,
+      "record_count": 8278,
+      "recorded_earliest_receipt": "2026-09-13T16:16:05.687031+00:00",
+      "recorded_latest_receipt": "2026-09-13T19:03:11.932284+00:00",
+      "individual_receipt_bindings_revalidated_this_check": false
+    },
+    "daily_lineage": {
+      "path": "output/experiments/s20_safe_v4/sources/identity-panel-a8199bfc7f2143ba8e5f4953ff088e55/inputs_outputs.json",
+      "sha256": "a61611a310837b71f03bfb9fe211c742e3b44418622f30fb54173826c9961991",
+      "raw_partitions_rehashed": 26,
+      "raw_hash_matches": 26,
+      "canonical_partitions_rehashed": 26,
+      "canonical_hash_matches": 26,
+      "same_basename_json_receipts_present": 0,
+      "semantic_identity_mapping_recomputed": false,
+      "historical_availability_proven": false
+    },
+    "existing_audits": [
+      "docs/research/s20_v4_consumer_availability_audit_20260914.md",
+      "docs/research/s20_legacy_recovery_audit_20260914.md"
+    ],
+    "workspace_bindings": {
+      "config/s20_v4_h03_intake.json": "absent",
+      "config/s20_v4_h05_intake.json": "absent"
+    }
+  },
+  "disposition": {
+    "scoped_historical_admission": "FAILED_VALIDITY",
+    "market_effect": "NOT_ESTABLISHED",
+    "formal_training_authorized": false,
+    "formal_stage_state_changed": false,
+    "production_change_authorized": false,
+    "new_retrospective_assumption_authorized": false,
+    "generic_harness_expansion": "defer unless required by a registered falsifiable experiment or a verified defect",
+    "repeat_same_source_search": "do not repeat without new evidence"
+  },
+  "recovery": [
+    {
+      "condition": "original archive or independent version/publication evidence supplied",
+      "required_binding": ["source identity", "exact consumed version or explicit revision lineage", "trustworthy available_at with timezone", "coverage of relevant feature dependencies"],
+      "next_action": "verify supplied evidence and rerun affected admission checks; do not presume H01 or H03 passes"
+    },
+    {
+      "condition": "user explicitly authorizes a separate retrospective research assumption",
+      "next_action": "register a separate diagnostic protocol, limits and baseline comparison; retain original H01 failure and frozen production protocol"
+    },
+    {
+      "condition": "a prospective collection workflow is separately authorized",
+      "next_action": "capture evidence from actual acquisition onward; wait for labels to mature; never backdate historical availability"
+    }
+  ],
+  "baseline_bridge_prerequisites": [
+    "formally admitted data and label scope",
+    "precise chronological fit/tune/calibration/policy/outer dates",
+    "shared complete candidate universe and actual label maturity",
+    "exact legacy state recovery or separately registered corrected reconstruction with charged anchor and OOF fits",
+    "pinned baseline bundle and formal H03 acceptance, not merely creation of a binding file"
+  ]
+}

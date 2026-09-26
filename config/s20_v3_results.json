@@ -1,0 +1,58 @@
+{
+  "version": "s20-v3-opportunity-risk-20260912",
+  "status": "retrained_not_improved_not_production_eligible",
+  "labels": {
+    "rows": 3252130,
+    "symbols": 5304,
+    "source_end": "20260911",
+    "latest_mature_signal": "20260814",
+    "ambiguous_excluded": 30,
+    "old_top20_immediate_count_corrected": 893,
+    "old_top20_delayed_count_corrected": 112
+  },
+  "training": {
+    "development_rows": 1200253,
+    "walk_forward_folds": 3,
+    "full_features": 166,
+    "low_correlation_features": 24,
+    "fit_spearman_limit": 0.7,
+    "trained_models": 8,
+    "seed": 20260912
+  },
+  "development_top20": {
+    "old_s20": {"immediate_rate": 0.36586206896551726, "down_rate": 0.3024137931034483},
+    "full_equal_risk": {"immediate_rate": 0.2693103448275862, "down_rate": 0.23206896551724138},
+    "full_half_risk": {"immediate_rate": 0.3837931034482759, "down_rate": 0.3182758620689655}
+  },
+  "diagnostic_top20": {
+    "window": ["20260127", "20260805"],
+    "rows": 613500,
+    "dates": 126,
+    "selected_rows": 2520,
+    "old_s20": {"immediate_rate": 0.3543650793650794, "down_rate": 0.5583333333333333},
+    "old_r20_reference": {"immediate_rate": 0.3, "down_rate": 0.5388888888888889},
+    "full_equal_risk": {"immediate_rate": 0.30952380952380953, "down_rate": 0.551984126984127},
+    "lowcorr_equal_risk": {"immediate_rate": 0.30158730158730157, "down_rate": 0.5777777777777777},
+    "full_half_risk": {"immediate_rate": 0.32103174603174606, "down_rate": 0.5932539682539683},
+    "half_risk_up_delta_vs_old_s20": -0.033333333333333326,
+    "half_risk_up_delta_block_ci95": [-0.17461309523809523, 0.10716269841269832],
+    "half_risk_down_delta_vs_old_s20": 0.03492063492063492,
+    "independent_confirmation": false
+  },
+  "probability_status": "rejected_for_absolute_confidence",
+  "balanced_selected_probability_audit": {
+    "mean_p_immediate": 0.6721635824436892,
+    "actual_immediate": 0.32103174603174606,
+    "mean_p_down": 0.19439906297870574,
+    "actual_down": 0.5932539682539683
+  },
+  "feature_findings": {
+    "strongest_consistent_up_and_down_signal": "atr_pct",
+    "up_contribution_positive_in_all_four_evaluations": ["atr_pct", "mkt_ret_60d"],
+    "additional_candidates_not_stably_validated": ["ma_ratio_120", "k_klen", "cyb_rel_strength", "regime_intensity"],
+    "low_correlation_subset_improved_performance": false,
+    "orthogonality_claim": "pairwise low correlation only, not independence"
+  },
+  "local_artifacts": "output/experiments/s20_v3/",
+  "production_impact": "none"
+}

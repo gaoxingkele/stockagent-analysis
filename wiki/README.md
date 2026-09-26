@@ -24,6 +24,9 @@
 
 | 日期 | 条目 | 思想来源 (出处) | 裁决 | 一句话 |
 |------|------|----------------|------|--------|
+| 2026-09-26 | [[2026-09-26_s20-amplitude-not-direction]] | TypeSafe/Jev System One 文档 + 本仓 v4 打乱对照与 09-20 诊断 | 🧩框架 | S20 的可用信息是振幅不是方向；语义模型无文本则无增量，且错配对照必须与标签独立 |
+| 2026-09-20 | [[2026-09-20_s20-causal-screen-specified-rise]] | Dream-RSI / Harness-RSI / Cunningham / Selective classification / Conformal Risk Control / 本仓 v4 诊断 | 🧩框架 | 入池看指定 +15% 止盈；沉默是任务支持不是质检；因果冷却未迁移，发运仍 π0 |
+| 2026-09-13 | [[2026-09-13_s20-three-track-evidence-gate]] | Selective classification / Conformal Risk Control / DLinear / DoubleAdapt / MASTER / 本仓 v3·B1 负结果 | 🧩框架 | S20-Safe：O/P/T 三轨分开；TopN 可空缺；先修数据与联合风险再放行复杂模型 |
 | 2026-08-29 | [[2026-08-29_pool-e-published-contract]] | Pact Consumer-Driven Contracts / POSIX atomic rename / stock_benchmark 稳定导出契约 | ✅落地 | 池E只消费权威完整快照，下游复验100只/配额/15策略并用真实signal_date守住最近良好版本 |
 | 2026-06-25 | [[2026-06-25_worldquant-brain-pipeline]] | WorldQuant BRAIN platform / FASTEXPR / 内生 anti-overfitting | 🧩 框架 | 跨到未枯竭美股空间, 管道 live, 借平台checks当gate; analyst4三批: EPS修正动量峰Sharpe0.93@120d<1.25门槛=优质building block非独立alpha |
 | 2026-06-24 | [[2026-06-24_improvement-loop-methodology]] | Ralph Wiggum (Carson) / Sakana AI Scientist / 内生 anti-overfitting | 🧩 框架 | loop 在枯竭空间只跑工程+累积+复检, 不跑挖矿; 每轮选→执行→评估→总结→提下一步 |

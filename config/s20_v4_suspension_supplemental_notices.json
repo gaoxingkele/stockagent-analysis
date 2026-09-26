@@ -1,0 +1,30 @@
+{
+  "schema_version": "1-supplemental-retrospective-source",
+  "purpose": "New corroborating documents, not replacements for original notice files or historical receipts",
+  "reviewed_cases": [
+    {
+      "ts_code": "603616.SH",
+      "trade_date": "20260122",
+      "source_url": "https://static.cninfo.com.cn/finalpage/2026-02-04/1224965264.PDF",
+      "source_notice": "2026-007",
+      "retrospective_state": "full_day_suspended",
+      "semantic_finding": "Page 1 retrospectively states continuous suspension beginning January 22 and explicitly references notice 2026-003; this independently hosted later issuer disclosure corroborates the target date, but is not byte identity proof of the original mirrored notice.",
+      "scope_limit": "February 4 publication and current retrieval cannot prove January 22 receipt; resumption announcement does not prove fills."
+    },
+    {
+      "ts_code": "603897.SH",
+      "trade_date": "20251104",
+      "source_url": "https://static.cninfo.com.cn/finalpage/2025-11-08/1224792149.PDF",
+      "source_notice": "2025-029",
+      "retrospective_state": "full_day_suspended",
+      "semantic_finding": "Later issuer disclosure repeats suspension starting November 3 and continued suspension November 5 before announcing November 10 resumption; November 4 remains a continuity inference, not a directly enumerated date.",
+      "scope_limit": "Do not promote target-date certainty from expected durations or treat this later notice as prior receipt."
+    }
+  ],
+  "unresolved_original_source_search": [
+    {"ts_code":"603056.SH","trade_date":"20260112","status":"Original disclosure-hosted 2026-004 PDF not located by bounded search; mirror status unchanged"},
+    {"ts_code":"603897.SH","trade_date":"20251104","status":"Additional issuer notices located, but no direct target-date statement; interval inference unchanged"}
+  ],
+  "historical_availability_proven": false,
+  "formal_training_authorized": false
+}

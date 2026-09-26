@@ -1,0 +1,34 @@
+{
+  "schema_version": "0.1-retrospective-rule-cases",
+  "policy": "Explanatory evidence only. Do not backdate disclosure availability or authorize fills from sentinel values alone.",
+  "cases": [
+    {
+      "ts_code": "920680.BJ",
+      "event_date": "20251211",
+      "event_type": "delisting_trading_first_day",
+      "daily_price_limit": false,
+      "following_day_limit_ratio": 0.30,
+      "source": "https://www.bse.cn/disclosure/2025/2025-12-30/c85ed19b2163424db07f1617a5e711fa.pdf",
+      "source_publication_date": "20251230",
+      "announcement_number": "2025-110",
+      "evidence_role": "retrospective_issuer_disclosure",
+      "historical_available_at": null,
+      "local_archive_verified": false,
+      "fill_authorized": false
+    },
+    {
+      "ts_code": "920305.BJ",
+      "event_date": "20260709",
+      "event_type": "delisting_trading_first_day",
+      "daily_price_limit": false,
+      "following_day_limit_ratio": 0.30,
+      "source": "https://www.bse.cn/disclosure/2026/2026-07-27/a2b5e33fb84c4d778f86fc88447ddb9a.pdf",
+      "source_publication_date": "20260727",
+      "announcement_number": "2026-072",
+      "evidence_role": "retrospective_issuer_disclosure",
+      "historical_available_at": null,
+      "local_archive_verified": false,
+      "fill_authorized": false
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "schema_version": "0.1-source-bound-beneficiary-reviews",
+  "policy": "Reviews authorize only supplied-event accounting diagnostics, not complete corporate-action coverage, net tax treatment or historical feed availability.",
+  "reviews": {
+    "a4aa614e0f999bb3a1aa8b2d04fc5e34102aba68a0003ccd87f4671120db9f5e": {
+      "row_sha256": "09d2b9e5b4f9d6ff3345e60b8a764aae98aff4399a0dc8d8bd7338f26a475ad8",
+      "ts_code": "603081.SH",
+      "beneficiary_scope": "existing_shareholders_verified",
+      "source": "https://static.cninfo.com.cn/finalpage/2024-06-28/1220482810.PDF",
+      "announcement_number": "2024-054", "publication_date": "20240628",
+      "record_date": "20240703", "ex_date": "20240704", "pay_date": "20240704",
+      "gross_cash_per_share": 0.05, "bonus_per_share": 0.0,
+      "scope_note": "Registered holders excluding issuer repurchase account receive 0.05 gross per share. Diluted reference-price cash 0.0493 is not holder entitlement. No bonus shares. Personal public-market tax deferred until transfer.",
+      "review_status": "all four issuer PDF pages read via direct HTTPS; canonical URL located through public cninfo announcement query",
+      "historical_feed_available_at": null, "local_archive_verified": false
+    },
+    "f186a336db962ecea814b7f4e52ece302b60d324bc7682bbc52f4cf21ead429a": {
+      "row_sha256": "57e7b3d65de86dec84df71a1552952d4cf7dc758e1806b769db12c1204275a06",
+      "ts_code": "603221.SH",
+      "beneficiary_scope": "existing_shareholders_verified",
+      "source": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?id=12479000&stockid=603221",
+      "announcement_number": "2025 annual distribution implementation, published 2026-08-06",
+      "publication_date": "20260806",
+      "record_date": "20260811", "ex_date": "20260812", "pay_date": "20260812",
+      "gross_cash_per_share": 0.03, "bonus_per_share": 0.0,
+      "scope_note": "Issuer announcement names all registered shareholders; no differentiated distribution. Cash entitlement on August 11 during suspension, paid August 12. Ordinary natural-person tax is deferred until sale; gross receipt is not final net cash.",
+      "review_status": "complete issuer announcement text reviewed through disclosure mirror; exchange PDF endpoint returned no readable content",
+      "historical_feed_available_at": null,
+      "local_archive_verified": false
+    },
+    "46fe5807cef9cfd598ce2bd449a12a899d334b7606c9ad84d14759555e71e8b1": {
+      "row_sha256": "8128f5736fde0703c7f211be182617f4150d478bc891e036787293aab9ff370e",
+      "ts_code": "689009.SH",
+      "beneficiary_scope": "registered_cdr_holders_verified",
+      "source": "https://static.cninfo.com.cn/finalpage/2025-10-25/1224734271.PDF",
+      "announcement_number": "2025-069",
+      "publication_date": "20251025",
+      "gross_cash_per_quote_unit": 0.42073,
+      "quote_unit": "domestic_CDR",
+      "scope_note": "Registered domestic CDR holders excluding issuer repurchase account; requires independent full-row unit review. Never use underlying-share 4.2073 or ex-reference 0.41873 as holder cash.",
+      "historical_feed_available_at": null,
+      "local_archive_verified": false
+    },
+    "7f075a9b4fdea1faa59b60e2e683c42330bdf250c074c658c356cf0b06f95d45": {
+      "row_sha256": "8f0f053c9627ecb2ddfec8138f1be7fd4fb89bf47fdb5231b82e021dae609a98",
+      "ts_code": "002043.SZ",
+      "beneficiary_scope": "existing_shareholders_verified",
+      "source": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?id=12351192&stockid=002043",
+      "announcement_number": "2026-027",
+      "publication_date": "20260526",
+      "gross_cash_per_share": 0.132,
+      "independent_entitlement_group": ["471e7a1824f1970c6e805acb372963bd7450eb56e9fa9e7e268f7c41e7f92449", "7f075a9b4fdea1faa59b60e2e683c42330bdf250c074c658c356cf0b06f95d45"],
+      "scope_note": "2025 annual component, independent of 2026 Q1 component. Issuer PDF confirms sum 0.312 per ordinary share, excluding repurchase account. Reference ex-price cash is separately diluted to 0.3080016, not investor cash.",
+      "review_status": "issuer implementation PDF pages 0-2 reviewed",
+      "historical_feed_available_at": null,
+      "local_archive_verified": false
+    },
+    "471e7a1824f1970c6e805acb372963bd7450eb56e9fa9e7e268f7c41e7f92449": {
+      "row_sha256": "f06d86db618fbbe13475916d3a61f70464dec5cf37203c9591a486453e7304eb",
+      "ts_code": "002043.SZ",
+      "beneficiary_scope": "existing_shareholders_verified",
+      "source": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?id=12351192&stockid=002043",
+      "announcement_number": "2026-027",
+      "publication_date": "20260526",
+      "gross_cash_per_share": 0.18,
+      "independent_entitlement_group": ["471e7a1824f1970c6e805acb372963bd7450eb56e9fa9e7e268f7c41e7f92449", "7f075a9b4fdea1faa59b60e2e683c42330bdf250c074c658c356cf0b06f95d45"],
+      "scope_note": "2026 Q1 component; record 2026-05-29, ex/payment 2026-06-01. Not a duplicated annual proposal. Gross cash does not settle investor tax.",
+      "review_status": "issuer implementation PDF pages 0-2 reviewed",
+      "historical_feed_available_at": null,
+      "local_archive_verified": false
+    },
+    "5e64738da59bf954c339c2da0fb4ddf5cd0c8bc70814513e3e348fd53cbebaf8": {
+      "row_sha256": "cccc7c97217a530fed611d300ba48f9eef05155145026173a2ff7cb169d86013",
+      "ts_code": "688109.SH",
+      "beneficiary_scope": "existing_shareholders_verified",
+      "source": "https://paper.cnstock.com/html/2026-05/26/content_2221788.htm",
+      "pdf_source": "https://epaper.stcn.com/pic/202605/26/0c305dfd4b9d3713a7370c5699ff6277.pdf",
+      "announcement_number": "2026-020",
+      "publication_date": "20260526",
+      "record_date": "20260529",
+      "ex_date": "20260601",
+      "pay_date": "20260601",
+      "gross_cash_per_share": 0.25,
+      "bonus_per_share": 0.0,
+      "scope_note": "Issuer distribution to registered shareholders excluding its repurchase account; ordinary market-bought shares participate. Gross receipt is not final after-sale tax liability.",
+      "review_status": "issuer announcement text and PDF pages 0-2 reviewed",
+      "historical_feed_available_at": null,
+      "local_archive_verified": false
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "version": "s20-v3-opportunity-risk-20260912",
+  "status": "frozen_research_experiment",
+  "production_impact": "none",
+  "entry": "D+1 open; next 20 observed stock sessions; raw cached OHLC",
+  "classes": {
+    "0": "+20% before first breach below entry * 0.90; later drawdown ignored",
+    "1": "+15% to below +20%, all 20 sessions stay >= entry * 0.90",
+    "2": "breach below -10% before +20%; delayed opportunity, not executable success",
+    "3": "below +15%, no breach below -10%; insufficient upside",
+    "4": "below +15%, breach below -10%",
+    "5": "+15% to below +20%, breach below -10%",
+    "-1": "same-session first +20% and first -10% breach; unknown order, excluded"
+  },
+  "primary_target": "P(class0 or class1)",
+  "down_target": "P(class2 or class4 or class5)",
+  "score": "50 * (1 + P(immediate) - P(down)); 0-100 utility index, not probability",
+  "secondary_score_experiment": {
+    "reason": "equal risk penalty over-selects safe but insufficient-upside negatives",
+    "selection_data": "development folds only, before inspecting diagnostic metrics",
+    "grid": [0, 0.25, 0.5, 0.75, 1],
+    "selection_criterion": "maximum Top20 immediate-minus-down utility",
+    "selected_mode": "portable_full",
+    "selected_risk_weight": 0.5,
+    "score": "100 * (0.5 + P(immediate) - 0.5 * P(down)) / 1.5",
+    "status": "exploratory_secondary_analysis_not_preregistered_primary"
+  },
+  "delayed_entry": "observation only; requires independently validated future rescoring; never counts as immediate success",
+  "model": "six-class LightGBM, seed20260912, max350 rounds, earlystop25; multiclass logistic calibration on separate mature segment",
+  "candidates": ["portable_full", "lowcorr24"],
+  "lowcorr": "fit-only Spearman abs<=0.70, at most24 representatives ordered by full-model gain; no test-driven feature selection",
+  "development": "same 5000bps stock-date sample and three purged walk-forward folds as S20-v2",
+  "comparison": "same new labels, same stock-date universe, same daily TopK; old S20-20R and R20 references; historical common universe inherits old exclusion of ambiguous outcomes",
+  "old_top20_correction": "9 original N3 rows breached -10% before +20%; immediate count893 (35.4365%), delayed112 (4.4444%), negative1515; total2520",
+  "diagnostic_2026": "20260127-20260805 already inspected: retrospective only, not independent confirmation",
+  "promotion": "requires new unseen matured data; no production change from historical relabeling",
+  "known_limitations": ["current ST and industry metadata not point-in-time", "raw OHLC may include corporate-action discontinuities", "stock sessions may span suspensions", "single-seed experiment", "daily high touch is not realized tradable profit", "low pairwise correlation is not statistical independence"]
+}

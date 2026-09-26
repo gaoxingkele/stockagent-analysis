@@ -1,0 +1,72 @@
+{
+  "schema_version": "0.1-reviewed-source-leads",
+  "review_date": "2026-09-14",
+  "purpose": "Explain three fully absent codes in retrospective listing coverage; not historical scoring authorization",
+  "coverage_table_sha256": "2bff58a4f632434a8e85896fd7e61f65c1773d28d24b263a02c21d651ab1877e",
+  "historical_received_at_proven": false,
+  "full_interval_no_resumption_proven": false,
+  "automatic_universe_exclusion_allowed": false,
+  "sources": {
+    "szse_dec2023": {
+      "url": "https://docs.static.szse.cn/www/market/periodical/month/W020240115343587084719.html",
+      "type": "exchange_monthly_suspension_table",
+      "reviewed": true,
+      "archive_path": "output/experiments/s20_safe_v4/sources/suspension-docs-d10310af143a4207bcb10bc6143c6365/szse_dec2023.html",
+      "archive_sha256": "2781b16017e7cc88695bb8274f4c084a884ac184269bf509925874c188ff3cef",
+      "archive_encoding": "gb18030",
+      "archive_observed_by": "2026-09-13T18:41:05+00:00",
+      "archive_validation": "HTML table contains both stock codes, matching start dates and missing-resume sentinels; not a historical receipt",
+      "scope": "December 2023 suspension starts; 9999/12/31 is missing resume sentinel, not an infinite verified interval",
+      "historical_release_timestamp": null
+    },
+    "huayi_halt": {
+      "url": "https://epaper.stcn.com/att/202312/26/8595c563-d803-44c5-8ee2-0a3c793a428d.pdf",
+      "type": "issuer_announcement_in_designated_newspaper",
+      "publication_date": "2023-12-26",
+      "reviewed": true,
+      "scope": "B25 issuer notice 2023-135, all notice text reviewed; unrelated page articles not used"
+    },
+    "bailong_delist": {
+      "url": "https://pdf.dfcfw.com/pdf/H2_AN202401221617923925_1.pdf",
+      "type": "issuer_pdf_third_party_mirror",
+      "publication_date": "2024-01-22",
+      "reviewed": true,
+      "scope": "Three-page issuer notice; no delisting trading period; body section I gives 2024-01-25 removal",
+      "source_conflict": "Opening warning incorrectly states 2023-01-25; preserve discrepancy, do not parse first date or silently repair source"
+    }
+  },
+  "cases": [
+    {
+      "ts_code": "000046.SZ",
+      "suspension_start_at": "2023-12-28T09:30:00+08:00",
+      "start_source": "szse_dec2023",
+      "metadata_delist_date": "20240207",
+      "missing_listing_sessions": 26,
+      "termination_decision_url": "https://www.szse.cn/disclosure/notice/company/t20240126_605763.html",
+      "termination_decision_date": "2024-01-26",
+      "no_delisting_trading_period": true,
+      "interpretation": "Suspension before audit start supports absence explanation; full continued interval and archived receipts still required"
+    },
+    {
+      "ts_code": "002776.SZ",
+      "suspension_start_at": "2023-12-27T09:30:00+08:00",
+      "start_source": "szse_dec2023",
+      "metadata_delist_date": "20240125",
+      "missing_listing_sessions": 17,
+      "delist_source": "bailong_delist",
+      "no_delisting_trading_period": true,
+      "interpretation": "Suspension before audit start supports absence explanation; delist source year conflict explicitly retained"
+    },
+    {
+      "ts_code": "600290.SH",
+      "suspension_start_at": "2023-12-26T09:30:00+08:00",
+      "start_time_basis": "Issuer says market open; 09:30 is research session convention, not exact release timestamp",
+      "start_source": "huayi_halt",
+      "metadata_delist_date": "20240116",
+      "missing_listing_sessions": 10,
+      "delist_source_lead": "https://static.sse.com.cn/disclosure/listedinfo/announcement/c/new/2024-01-10/600290_20240110_TD0K.pdf",
+      "delist_source_full_fetch_succeeded": false,
+      "interpretation": "Suspension start verified from issuer newspaper notice; official removal PDF fetch failed; retain remaining uncertainty"
+    }
+  ]
+}

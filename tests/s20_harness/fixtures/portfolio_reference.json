@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "evidence_mode": "synthetic",
+  "initial_cash": 1000,
+  "calendar": ["20240702", "20240729", "20240730"],
+  "events": [
+    {"kind": "buy_request", "args": {"order_id": "buy", "ts_code": "SYNTHETIC", "buy_date": "20240702", "due_date": "20240729", "quantity": 100, "price_cap": 8, "fee_cap": 1, "submitted_at": "2024-07-02T09:20:00+08:00"}},
+    {"kind": "buy_result", "args": {"event_id": "buy-result", "order_id": "buy", "outcome_at": "2024-07-02T09:30:00+08:00", "received_at": "2024-07-02T09:31:00+08:00", "processing_at": "2024-07-02T09:32:00+08:00", "filled_quantity": 100, "price": 7, "fee": 1, "reason": "synthetic", "evidence_id": "fixture-not-market-evidence"}},
+    {"kind": "cash_record", "args": {"event_id": "record", "ts_code": "SYNTHETIC", "processing_at": "2024-07-02T15:02:00+08:00", "terms_available_at": "2024-07-01T12:00:00+08:00", "source_id": "fixture-not-market-evidence", "distribution": {"event_id": "dividend", "record_date": "20240702", "ex_date": "20240729", "known_date": "20240701", "cash_per_share": 0.2, "pay_date": "20240730", "beneficiary_scope": "existing_shareholders_verified"}}},
+    {"kind": "cash_accrual", "args": {"event_id": "accrue", "distribution_id": "dividend", "processing_at": "2024-07-29T09:00:00+08:00"}},
+    {"kind": "exit_request", "args": {"order_id": "sell", "position_id": "buy", "submitted_at": "2024-07-29T14:50:00+08:00", "policy": {"policy_id": "fixture-policy", "frozen_at": "2024-07-01T10:00:00+08:00"}}},
+    {"kind": "exit_result", "args": {"event_id": "sell-result", "order_id": "sell", "outcome_at": "2024-07-29T15:00:00+08:00", "received_at": "2024-07-29T15:01:00+08:00", "processing_at": "2024-07-29T15:02:00+08:00", "filled_quantity": 100, "price": 6, "fee": 1, "reason": "synthetic", "evidence_id": "fixture-not-market-evidence"}},
+    {"kind": "cash_receipt", "args": {"event_id": "pay", "distribution_id": "dividend", "received_at": "2024-07-30T09:00:00+08:00", "processing_at": "2024-07-30T09:01:00+08:00", "cash_received": 18, "tax_withheld": 2, "evidence_id": "fixture-not-market-evidence"}},
+    {"kind": "valuation", "args": {"event_id": "valuation", "valuation_at": "2024-07-30T15:00:00+08:00", "knowledge_at": "2024-07-30T15:01:00+08:00", "marks": []}}
+  ]
+}

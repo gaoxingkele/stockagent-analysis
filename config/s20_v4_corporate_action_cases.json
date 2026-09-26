@@ -1,0 +1,83 @@
+{
+  "schema_version": "0.1-reviewed-cases",
+  "review_date": "2026-09-14",
+  "scope": "Retrospective reference-price explanation, not a prediction-time filter or automatic raw-price correction",
+  "cases": [
+    {
+      "ts_code": "603221.SH", "event_date": "20260818",
+      "previous_observed_date": "20260810", "previous_close": 27.30,
+      "observed_vendor_reference_price": 27.27,
+      "reference_price_evidence": "observed raw vendor pre_close; reconciled numerically with issuer gross cash, not an independently quoted exchange reference price",
+      "event_type": "cash_distribution_during_suspension",
+      "record_date": "20260811", "ex_date": "20260812", "pay_date": "20260812",
+      "gross_cash_per_share": 0.03,
+      "source": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?id=12479000&stockid=603221",
+      "publication_path_date": "20260806", "intraday_available_at": null,
+      "evidence_status": "complete issuer announcement text reviewed via mirror; local archival pending",
+      "scope_limit": "No synthetic halt-period OHLC or historical receipt inferred; entitlement requires holdings on record date and separate net tax treatment"
+    },
+    {
+      "ts_code": "000697.SZ",
+      "event_date": "20251128",
+      "halt_date": "20251127",
+      "previous_observed_date": "20251126",
+      "previous_close": 8.52,
+      "official_reference_price": 8.05,
+      "event_type": "restructuring_capital_reserve_conversion",
+      "ordinary_holder_bonus_credit_permitted_from_vendor_stk_div": false,
+      "allocation": "administrator account, subsequently restructuring investors and creditors",
+      "source": "https://static.cninfo.com.cn/finalpage/2025-11-28/1224831707.PDF",
+      "announcement_number": "2025-065",
+      "signed_date": "20251127",
+      "publication_path_date": "20251128",
+      "intraday_available_at": null,
+      "evidence_status": "issuer PDF text reviewed; local archival pending"
+    },
+    {
+      "ts_code": "002713.SZ",
+      "event_date": "20251230",
+      "halt_date": "20251229",
+      "previous_observed_date": "20251226",
+      "previous_close": 11.00,
+      "official_reference_price": 8.14,
+      "event_type": "restructuring_capital_reserve_conversion",
+      "ordinary_holder_bonus_credit_permitted_from_vendor_stk_div": false,
+      "allocation": "administrator account, subsequently restructuring investors and creditors",
+      "source": "https://static.cninfo.com.cn/finalpage/2025-12-30/1224906746.PDF",
+      "announcement_number": "2025-102",
+      "signed_date": "20251229",
+      "publication_path_date": "20251230",
+      "intraday_available_at": null,
+      "evidence_status": "issuer PDF text reviewed; local archival pending"
+    },
+    {
+      "ts_code": "300091.SZ",
+      "event_date": "20260212",
+      "halt_date": "20260211",
+      "previous_observed_date": "20260210",
+      "previous_close": 3.16,
+      "official_reference_price": 2.79,
+      "event_type": "restructuring_capital_reserve_conversion",
+      "ordinary_holder_bonus_credit_permitted_from_vendor_stk_div": false,
+      "allocation": "administrator account, subsequently investors and creditors",
+      "source": "https://static.cninfo.com.cn/finalpage/2026-02-12/1224977289.PDF",
+      "announcement_number": "2026-015",
+      "signed_date": "20260211",
+      "publication_path_date": "20260212",
+      "intraday_available_at": null,
+      "evidence_status": "issuer PDF text reviewed; local archival pending"
+    }
+  ],
+  "remaining_unexplained_reference_cases": [
+    {"ts_code": "603081.SH", "event_date": "20240625", "issue": "factor-only discontinuity: prior close and current pre_close both 9.05; adj_factor changes 1.062 to 1.070; cause not established, raw OHLC must not be corrected",
+     "fresh_probe": "output/experiments/s20_safe_v4/sources/factor-case-probe-8140ea17f9d2491fb9e0f8b9c7ea8845/summary.json",
+     "fresh_factor_sha256": "0f6db4bf9fff258a8b876f3b3058b03a838a5cb7381b7065d4e0787abfad3ae1",
+     "fresh_daily_sha256": "0e1d8547c85e911dd5d7262c377372e5443a8f67d6a5764c0525e327b6515e28",
+     "fresh_vs_prior_equal_factor_days": 15,
+     "raw_return_percent": 0.33149171270716593,
+     "factor_adjusted_return_percent": 1.0872844939705084,
+     "finding": "Repeatable provider inconsistency with raw reference relationship; does not establish cause or independently verify either return convention",
+     "automatic_price_or_factor_correction_authorized": false}
+  ],
+  "limitations": ["reference-price explanation does not imply economic price neutrality", "do not use signed date as proven pre-decision availability", "not an exhaustive restructuring-event inventory", "PIT-safe features and generic event classification still required"]
+}

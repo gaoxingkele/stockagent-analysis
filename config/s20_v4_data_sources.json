@@ -1,0 +1,155 @@
+{
+  "schema_version": "0.1-candidate-inventory",
+  "created_date": "2026-09-14",
+  "use_policy": "Read-only candidate sources; none authorized as PIT-correct until semantic coverage and provenance audits pass. Do not overwrite source projects or production caches.",
+  "sources": [
+    {
+      "role": "reviewed_distribution_ledger",
+      "path": "output/experiments/s20_safe_v4/sources/distribution-adapter-c1fc4f44bdcd492b9a928524735336a6",
+      "summary_sha256": "880be4bba1c40f43969329c04003ad7769086239e68316408d0966ea02bf9d43",
+      "status": "candidate_gross_cash_ledger_requires_fresh_reconstruction",
+      "limitations": ["681 reviewed events do not cover all 14427 normalized events", "not exhaustive corporate actions", "historical availability and final personal tax unproved"]
+    },
+    {
+      "role": "entity_listing_coverage",
+      "path": "output/experiments/s20_safe_v4/sources/entity-coverage-fca0ada4075549f89ec89662c23ac07f",
+      "status": "verified_identity_panel_joined_to_retrospective_listing_intervals",
+      "summary_sha256": "73edc5d1da2f82af5e04efa3574ce863fc0121195f2318f4e066acf5e3e74fc9",
+      "limitations": ["current metadata is not a PIT universe", "reviewed aliases are not an exhaustive master", "three entirely unobserved listing windows retained", "BJ separate"]
+    },
+    {
+      "role": "daily_suspension_events",
+      "path": "output/experiments/s20_safe_v4/sources/suspension-daily-c33b7fcdccfd4561b5a814eb263b199d",
+      "status": "full_acquisition_receipts_audited_semantic_exceptions_retained",
+      "audit": "output/experiments/s20_safe_v4/sources/suspension-daily-audit-334216c40e044e82818387403c0b0290/summary.json",
+      "audit_sha256": "25d8eaa09135244867bad73cbc5834b6cd194d77df4d12f2ea92fccc6c442fb1",
+      "completed_dates": 654,
+      "rows": 10257,
+      "gap_overlay": "output/experiments/s20_safe_v4/sources/daily-gap-join-6245d9dddd894301b9a304a5fd4f48a4/summary.json",
+      "gap_validity": "output/experiments/s20_safe_v4/sources/gap-validity-363f355a9d554269a6315f40eae0f796/summary.json",
+      "gap_validity_sha256": "5d8ff05bf5f54f8e865c356a71f1134ee8595075f37289fbdb27be073b9c6524",
+      "retrospective_event_overlay": "output/experiments/s20_safe_v4/sources/suspension-semantics-785b8e00dca345c0adbc396596c7e3e6/summary.json",
+      "retrospective_event_overlay_sha256": "80275b7145b34cb6caef7b4bca97e7b7957499780349eeafeb0761f0250e410f",
+      "selected_exchange_crosscheck": "output/experiments/s20_safe_v4/sources/suspension-crosscheck-2d397111f98d4d05b92eed9fed9dcb33/summary.json",
+      "selected_exchange_crosscheck_sha256": "34adb94baaef21939635c385d06d3e215810b7bdd91bdd303cbfe94611261103",
+      "limitations": ["same-day S/R cannot be globally prioritized", "equal timing endpoints need event review", "one null-timing S row conflicts with an actual quote", "historical availability unproved", "summary pin does not replace full source revalidation"]
+    },
+    {
+      "role": "daily_price_limits_fresh",
+      "path": "output/experiments/s20_safe_v4/sources/limits-0defaeb978864652bfbebcd63206db4a",
+      "status": "complete_acquisition_receipts_and_coverage_audited",
+      "audit": "output/experiments/s20_safe_v4/sources/limit-audit-2843f9dd4c5d44c3a877c028d0868b6f/summary.json",
+      "collection_plan_sha256": "52373cf4f22d7d9723cd6703361110defa4ef5cc8d3eece425f7024dc702ea07",
+      "special_value_diagnostics": "output/experiments/s20_safe_v4/sources/no-limit-diagnostic-3733a549e2ba4db7947dd76b61d80c76/summary.json",
+      "completed_dates": 654,
+      "usable_stock_dates": 3537256,
+      "invalid_limit_rows": 108,
+      "limitations": ["sentinel/no-limit cases need event and rule evidence", "historical availability unproved", "not auction fill evidence"]
+    },
+    {
+      "role": "per_code_historical_names",
+      "path": "output/experiments/s20_safe_v4/sources/namehistory-6fe4b897c85d4329a7564fe79e37b513",
+      "status": "complete_receipts_audited_timeline_and_panel_join_verified",
+      "timeline": "timeline-32a6d401d845485f8d4c22cdd292c0af/name_timeline.parquet",
+      "timeline_sha256": "34f01e6d2a15f955d2cbb9603a59ceb1f619d9aec6c4b72acdb1dd13b413abff",
+      "state_join_audit": "output/experiments/s20_safe_v4/sources/state-join-9fd4e9f28c96459d9ccc6704a62fc3f9/summary.json",
+      "unknown_observed_stock_dates": 597,
+      "completed_codes": 5662,
+      "empty_codes": ["300114.SZ"],
+      "missing_announcement_rows": 1,
+      "limitations": ["empty result is unknown, not non-ST", "historical revisions and official ST registry remain unproved", "alias-aware downstream state join still required"]
+    },
+    {
+      "role": "identity_aware_daily_panel",
+      "path": "output/experiments/s20_safe_v4/sources/identity-panel-a8199bfc7f2143ba8e5f4953ff088e55",
+      "summary_sha256": "8192f67376acbaa424d16c0eed030b9139224da310496a91af921b93fcd9096e",
+      "status": "full_partition_hash_and_semantic_reconstruction_verified",
+      "daily_files": 654,
+      "raw_rows": 3537364,
+      "canonical_rows": 3537096,
+      "limitations": ["not an exhaustive identity master", "historical universe, corporate-action and availability gates remain", "must reverify pinned manifest before consumption", "not formally training eligible"]
+    },
+    {
+      "role": "listing_and_name_history",
+      "path": "output/experiments/s20_safe_v4/sources/metadata-a8335d9147fa4cfba794a40a81d6669d",
+      "status": "global_omissions_confirmed_superseded_by_per_code_acquisition",
+      "stock_basic_rows": 5901,
+      "namechange_rows": 14212,
+      "basic_missing_observed_codes": ["300114.SZ"],
+      "name_missing_observed_codes": ["300114.SZ", "688208.SH"],
+      "limitations": ["300114 is a reviewed code change to 302132, not a presumed delisting", "688208 and 000001 omissions verified in single-code crosschecks", "per-code collection remains separately tracked; global history is incomplete", "current names and status are not historical features"]
+    },
+    {
+      "role": "corporate_action_distributions",
+      "path": "output/experiments/s20_safe_v4/sources/dividends-ede44a1dd1f049ca82d930e2385155de",
+      "status": "complete_ex_date_acquisition_semantic_audit_has_gaps",
+      "completed_dates": 654,
+      "event_rows": 14926,
+      "zero_event_dates": 87,
+      "audit": "audit-f0a0c97f307f46d7a1ff6edbae703a34/summary.json",
+      "term_checks_passed_rows": 13505,
+      "limitations": ["same-stock/ex-date multiple events need normalization", "tax and historical revision policies unverified", "rights issues, restructurings and mergers not covered by dividend endpoint alone", "not an approved economic ledger"]
+    },
+    {
+      "role": "adjustment_factors",
+      "path": "output/experiments/s20_safe_v4/sources/adjustments-89c0abe417ab4eb98b4dcd7f8b3d4838",
+      "status": "complete_acquisition_ratio_audited",
+      "completed_dates": 654,
+      "missing_daily_code_rows": 0,
+      "reconciliation": "reconcile-d7067ef6737442ed868b18d040b3a29d/summary.json",
+      "raw_trigger_count": 12979,
+      "raw_triggers_consistent_with_factor_ratio": 12973,
+      "all_unexplained_transition_count": 7,
+      "limitations": ["factor ratios are not a cash/share ledger", "historical revision availability remains unproved", "all unexplained transitions require review"]
+    },
+    {
+      "role": "exchange_calendar",
+      "path": "output/experiments/s20_safe_v4/sources/calendar-899274a52bad4953b665b179b8b76360/trade_cal.parquet",
+      "sha256": "148530fb1ae44d56df64dcfed5bc29a2672d498141b048ade1fdc938faac449a",
+      "status": "validated_calendar_source",
+      "exchanges": ["SSE", "SZSE"],
+      "start": "20240101",
+      "end": "20260911",
+      "provider_documentation": "https://tushare.pro/document/2?doc_id=26",
+      "receipt_directory": "output/experiments/s20_safe_v4/sources/calendar-899274a52bad4953b665b179b8b76360",
+      "limitations": ["acquired now, not a historical availability receipt", "BSE not verified", "calendar correctness alone does not pass H01"]
+    },
+    {
+      "role": "exchange_calendar",
+      "path": "D:/aicoding/stock_benchmark/data/processed/full_universe_pit_panel/tradability/trade_cal.parquet",
+      "observed_exchange": "SSE",
+      "observed_start": "20250526",
+      "observed_end": "20260610",
+      "status": "partial_coverage_candidate",
+      "gaps": ["does not cover complete 20240102-20260911 interval", "SZ/BJ calendar not verified", "retrieval provenance not yet audited"]
+    },
+    {
+      "role": "daily_price_limits",
+      "path": "D:/aicoding/stock_benchmark/data/processed/full_universe_pit_panel/tradability/stk_limit",
+      "status": "partial_coverage_audited_not_accepted",
+      "audit": "output/experiments/s20_safe_v4/sources/limit-audit-81a226d7d4a842e9b7d9dc7ad258c931/summary.json",
+      "observed_files": 254,
+      "missing_daily_dates": 400,
+      "usable_stock_dates": 1383037,
+      "invalid_limit_rows": 55,
+      "gaps": ["400 of 654 dates absent", "55 invalid/nonfinite/nonpositive/reversed limit rows require explanation", "historical availability not proved", "price limits alone do not prove open auction fill"]
+    },
+    {
+      "role": "historical_names",
+      "path": "D:/aicoding/DeepKline/data/pit/cn_riser_v2_20260614/namechange_universe.parquet",
+      "observed_rows": 7698,
+      "observed_columns": ["ts_code", "name", "start_date", "end_date", "change_reason", "is_st_name"],
+      "status": "schema_inspected_not_accepted",
+      "gaps": ["ann_date absent from this schema", "historical event availability not proved", "stock/date coverage not audited"]
+    },
+    {
+      "role": "listing_delisting_intervals",
+      "path": "D:/aicoding/DeepKline/data/pit/cn_riser_v2_20260614/stock_basic_universe.parquet",
+      "observed_rows": 5199,
+      "status": "schema_inspected_not_accepted",
+      "gaps": ["filtered universe differs from 5662 observed daily stocks", "current industry/name fields are not historical PIT features", "source filter and coverage require audit"]
+    }
+  ],
+  "still_unlocated": ["complete corporate-action economic ledger", "historical data-availability ledger"],
+  "research_panel_warning": "Do not directly replace the daily universe with stock_benchmark's derived panel: it uses qfq prices, its own H5 labels, proxy tradability, different dates and a filtered universe."
+}

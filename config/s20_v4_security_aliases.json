@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1-reviewed-aliases",
+  "scope": "Stable research entity identity and date-effective trading code; not predictive features or a complete corporate-action master",
+  "aliases": [
+    {
+      "entity_id": "s20_equity_300114_continuing_issuer",
+      "old_code": "300114.SZ",
+      "new_code": "302132.SZ",
+      "effective_date": "20250217",
+      "share_conversion_ratio": 1.0,
+      "announcement_number": "2025-028",
+      "publication_date": "20250215",
+      "intraday_available_at": null,
+      "source": "https://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESZ_STOCK/2025/2025-2/2025-02-15/10745422.PDF",
+      "review_status": "issuer PDF reviewed; local archival pending"
+    }
+  ],
+  "policy": "Keep all raw rows and lineage. Merge alias rows only if observed price/volume fields agree exactly; discrepancies remain unresolved rather than choosing a favorable row. Preserve old trading code before effective_date, new code afterward."
+}

@@ -1,0 +1,10 @@
+{
+  "binding_directory": "output/experiments/s20_safe_v4/sources/suspension-notice-binding-a397df4aeb0344d4892cf7966b06e19a",
+  "binding_summary_sha256": "2b0bf3b97d41ceaf2b5107856ab2f91a227ca8fd62a14687439bf2e9de911ae3",
+  "historical_availability_proven": false,
+  "automatic_trading_override": false,
+  "cases": [
+    {"ts_code":"603616.SH","trade_date":"20260122","basis":"direct_disclosure","evidence":[{"page":1,"anchor":"自2026年1月22日"},{"page":1,"anchor":"开市起开始连续停牌"},{"page":1,"anchor":"2026-003"}],"finding":"后续2026-007公告回溯直接说明1月22日起连续停牌，并明确引用原2026-003公告。","limit":"仅支持目标日停牌解释；不是原镜像文件真实性或同一字节证明，2月4日公告不能作为1月22日预测输入。"},
+    {"ts_code":"603897.SH","trade_date":"20251104","basis":"interval_inference","evidence":[{"page":1,"anchor":"2025年11月3日"},{"page":1,"anchor":"2025年11月5日"}],"finding":"后续2025-029公告再次记载11月3日开始及11月5日继续停牌，支持连续区间但没有直接列举11月4日。","limit":"维持区间推断，不能升级为目标日直接说明或历史可得证明。"}
+  ]
+}

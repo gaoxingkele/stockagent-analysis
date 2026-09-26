@@ -1,0 +1,10 @@
+{
+  "scope": "Discovered SZSE monthly sources; explicitly incomplete, not full exchange coverage",
+  "sources": [
+    {"month": "2024.01", "url": "https://docs.static.szse.cn/www/market/periodical/month/W020240207349092453652.html"},
+    {"month": "2024.02", "url": "https://docs.static.szse.cn/www/market/periodical/month/W020240312338262679835.html"},
+    {"month": "2024.04", "url": "https://docs.static.szse.cn/www/market/periodical/month/W020240513367375059769.html"},
+    {"month": "2025.08", "url": "https://docs.static.szse.cn/www/market/periodical/month/W020250905347571947097.html"},
+    {"month": "2026.03", "url": "https://docs.static.szse.cn/www/market/periodical/month/W020260403534498695444.html"}
+  ]
+}

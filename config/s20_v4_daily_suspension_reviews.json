@@ -1,0 +1,132 @@
+{
+  "schema_version": "0.1-event-review",
+  "review_date": "2026-09-14",
+  "audit_rows_sha256": "f76a59717d6822a5e18aab58f8afcde70eb26392892a916eb0ff312b6edf6b9e",
+  "automatic_override_enabled": false,
+  "historical_receipt_availability_proven": false,
+  "policy": "Preserve every raw S/R row. Same-day R/S has no global priority. Equal timing endpoints are not proof of zero-duration or full-day suspension.",
+  "reviewed_cases": [
+    {
+      "ts_code": "603897.SH", "trade_date": "20251104",
+      "retrospective_state": "full_day_suspended",
+      "provider_rows": [{"type": "R", "timing": null}, {"type": "S", "timing": null}],
+      "quote_present": false,
+      "source_url": "https://static.cninfo.com.cn/finalpage/2025-11-05/1224786232.PDF",
+      "source_notice": "2025-028", "source_publication_date": "2025-11-05", "pages_reviewed": 2,
+      "semantic_finding": "Continued-suspension notice retrospectively describes suspension from 2025-11-03 and inability to resume on 2025-11-05; supports intervening 2025-11-04 suspension",
+      "scope_limit": "Retrospective interval inference, not a precise receipt before target date; expected further three days does not establish actual resumption",
+      "local_source_archive_verified": false
+    },
+    {
+      "ts_code": "688005.SH", "trade_date": "20260115",
+      "retrospective_state": "full_day_suspended",
+      "provider_rows": [{"type": "R", "timing": null}, {"type": "S", "timing": null}],
+      "quote_present": false,
+      "source_url": "https://star.sse.com.cn/disclosure/listedinfo/announcement/c/new/2026-01-16/688005_20260116_ZIG4.pdf",
+      "source_host_role": "exchange_hosted_issuer_pdf",
+      "source_notice": "2026-005", "source_publication_date": "2026-01-16", "pages_reviewed": 2,
+      "semantic_finding": "Issuer explicitly confirms suspension on 2026-01-14 and 2026-01-15",
+      "scope_limit": "Retrospective evidence received after target date is not a historical prediction input",
+      "local_source_archive_verified": false
+    },
+    {
+      "ts_code": "688005.SH", "trade_date": "20260116",
+      "retrospective_state": "full_day_suspended",
+      "provider_rows": [{"type": "S", "timing": "09:30-09:30"}],
+      "quote_present": false,
+      "source_url": "https://star.sse.com.cn/disclosure/listedinfo/announcement/c/new/2026-01-16/688005_20260116_ZIG4.pdf",
+      "source_host_role": "exchange_hosted_issuer_pdf",
+      "source_notice": "2026-005", "source_publication_date": "2026-01-16", "pages_reviewed": 2,
+      "semantic_finding": "Issuer explicitly continues suspension for one day on 2026-01-16; equal provider endpoints do not establish zero duration",
+      "scope_limit": "Same-date publication is not exact historical ingestion time; no later resume date inferred",
+      "local_source_archive_verified": false
+    },
+    {
+      "ts_code": "603159.SH", "trade_date": "20260616",
+      "retrospective_state": "full_day_suspended",
+      "provider_rows": [{"type": "R", "timing": null}, {"type": "S", "timing": null}],
+      "quote_present": false,
+      "source_url": "https://static.cninfo.com.cn/finalpage/2026-06-23/1225380530.PDF",
+      "source_notice": "2026-016", "source_publication_date": "2026-06-23", "pages_reviewed": 2,
+      "semantic_finding": "Issuer retrospectively confirms 2026-06-15 and 2026-06-16 suspension before continued suspension from June 17",
+      "scope_limit": "June 23 publication cannot be a June 16 historical prediction input; announced June 23 resumption does not prove fills",
+      "local_source_archive_verified": false
+    },
+    {
+      "ts_code": "002731.SZ", "trade_date": "20260706",
+      "retrospective_state": "full_day_suspended",
+      "provider_rows": [{"type": "S", "timing": null}, {"type": "R", "timing": null}],
+      "quote_present": false,
+      "source_url": "https://disc.static.szse.cn/download/disc/disk03/finalpage/2026-07-06/2ff408da-fb79-4c86-a18a-bd07ad1be299.PDF",
+      "source_host_role": "exchange_hosted_issuer_pdf",
+      "source_notice": "2026-067", "source_publication_date": "2026-07-06", "pages_reviewed": 3,
+      "semantic_finding": "Issuer explicitly continues suspension for one full trading day from July 6 open and announces July 7 open resumption",
+      "scope_limit": "No historical receipt or actual July 7 fill proven; stock-specific risk-warning and limit statements are not generalized",
+      "local_source_archive_verified": false
+    },
+    {
+      "ts_code": "603056.SH", "trade_date": "20260112",
+      "retrospective_state": "full_day_suspended",
+      "provider_rows": [{"type": "R", "timing": null}, {"type": "S", "timing": null}],
+      "quote_present": false,
+      "source_url": "https://stockmc.xueqiu.com/202601/603056_20260110_70I3.pdf",
+      "source_host_role": "issuer_pdf_mirror",
+      "source_notice": "2026-004", "source_publication_date": "2026-01-10", "pages_reviewed": 2,
+      "semantic_finding": "Issuer explicitly says planned 2026-01-12 resumption cannot occur and suspension continues that day",
+      "scope_limit": "Expected two further trading days is not a confirmed resume time; earlier 2026-01-09 halt began midday, not a full-day halt",
+      "local_source_archive_verified": false
+    },
+    {
+      "ts_code": "605028.SH", "trade_date": "20260113",
+      "retrospective_state": "full_day_suspended",
+      "provider_rows": [{"type": "R", "timing": null}, {"type": "S", "timing": null}],
+      "quote_present": false,
+      "source_url": "https://static.cninfo.com.cn/finalpage/2026-01-13/1224929951.PDF",
+      "source_notice": "2026-001", "source_publication_date": "2026-01-13", "pages_reviewed": 2,
+      "semantic_finding": "Issuer table explicitly identifies full-day suspension on 2026-01-13, continuing suspension begun 2026-01-12",
+      "scope_limit": "Publication date is not an exact prior-to-open receipt; expected total two days does not prove resumption",
+      "local_source_archive_verified": false
+    },
+    {
+      "ts_code": "603616.SH", "trade_date": "20260122",
+      "retrospective_state": "full_day_suspended",
+      "provider_rows": [{"type": "R", "timing": null}, {"type": "S", "timing": null}],
+      "quote_present": false,
+      "source_url": "https://stockmc.xueqiu.com/202601/603616_20260122_LEAE.pdf",
+      "source_host_role": "issuer_pdf_mirror",
+      "source_notice": "2026-003", "source_publication_date": "2026-01-22", "pages_reviewed": 3,
+      "semantic_finding": "Issuer states suspension from market open 2026-01-22 for planned major asset restructuring",
+      "scope_limit": "Expected nine-day maximum is not actual resume timestamp; does not authorize forecasting use before observed source availability",
+      "local_source_archive_verified": false
+    },
+    {
+      "ts_code": "603003.SH",
+      "retrospective_state": "resumption_announced_quote_observed",
+      "trade_date": "20250610",
+      "provider_rows": [{"type": "R", "timing": null}, {"type": "S", "timing": null}],
+      "quote_present": true,
+      "source_url": "https://static.cninfo.com.cn/finalpage/2025-05-31/1223736894.PDF",
+      "source_notice": "2025-041",
+      "source_publication_date": "2025-05-31",
+      "pages_reviewed": 3,
+      "semantic_finding": "Issuer explicitly resumes trading on 2025-06-10, first delisting-period trading day; full-day suspension interpretation is contradicted",
+      "scope_limit": "Does not establish intraday no-halt status or actual fill. First delisting-period day has no price limit per this notice, not a rule for other dates/stocks.",
+      "local_source_archive_verified": false
+    },
+    {
+      "ts_code": "688766.SH",
+      "retrospective_state": "full_day_suspended",
+      "trade_date": "20251126",
+      "provider_rows": [{"type": "R", "timing": null}, {"type": "S", "timing": "09:30-09:30"}],
+      "quote_present": false,
+      "source_url": "https://static.cninfo.com.cn/finalpage/2025-11-26/1224826077.PDF",
+      "source_notice": "2025-082",
+      "source_publication_date": "2025-11-26",
+      "pages_reviewed": 2,
+      "semantic_finding": "Issuer states suspension from market open on 2025-11-26 for planned asset acquisition; equal endpoints must not be treated as a verified zero-length trading interruption",
+      "scope_limit": "Expected no-more-than-ten trading days is not verified resumption date. Publication date is not precise historical ingestion time.",
+      "local_source_archive_verified": false
+    }
+  ],
+  "remaining_cases": []
+}

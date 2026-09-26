@@ -1,0 +1,38 @@
+{
+  "schema_version": "0.1-investigation-cases",
+  "purpose": "Source-bound unit investigation; does not authorize automatic rate correction or ordinary-share tax policy",
+  "cases": [
+    {
+      "ts_code": "689009.SH",
+      "instrument_type": "CDR",
+      "instrument_issue": "CDR quoted unit versus underlying ordinary share",
+      "event_ids": ["71c4b72c849ae3fff4cce90b5fb198f37379c1a2e47aa02135b35373a5aa3690", "279dc8678aee2245b90acdb9f757c20d11c762ee7cbe9d2a22bf2545cfdac706", "46fe5807cef9cfd598ce2bd449a12a899d334b7606c9ad84d14759555e71e8b1", "660677dc3dcad16380e61873e1597b795223ab22635a469ff6c1ec8c24fdb6a4"],
+      "dates": ["20240524", "20250613", "20251031", "20260807"],
+      "observed_declared_cash": [2.835, 11.31, 4.2073, 12.3852],
+      "review_status": "2025-10-25 issuer implementation PDF 2025-069 fully read (four pages); other event notices and local archival pending",
+      "verified_20251031_terms": {
+        "source": "https://static.cninfo.com.cn/finalpage/2025-10-25/1224734271.PDF",
+        "record_date": "20251030",
+        "ex_date": "20251031",
+        "pay_date": "20251031",
+        "gross_per_underlying_share": 4.2073,
+        "gross_per_cdr": 0.42073,
+        "ex_reference_reduction_per_cdr": 0.41873,
+        "beneficiary": "registered domestic CDR holders except issuer repurchase account",
+        "bonus_ratio": 0,
+        "tax_source": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5211074/content.html",
+        "tax_rule_window": ["20230921", "20251231"],
+        "historical_vendor_availability_proven": false
+      },
+      "source_leads": [
+        "https://static.cninfo.com.cn/finalpage/2025-10-10/1224701761.PDF",
+        "https://file.finance.sina.com.cn/211.154.219.97%3A9494/MRGG/CNSESH_STOCK/2025/2025-10/2025-10-25/11532793.PDF",
+        "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?id=12472185&stockid=689009"
+      ],
+      "hypothesis": "2025-10-31 notice confirms distinct underlying-share/CDR amounts and repurchase-adjusted ex-reference; other dates require separate event-specific confirmation",
+      "automatic_divide_by_ten_allowed": false,
+      "ordinary_shsz_personal_tax_policy_authorized": false,
+      "next_evidence": "fully read and archive date-specific depositary implementation notices, unit ratio and CDR-specific tax rules before normalizing"
+    }
+  ]
+}

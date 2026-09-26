@@ -1,0 +1,24 @@
+{
+  "schema_version": "0.1-event-bound-quote-unit-reviews",
+  "policy": "Preserve source cash fields; add independently reviewed gross cash per quoted security. No cross-event or all-date scaling.",
+  "reviews": {
+    "46fe5807cef9cfd598ce2bd449a12a899d334b7606c9ad84d14759555e71e8b1": {
+      "row_sha256": "8128f5736fde0703c7f211be182617f4150d478bc891e036787293aab9ff370e",
+      "ts_code": "689009.SH",
+      "record_date": "20251030",
+      "ex_date": "20251031",
+      "source_gross_cash": 4.2073,
+      "source_unit": "underlying_share",
+      "quote_unit": "domestic_CDR",
+      "quoted_units_per_source_unit": 10,
+      "gross_cash_per_quote_unit": 0.42073,
+      "reference_reduction_per_quote_unit": 0.41873,
+      "source": "https://static.cninfo.com.cn/finalpage/2025-10-25/1224734271.PDF",
+      "announcement": "2025-069",
+      "publication_date": "20251025",
+      "review_status": "four-page issuer implementation notice fully read; local archival pending",
+      "tax_policy_authorized": false,
+      "historical_availability_proven": false
+    }
+  }
+}

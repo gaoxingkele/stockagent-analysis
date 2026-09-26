@@ -1,0 +1,20 @@
+{
+  "schema_version": "1-case-page-review",
+  "binding_directory": "output/experiments/s20_safe_v4/sources/suspension-notice-binding-cb630e847a0e43d6a053a78739eda642",
+  "binding_summary_sha256": "387222b713c350fbc54f4d76fb4816fd4ce0047645a7f9897e06dae1fbdd5a7d",
+  "review_basis": "Agent read the locally hash-bound PDF text; anchors locate evidence, not an automatic semantic classifier",
+  "historical_availability_proven": false,
+  "automatic_trading_override": false,
+  "cases": [
+    {"ts_code":"603897.SH","trade_date":"20251104","basis":"interval_inference","evidence":[{"page":1,"anchor":"2025年11月3日"},{"page":2,"anchor":"开市起继续停牌"}],"finding":"11月3日开始停牌，11月5日继续停牌；11月4日状态来自连续区间推断，不是公告逐日直接列举。","limit":"仍需直接日期证据或独立区间确认；预计后续停牌天数不证明复牌日。"},
+    {"ts_code":"688005.SH","trade_date":"20260115","basis":"direct_disclosure","evidence":[{"page":1,"anchor":"1月15日停牌2日"}],"finding":"公告回溯说明1月14日及15日停牌，支持15日全天停牌的个案解释。","limit":"1月16日公告不是15日已收到的证据。"},
+    {"ts_code":"688005.SH","trade_date":"20260116","basis":"direct_disclosure","evidence":[{"page":1,"anchor":"1月16日将继续停牌1日"}],"finding":"公告明确16日再停牌一天；供应商相同起止时刻不能解释为零时长。","limit":"同日公告缺少历史精确收件时间，不证明后续实际复牌。"},
+    {"ts_code":"603159.SH","trade_date":"20260616","basis":"direct_disclosure","evidence":[{"page":1,"anchor":"2026年6月15日、2026年6月16日停牌"}],"finding":"公告回溯列明6月16日停牌，与原始缺行情状态一致。","limit":"6月23日来源不能作为6月16日预测输入。"},
+    {"ts_code":"002731.SZ","trade_date":"20260706","basis":"direct_disclosure","evidence":[{"page":1,"anchor":"7月6日开市起继续停牌一个交易日"}],"finding":"公告说明7月6日继续停牌一交易日；S/R同行不应直接优先复牌。","limit":"7月7日复牌安排不证明实际成交；公告中的个股涨跌停说明不推广到其他股票。"},
+    {"ts_code":"603056.SH","trade_date":"20260112","basis":"mirror_pending_primary","evidence":[{"page":1,"anchor":"预计无法在2026年1月12日"},{"page":1,"anchor":"起继续停牌"}],"finding":"镜像文档说明1月12日不能按原计划复牌并继续停牌。","limit":"保留镜像来源限制；1月9日午间开始停牌不能扩展为当日全天停牌。"},
+    {"ts_code":"605028.SH","trade_date":"20260113","basis":"direct_disclosure","evidence":[{"page":1,"anchor":"2026/1/13全天"}],"finding":"停复牌表明确1月13日全天停牌，正文与12日开始停牌相衔接。","limit":"预计累计两天不是已实现复牌日期；不证明当日开盘前收到公告。"},
+    {"ts_code":"603616.SH","trade_date":"20260122","basis":"mirror_pending_primary","evidence":[{"page":1,"anchor":"2026年1月22日"},{"page":1,"anchor":"开市起开始停牌"}],"finding":"镜像文档说明1月22日开市起因筹划重组停牌。","limit":"仍需原始披露站点交叉确认；预计九日不证明实际停牌长度。"},
+    {"ts_code":"603003.SH","trade_date":"20250610","basis":"direct_disclosure","evidence":[{"page":1,"anchor":"复牌2025/6/92025/6/10"}],"finding":"停复牌表列出6月10日复牌，正文说明该日进入退市整理期；与观察到行情一致，否定简单全天停牌解释。","limit":"不证明全天无临时停牌、真实成交或未受限退出。"},
+    {"ts_code":"688766.SH","trade_date":"20251126","basis":"direct_disclosure","evidence":[{"page":1,"anchor":"自2025年11月26日"},{"page":1,"anchor":"开市起开始停牌"}],"finding":"公告说明11月26日开市起停牌，支持该日停牌解释而非零时长中断。","limit":"预计十日内不构成实际复牌时间或历史收件证据。"}
+  ]
+}
