@@ -33,10 +33,12 @@ python scripts/fetch_daily_range.py --start 20260924 --end 20260930
 
 ## 入库现状（2026-09-27 起）
 
-1. **原始日线已纳入 Git LFS**：`output/tushare_cache/daily/*.parquet` 由 `.gitattributes` 以 LFS 跟踪，`.gitignore` 为其加了白名单。仓库历史只存指针，数据本体在 GitHub LFS 存储。
-2. 派生产物（`s20_20r_confirmation/factor_groups` 约 411 MB、`s20_uns20_20260927` 约 33 MB）仍未入库，可由脚本重建；需要时再按同样方式 `git lfs track`。
-3. 仓库 `.git` 已约 1.9 GB，LFS 指针不会继续膨胀 git 历史。
-4. Tushare 数据再分发受其服务条款约束；公开仓库上传原始行情前需确认许可。
+1. **原始日线已纳入 Git LFS**：`output/tushare_cache/daily/*.parquet` 由 `.gitattributes` 以 LFS 跟踪。
+2. **四个派生产物目录也已纳入 LFS**：`output/experiments/s20_uns20_20260927`、`output/experiments/s20_20r_confirmation`、`output/experiments/s20_safe_v4/sources/v4-paired-campaign`、`output/experiments/s20_safe_v4/sources/v4-rsi-campaign`。
+3. LFS 总占用约 **1,012 MB**，已贴近免费额度上限（1 GB 存储）；后续大文件需先扩容 LFS 额度。
+4. 仍未入库、可由脚本重建或非当前工作：`moneyflow`（约 393 MB）、`s20_v3`（约 1 GB）、`s20_20r_calibration*`（约 500 MB）、`identity-panel`（约 261 MB）、其余 `s20_safe_v4` 运行产物。
+5. 仓库 `.git` 已约 1.9 GB，LFS 指针不会继续膨胀 git 历史。
+6. Tushare 数据再分发受其服务条款约束；公开仓库上传原始行情前需确认许可。
 
 另一台电脑拉取：
 
@@ -46,4 +48,6 @@ git clone https://github.com/gaoxingkele/stockagent-analysis.git
 git lfs pull   # 已在 clone 时自动拉取，除非 --skip-smudge
 ```
 
-结论：GitHub 现在**可以直接满足训练**（原始日线 + 重建脚本）；数据本体走 LFS，不走 git 历史。
+注意：拉取全部 LFS 数据约消耗 1 GB 下载流量，与免费额度（每月 1 GB）相当。
+
+结论：GitHub 现在**可以直接满足当前全部训练与复算**（原始日线 + 当前派生产物 + 重建脚本）；数据本体走 LFS，不走 git 历史。
