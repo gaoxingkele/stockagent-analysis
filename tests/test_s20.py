@@ -197,6 +197,35 @@ def test_s20_v2_labels_partition_positive_and_three_negative_reasons():
     assert result["positive15"].tolist() == [1, 1, 0, 0, 0, -1, 0]
 
 
+def test_uns20_down_first_is_stop_before_target_not_any_miss():
+    from stockagent_analysis.s20 import build_uns20_path_labels
+
+    entry = [100.0] * 4
+    highs = np.array(
+        [
+            [105, 110, 112, 114],  # quiet miss, no -10%
+            [105, 106, 116, 117],  # -10% before +20% (low 89)
+            [121, 122, 110, 90],  # +20% first, later crash
+            [121, 122, 123, 124],  # same day both barriers
+        ],
+        dtype=float,
+    )
+    lows = np.array(
+        [
+            [98, 97, 96, 95],
+            [89, 93, 101, 102],
+            [119, 118, 100, 89],
+            [89, 120, 121, 122],
+        ],
+        dtype=float,
+    )
+    result = build_uns20_path_labels(entry, highs, lows)
+    assert result["down_first20"].tolist() == [0, 1, 0, -1]
+    assert result["reason20"].tolist()[1] == "n2_stop_before_target"
+    assert int(result.loc[0, "down_any20"]) == 0
+    assert int(result.loc[2, "down_any20"]) == 1
+
+
 def test_s20_v2_daily_builder_uses_next_open_and_all_five_targets():
     rows = 22
     daily = pd.DataFrame(

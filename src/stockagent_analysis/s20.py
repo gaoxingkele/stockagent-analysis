@@ -262,6 +262,88 @@ def build_s20_v2_path_labels(
     return pd.DataFrame(result)
 
 
+UNS20_UPSIDE_PCT = 20.0
+UNS20_DOWNSIDE_PCT = -10.0
+
+
+def build_uns20_path_labels(
+    entry_price: Iterable[float],
+    future_high: np.ndarray,
+    future_low: np.ndarray,
+    *,
+    upside_pct: float = UNS20_UPSIDE_PCT,
+    downside_pct: float = UNS20_DOWNSIDE_PCT,
+) -> pd.DataFrame:
+    """Label the 20-session downside mirror of S20-20.
+
+    ``down_first20`` is 1 when the −10% rail is touched before +20%, 0 when the
+    path is resolved and the rail is not first, and −1 when the same session
+    touches both so the order is unknown. This is not ``positive20 == 0``.
+    """
+    labels = build_s20_v2_path_labels(
+        entry_price,
+        future_high,
+        future_low,
+        target_drawdown={float(upside_pct): float(downside_pct)},
+    )
+    tag = f"{int(upside_pct) if float(upside_pct).is_integer() else upside_pct:g}"
+    resolved = labels[f"class{tag}"].to_numpy()
+    down_first = np.where(resolved < 0, -1, (resolved == 2).astype(np.int8)).astype(np.int8)
+    lows = np.asarray(future_low, dtype=float)
+    entry = np.asarray(list(entry_price), dtype=float)
+    down_any = (lows < entry[:, None] * (1 + float(downside_pct) / 100)).any(axis=1)
+    return pd.DataFrame(
+        {
+            "down_first20": down_first,
+            "down_any20": down_any.astype(np.int8),
+            "class20": labels[f"class{tag}"].to_numpy(),
+            "reason20": labels[f"reason{tag}"].to_numpy(),
+        }
+    )
+
+
+def build_daily_uns20_labels(
+    daily: pd.DataFrame,
+    *,
+    horizon_sessions: int = 20,
+) -> pd.DataFrame:
+    """Build unS20 downside labels for one stock. Entry is the next session open."""
+    required = {"ts_code", "trade_date", "open", "high", "low", "close"}
+    missing = required.difference(daily.columns)
+    if missing:
+        raise ValueError(f"missing daily columns: {sorted(missing)}")
+    if horizon_sessions != 20:
+        raise ValueError("unS20 horizon is the frozen 20-session window")
+    frame = daily.sort_values("trade_date").reset_index(drop=True).copy()
+    if frame["ts_code"].astype(str).nunique() > 1:
+        raise ValueError("daily frame must contain exactly one stock")
+    if frame["trade_date"].astype(str).duplicated().any():
+        raise ValueError("daily frame contains duplicate trade dates")
+    if len(frame) <= horizon_sessions:
+        return pd.DataFrame()
+    numeric = frame[["open", "high", "low", "close"]].apply(pd.to_numeric, errors="coerce")
+    if not np.isfinite(numeric.to_numpy(dtype=float)).all():
+        raise ValueError("daily OHLC values must be finite")
+    window = horizon_sessions
+    high_paths = np.lib.stride_tricks.sliding_window_view(numeric["high"].to_numpy()[1:], window)
+    low_paths = np.lib.stride_tricks.sliding_window_view(numeric["low"].to_numpy()[1:], window)
+    entry = numeric["open"].to_numpy()[1 : len(frame) - window + 1]
+    labels = build_uns20_path_labels(entry, high_paths, low_paths)
+    rows = len(labels)
+    max_dd = (low_paths.min(axis=1) / entry - 1) * 100
+    prefix = pd.DataFrame(
+        {
+            "ts_code": frame["ts_code"].astype(str).iloc[:rows].to_numpy(),
+            "trade_date": frame["trade_date"].astype(str).iloc[:rows].to_numpy(),
+            "entry_date": frame["trade_date"].astype(str).iloc[1 : rows + 1].to_numpy(),
+            "horizon_end_date": frame["trade_date"].astype(str).iloc[window:].to_numpy(),
+            "entry_open": entry,
+            "max_dd_20": max_dd,
+        }
+    )
+    return pd.concat([prefix, labels], axis=1)
+
+
 def build_daily_s20_v2_labels(
     daily: pd.DataFrame,
     *,
