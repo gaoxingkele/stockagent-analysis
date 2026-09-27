@@ -24,6 +24,7 @@
 
 | 日期 | 条目 | 思想来源 (出处) | 裁决 | 一句话 |
 |------|------|----------------|------|--------|
+| 2026-09-27 | [[2026-09-27_s20-two-axis-decomposition]] | EJOR 2024 首次触线 / arXiv:2603.13252 两层不确定性 / KDD 2025 PDU / 本仓 Stage1 审计 | 🧩框架 | 正+反拆成幅度轴×方向轴；方向含量看 up/(up+down) 斜率；方向轴只加信息，禁双二分类 |
 | 2026-09-27 | [[2026-09-27_s20-uns20-downside-mirror]] | EJOR 2024 首次触线 / KDD 2025 PDU / arXiv:2603.13252 / TOIS 2024 SVAT | 🧩框架 | 下跌标签要单独按先触 −10% 训练；镜像不是自动 SOTA，stage1 也不该换成深度排序器 |
 | 2026-09-26 | [[2026-09-26_s20-amplitude-not-direction]] | TypeSafe/Jev System One 文档 + 本仓 v4 打乱对照与 09-20 诊断 | 🧩框架 | S20 的可用信息是振幅不是方向；语义模型无文本则无增量，且错配对照必须与标签独立 |
 | 2026-09-20 | [[2026-09-20_s20-causal-screen-specified-rise]] | Dream-RSI / Harness-RSI / Cunningham / Selective classification / Conformal Risk Control / 本仓 v4 诊断 | 🧩框架 | 入池看指定 +15% 止盈；沉默是任务支持不是质检；因果冷却未迁移，发运仍 π0 |
