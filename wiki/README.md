@@ -24,6 +24,7 @@
 
 | 日期 | 条目 | 思想来源 (出处) | 裁决 | 一句话 |
 |------|------|----------------|------|--------|
+| 2026-09-27 | [[2026-09-27_s20-uns20-downside-mirror]] | EJOR 2024 首次触线 / KDD 2025 PDU / arXiv:2603.13252 / TOIS 2024 SVAT | 🧩框架 | 下跌标签要单独按先触 −10% 训练；镜像不是自动 SOTA，stage1 也不该换成深度排序器 |
 | 2026-09-26 | [[2026-09-26_s20-amplitude-not-direction]] | TypeSafe/Jev System One 文档 + 本仓 v4 打乱对照与 09-20 诊断 | 🧩框架 | S20 的可用信息是振幅不是方向；语义模型无文本则无增量，且错配对照必须与标签独立 |
 | 2026-09-20 | [[2026-09-20_s20-causal-screen-specified-rise]] | Dream-RSI / Harness-RSI / Cunningham / Selective classification / Conformal Risk Control / 本仓 v4 诊断 | 🧩框架 | 入池看指定 +15% 止盈；沉默是任务支持不是质检；因果冷却未迁移，发运仍 π0 |
 | 2026-09-13 | [[2026-09-13_s20-three-track-evidence-gate]] | Selective classification / Conformal Risk Control / DLinear / DoubleAdapt / MASTER / 本仓 v3·B1 负结果 | 🧩框架 | S20-Safe：O/P/T 三轨分开；TopN 可空缺；先修数据与联合风险再放行复杂模型 |
