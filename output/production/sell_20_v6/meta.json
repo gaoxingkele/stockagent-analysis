@@ -1,13 +1,3 @@
-{
-  "best_iter": 482,
-  "auc": 0.6773693102246683,
-  "base_rate": 0.2786376901380896,
-  "n_train": 1500000,
-  "n_test": 920055,
-  "n_features": 220,
-  "version": "v6",
-  "mfk_importance_pct": 0.43700940709672204,
-  "anchor_p5": 0.04500313421543842,
-  "anchor_p50": 0.4346666081852922,
-  "anchor_p95": 0.8744819651140626
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:7cf36116add355bd91ddc09711d7612c1c9e33dec010177f6e81813115a1ff1d
+size 333

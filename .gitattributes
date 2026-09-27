@@ -3,3 +3,4 @@ output/experiments/s20_uns20_20260927/** filter=lfs diff=lfs merge=lfs -text
 output/experiments/s20_20r_confirmation/** filter=lfs diff=lfs merge=lfs -text
 output/experiments/s20_safe_v4/sources/v4-paired-campaign/** filter=lfs diff=lfs merge=lfs -text
 output/experiments/s20_safe_v4/sources/v4-rsi-campaign/** filter=lfs diff=lfs merge=lfs -text
+output/** filter=lfs diff=lfs merge=lfs -text

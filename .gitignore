@@ -9,25 +9,8 @@ __pycache__/
 dist/
 build/
 
-# Output data (run results, charts, PDFs)
-# The raw daily market data is the training dataset and is tracked via Git LFS.
-output/*
-!output/tushare_cache/
-output/tushare_cache/*
-!output/tushare_cache/daily/
-!output/tushare_cache/daily/*.parquet
-
-# Derived training artifacts tracked via Git LFS (see docs/research/s20_training_data_manifest_20260927.md)
-!output/experiments/
-output/experiments/*
-!output/experiments/s20_uns20_20260927/
-!output/experiments/s20_20r_confirmation/
-!output/experiments/s20_safe_v4/
-output/experiments/s20_safe_v4/*
-!output/experiments/s20_safe_v4/sources/
-output/experiments/s20_safe_v4/sources/*
-!output/experiments/s20_safe_v4/sources/v4-paired-campaign/
-!output/experiments/s20_safe_v4/sources/v4-rsi-campaign/
+# Output data is the research/training dataset and is fully tracked via Git LFS
+# (see docs/research/s20_training_data_manifest_20260927.md). Logs stay excluded.
 
 # Logs
 *.log

@@ -1,11 +1,3 @@
-{
-  "best_iter": 12,
-  "ic": 0.07278007411802698,
-  "rank_ic": 0.11310766848669021,
-  "rank_ic_ir": 0.4595208436200066,
-  "n_train": 1500000,
-  "n_test": 920040,
-  "n_features": 203,
-  "version": "v4",
-  "leakage_fix": true
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:53132b597e8fae0019582d07995297dc367fd647dd6574883d77231fe492e096
+size 235
