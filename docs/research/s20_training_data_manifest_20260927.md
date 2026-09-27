@@ -31,10 +31,19 @@ python scripts/fetch_daily_range.py --start 20260924 --end 20260930
 
 脚本只拉取本地缺失的交易日并跳过已存在文件。拉全后按上面两个脚本重建标签和模型。
 
-## 入库现状与限制
+## 入库现状（2026-09-27 起）
 
-1. 原始日线（178 MB）与派生产物（约 460 MB 起）都未入库。
-2. 仓库 `.git` 已约 1.9 GB；再纳入原始数据会显著超过 GitHub 的舒适区间（推荐 <1 GB），并进一步拖慢 clone 与 push。
-3. Tushare 数据再分发受其服务条款约束；在公开仓库中上传原始行情前需确认许可。
+1. **原始日线已纳入 Git LFS**：`output/tushare_cache/daily/*.parquet` 由 `.gitattributes` 以 LFS 跟踪，`.gitignore` 为其加了白名单。仓库历史只存指针，数据本体在 GitHub LFS 存储。
+2. 派生产物（`s20_20r_confirmation/factor_groups` 约 411 MB、`s20_uns20_20260927` 约 33 MB）仍未入库，可由脚本重建；需要时再按同样方式 `git lfs track`。
+3. 仓库 `.git` 已约 1.9 GB，LFS 指针不会继续膨胀 git 历史。
+4. Tushare 数据再分发受其服务条款约束；公开仓库上传原始行情前需确认许可。
 
-结论：GitHub 目前**不能**直接满足训练；正确路径是"清单 + 补数脚本 + 本地重建"，或把数据包放到 GitHub Release / LFS / 私有存储，而不是塞进 git 历史。
+另一台电脑拉取：
+
+```powershell
+git lfs install
+git clone https://github.com/gaoxingkele/stockagent-analysis.git
+git lfs pull   # 已在 clone 时自动拉取，除非 --skip-smudge
+```
+
+结论：GitHub 现在**可以直接满足训练**（原始日线 + 重建脚本）；数据本体走 LFS，不走 git 历史。

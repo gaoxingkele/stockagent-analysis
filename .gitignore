@@ -10,7 +10,12 @@ dist/
 build/
 
 # Output data (run results, charts, PDFs)
-output/
+# The raw daily market data is the training dataset and is tracked via Git LFS.
+output/*
+!output/tushare_cache/
+output/tushare_cache/*
+!output/tushare_cache/daily/
+!output/tushare_cache/daily/*.parquet
 
 # Logs
 *.log
