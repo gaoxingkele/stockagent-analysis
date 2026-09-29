@@ -24,6 +24,7 @@
 
 | 日期 | 条目 | 思想来源 (出处) | 裁决 | 一句话 |
 |------|------|----------------|------|--------|
+| 2026-09-29 | [[2026-09-29_jev-market-selloff-probe]] | TypeSafe Jev API / Engle 1982 ARCH / Bollerslev 1986 GARCH / AKShare 新闻联播 | ❌/🧩 | Jev 判 5 日普跌 AUC 0.73、无背答案，但错配新闻不掉分，免费梯度提升同数字 0.72；日级普跌可预测（波动聚集），Jev 无增量 |
 | 2026-09-29 | [[2026-09-29_s20-pure-r13-vol-band]]（R11–R13） | Ang et al. JF 2006 / Frazzini–Pedersen JFE 2014 / AFML 区间障碍 / 本仓朴素消融纪律 | ✅影子 | 目标改为安全且上涨、止盈为区间；stage1 按安全口径比全市场更危险；学习式安全模型输给低波动朴素规则；全市场低波动 40% + stage1 排序 + 行业扩容 = v1.1 稳健版 |
 | 2026-09-29 | [[2026-09-29_s20-pure-v1-freeze]] | 本仓 S20-Pure 十轮链 / 反过拟合脚手架 / TA-Lib matype | ✅影子 | stage1 锚模型补存并逐行复现；冻结先于测试；ta-lib 默认 EMA 漂移已修；新窗口 17 天振幅上限相对 stage1 +1.9pp/笔、纯跌 −14pp，但跑输全市场 |
 | 2026-09-28 | [[2026-09-28_s20-pure-chain]]（R01–R10） | AFML 三重障碍/元标签 / Joubert JFDS 2022 / Jin&Candès JMLR 2023 / Gibbs&Candès NeurIPS 2021 / KDD 2025 PDU / arXiv:2603.13252 / Ang et al. JF 2006 / Grinold–Kahn | 🧩框架 | 纯涨/纯跌/震荡参数化；剔除震荡训练有效但靠降振幅；反向减值 = 池内振幅上限（一行规则追平模型）；胜率主方差在日级：好日子 70%、坏日子 35% |
