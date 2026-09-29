@@ -22,7 +22,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from stockagent_analysis.s20_pure import (  # noqa: E402
     CONTRACT_PATH,
+    SAFE_CONTRACT_PATH,
     PureConfig,
+    SafeConfig,
+    select_safe,
     _frozen_models,
     exit_return,
     natr,
@@ -91,6 +94,9 @@ def main() -> int:
     cfg = PureConfig()
     contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
     assert contract["funnel"] == json.loads(json.dumps(cfg.to_dict())), "config drifted from frozen contract"
+    safe_cfg = SafeConfig()
+    safe_contract = json.loads(SAFE_CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert safe_contract["list"] == json.loads(json.dumps(safe_cfg.to_dict())), "safe config drifted"
     _, _, features = _frozen_models()
     f = load_factors(SHADOW / "factor_groups", features, "20260727")
     f["stage1_probability"] = stage1_probability(f)
@@ -117,9 +123,11 @@ def main() -> int:
 
     # --- daily lists
     new = f[f.trade_date >= EVAL_START].copy()
-    lists = pd.concat([select(new, cfg, r.name) for r in cfg.rules], ignore_index=True)
+    lists = pd.concat([select(new, cfg, r.name) for r in cfg.rules] + [select_safe(new, safe_cfg)],
+                      ignore_index=True)
     cols = ["trade_date", "rule", "list_rank", "ts_code", "name", "industry", "stage1_probability",
-            "pool_rank", "natr14", "natr_pct_in_pool"]
+            "pool_rank", "natr14", "natr_pct_in_pool", "natr_pct", "fill"]
+    cols = [c for c in cols if c in lists.columns]
     lists[cols].to_csv(SHADOW / "daily_lists.csv", index=False, encoding="utf-8-sig")
     last = lists.trade_date.max()
     report["latest_list_date"] = last
@@ -137,6 +145,22 @@ def main() -> int:
         Uv = new[["ts_code", "trade_date"]].merge(panel, on=["ts_code", "trade_date"])
         rows += [summarize(L, r, "s20_pure_v1"), summarize(B, r, "stage1_top20_nocap"), summarize(Uv, r, "universe")]
     ev = pd.DataFrame(rows)
+    # "safe and up" view (band exit a5/b15/D10) for every list
+    band = pd.read_parquet(ROOT / "output/experiments/s20_pure_20260928/band_panel.parquet",
+                           columns=["ts_code", "trade_date", "maxdd20", "cls_a5_d10", "ret_a5_b15_d10"])
+    band = band[band.trade_date >= EVAL_START]
+
+    def safe_metrics(q, name):
+        c, r = q.cls_a5_d10, q.ret_a5_b15_d10 - safe_cfg.cost_pct
+        return {"set": name, "days": q.trade_date.nunique(), "avg_len": round(len(q) / max(q.trade_date.nunique(), 1), 1),
+                "success": round(100 * float(c.isin([1, 3]).mean()), 1), "bad": round(100 * float((c == 2).mean()), 1),
+                "crash15": round(100 * float((q.maxdd20 <= -15).mean()), 1), "band_mean": round(float(r.mean()), 2)}
+    srows = [safe_metrics(lists[lists.rule == n].merge(band, on=["ts_code", "trade_date"]), n)
+             for n in ("safe_v1_1", "U15D10", "U20D15")]
+    srows.append(safe_metrics(new[["ts_code", "trade_date"]].merge(band, on=["ts_code", "trade_date"]), "universe"))
+    sev = pd.DataFrame(srows)
+    report["evaluation_safe_band_a5_b15_d10"] = sev.to_dict(orient="records")
+    print(sev.to_string(index=False))
     report["evaluation"] = {"signal_days": [EVAL_START, matured_to], "matured_days": int(ev.days.max()),
                             "promotion_review_needs": 60, "table": ev.to_dict(orient="records")}
     (SHADOW / "shadow_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -150,6 +174,13 @@ def main() -> int:
         for _, x in q.iterrows():
             md.append(f"| {int(x.list_rank)} | {x.ts_code} | {x.get('name','')} | {x.get('industry','')} | "
                       f"{x.stage1_probability:.3f} | {int(x.pool_rank)} | {x.natr14:.3f} |\n")
+    q = lists[(lists.trade_date == last) & (lists.rule == "safe_v1_1")]
+    md.append(f"\n## 稳健版 v1.1（全市场波动最低 {int(safe_cfg.natr_pct_max*100)}% → stage1 排序 → 前 {safe_cfg.top_k}，"
+              f"每行业 ≤ {safe_cfg.industry_cap}，超出部分由其他行业替补；止盈区间 +{safe_cfg.band_low:g}%～+{safe_cfg.band_high:g}%，"
+              f"止损 -{safe_cfg.crash_line:g}%）\n\n| # | 代码 | 名称 | 行业 | stage1 | 波动分位 | 来源 |\n|---|---|---|---|---|---|---|\n")
+    for i, (_, x) in enumerate(q.iterrows(), 1):
+        md.append(f"| {i} | {x.ts_code} | {x.get('name','')} | {x.get('industry','')} | {x.stage1_probability:.3f} | "
+                  f"{x.natr_pct:.2f} | {'替补' if x.fill == 'industry_substitute' else '前20'} |\n")
     (SHADOW / f"list_{last}.md").write_text("".join(md), encoding="utf-8")
     print(f"latest list {last}: {SHADOW / f'list_{last}.md'}")
     return 0
