@@ -362,8 +362,10 @@ def compute_factors(daily: pd.DataFrame) -> pd.DataFrame:
     out["sar_signal"] = np.where(c > sar, 1.0, np.where(c < sar, -1.0, 0))
     out["cmo_14"] = talib.CMO(c, 14)
     out["bop"] = talib.BOP(o, h, l, c)
-    out["ppo"] = talib.PPO(c, 12, 26)
-    out["apo"] = talib.APO(c, 12, 26)
+    # matype=0 (SMA) pinned: every stored factor was built with it; newer ta-lib
+    # Python wheels default to EMA and silently shift ppo/apo.
+    out["ppo"] = talib.PPO(c, 12, 26, matype=0)
+    out["apo"] = talib.APO(c, 12, 26, matype=0)
     out["ad"] = talib.AD(h, l, c, v)
     out["adosc"] = talib.ADOSC(h, l, c, v, 3, 10)
     out["natr_14"] = talib.NATR(h, l, c, 14)
