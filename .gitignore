@@ -53,3 +53,6 @@ research/brain/mine3_results.json
 research/brain/mineA_results.json
 research/brain/mineB_results.json
 eval_bundle*.tar.gz
+
+# S20-Pure: rebuildable feature cache (scripts/analyze_s20_pure_r04_direction.py)
+output/experiments/s20_pure_20260928/feat_cache_bps5000.parquet

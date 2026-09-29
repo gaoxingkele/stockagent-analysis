@@ -1,0 +1,69 @@
+{
+  "name": "s20_pure_v1",
+  "frozen_on": "2026-09-29",
+  "status": "shadow_preregistered",
+  "rationale": "wiki/2026-09-28_s20-pure-chain.md (R01-R10)",
+  "stage1": {
+    "source": "S20-20R portable residual (confirm_s20_20r_portable.py recipe)",
+    "anchor_early_best_iteration": 2,
+    "anchor_refit_rows": 1151403,
+    "development_sample_bps": 5000,
+    "reproduction_vs_run_v1": {
+      "rows": 613500,
+      "max_abs_diff": 0.0,
+      "mean_abs_diff": 0.0,
+      "daily_spearman_mean": 1.0,
+      "daily_top20_overlap_mean": 1.0
+    },
+    "artifacts": {
+      "anchor.txt": "624dee7117f628fe94e8713181aa6dad5ad96c2ef4e608266bc86a6d71a01f23",
+      "residual_seed20260907.txt": "d6a3bc44b58cbff5106e8b71cad742ec969f225bbf42bc70de2bc49e0ee1aee7",
+      "residual_seed20260921.txt": "25ce53a746a8c2484debca410b75dcf073463656f0e443af499290ee0bc315f3",
+      "residual_seed20261005.txt": "9b8c8c6f30e5207d583c7f62269a8515cff9f24d81baa21c8a13371fd5896164"
+    },
+    "feature_count": 166
+  },
+  "funnel": {
+    "pool_size": 100,
+    "top_k": 20,
+    "natr_window": 14,
+    "cost_pct": 0.3,
+    "daily_sleeve": 0.05,
+    "rules": [
+      {
+        "name": "U15D10",
+        "take_profit": 15.0,
+        "stop_loss": 10.0,
+        "amplitude_cap": 0.4,
+        "shakeout": 5.0,
+        "horizon": 20
+      },
+      {
+        "name": "U20D15",
+        "take_profit": 20.0,
+        "stop_loss": 15.0,
+        "amplitude_cap": 0.2,
+        "shakeout": 8.0,
+        "horizon": 20
+      }
+    ],
+    "primary_rule": "U15D10"
+  },
+  "evaluation": {
+    "window_start": "20260806",
+    "note": "2026-01-27..08-05 is consumed; only signal dates >= 20260806 with a fully matured 20-session horizon count. Promotion review needs >= 60 matured days.",
+    "min_matured_days_for_review": 60,
+    "baselines": [
+      "same-rule universe",
+      "stage1 Top20 without amplitude cap"
+    ],
+    "metrics": [
+      "exit win rate",
+      "exit mean per trade (0.3% cost)",
+      "pure_up share",
+      "pure_down share",
+      "worst month",
+      "realised failure rate of the list"
+    ]
+  }
+}
