@@ -1,0 +1,98 @@
+{
+  "name": "s20_pure_v1_1_safe",
+  "frozen_on": "2026-09-29",
+  "status": "shadow_preregistered",
+  "objective": "safe and up: avoid the -D crash line first, most names rise, small gains count",
+  "rationale": [
+    "wiki/2026-09-29_s20-pure-r11-safe-up-band.md",
+    "wiki/2026-09-29_s20-pure-r12-safe-model.md",
+    "wiki/2026-09-29_s20-pure-r13-vol-band.md"
+  ],
+  "stage1": {
+    "reuses": "config/s20_pure_v1.json",
+    "artifacts": {
+      "anchor.txt": "624dee7117f628fe94e8713181aa6dad5ad96c2ef4e608266bc86a6d71a01f23",
+      "residual_seed20260907.txt": "d6a3bc44b58cbff5106e8b71cad742ec969f225bbf42bc70de2bc49e0ee1aee7",
+      "residual_seed20260921.txt": "25ce53a746a8c2484debca410b75dcf073463656f0e443af499290ee0bc315f3",
+      "residual_seed20261005.txt": "9b8c8c6f30e5207d583c7f62269a8515cff9f24d81baa21c8a13371fd5896164"
+    }
+  },
+  "list": {
+    "natr_pct_max": 0.4,
+    "top_k": 20,
+    "industry_cap": 4,
+    "industry_mode": "expand",
+    "band_low": 5.0,
+    "band_high": 15.0,
+    "crash_line": 10.0,
+    "horizon": 20,
+    "cost_pct": 0.3
+  },
+  "outcome_definition": {
+    "success": "+5% before -10%, or neither and day-20 close > 0",
+    "bad": "-10% touched before +5% (stop fills at the line or the gap open)",
+    "exit": "half at +5% with stop moved to entry; rest at +15%, back at entry, or day-20 close; full exit at -10%"
+  },
+  "selection_rule": "dev only: among natr bands with dev bad and crash15 below the universe, maximise band expectancy; ties -> higher success",
+  "evidence_dev": {
+    "days": 145,
+    "avg_len": 20.3,
+    "success": 73.2,
+    "win": 69.9,
+    "bad": 16.0,
+    "crash15": 10.7,
+    "crash20": 6.7,
+    "band_mean": 1.68,
+    "worst_month": -1.74,
+    "max_ind_share": 16.2
+  },
+  "universe_dev": {
+    "days": 145,
+    "avg_len": 2405.0,
+    "success": 69.4,
+    "win": 64.7,
+    "bad": 17.8,
+    "crash15": 13.7,
+    "crash20": 8.1,
+    "band_mean": 1.17,
+    "worst_month": -3.11,
+    "max_ind_share": 6.2
+  },
+  "evidence_confirm_consumed_descriptive": {
+    "days": 126,
+    "avg_len": 21.0,
+    "success": 56.0,
+    "win": 54.2,
+    "bad": 32.4,
+    "crash15": 26.6,
+    "crash20": 12.8,
+    "band_mean": -1.41,
+    "worst_month": -3.6,
+    "max_ind_share": 20.3
+  },
+  "universe_confirm": {
+    "days": 126,
+    "avg_len": 4858.2,
+    "success": 59.2,
+    "win": 57.1,
+    "bad": 33.2,
+    "crash15": 29.5,
+    "crash20": 15.3,
+    "band_mean": -0.92,
+    "worst_month": -4.13,
+    "max_ind_share": 6.2
+  },
+  "known_limits": [
+    "stop-outs gap through the -10% line 13.5% of the time (mean fill -10.55%, p5 -12.1%, worst -34.9%)",
+    "in the consumed confirm window (high-volatility leadership) the list trailed the universe on success/expectancy",
+    "day-level (market-wide) crashes cannot be removed by stock selection; see wiki R06/R10"
+  ],
+  "evaluation": {
+    "window_start": "20260806",
+    "min_matured_days_for_review": 60,
+    "baselines": [
+      "same-rule universe",
+      "S20-Pure v1 (aggressive)"
+    ]
+  }
+}

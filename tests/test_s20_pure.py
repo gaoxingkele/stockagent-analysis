@@ -80,3 +80,49 @@ def test_frozen_contract_matches_default_config():
     assert contract["funnel"] == json.loads(json.dumps(PureConfig().to_dict()))
     assert [r["amplitude_cap"] for r in contract["funnel"]["rules"]] == [0.4, 0.2]
     assert contract["stage1"]["reproduction_vs_run_v1"]["daily_top20_overlap_mean"] >= 0.95
+
+
+def _day(inds, scores=None):
+    n = len(inds)
+    return pd.DataFrame({
+        "trade_date": ["20260101"] * n,
+        "ts_code": [f"S{i}" for i in range(n)],
+        "industry": inds,
+        "stage1_probability": scores if scores is not None else np.linspace(0.9, 0.1, n),
+        "natr14": np.linspace(0.01, 0.02, n),
+    })
+
+
+def test_industry_expand_keeps_top_k_and_adds_substitutes_for_the_excess():
+    frame = _day(["chip"] * 6 + ["bank", "chip", "food", "auto", "oil"])
+    cfg = PureConfig(pool_size=100, top_k=6, rules=(ExitRule("X", 15.0, 10.0, 0.0),), primary_rule="X")
+    out = select(frame, cfg, industry_cap=4, industry_mode="expand")
+    # top 6 are all chip -> 2 over the cap -> 2 substitutes from other industries, chip #7 skipped
+    assert list(out.ts_code) == ["S0", "S1", "S2", "S3", "S4", "S5", "S6", "S8"]
+    assert list(out.fill) == ["top"] * 6 + ["industry_substitute"] * 2
+
+
+def test_industry_replace_enforces_a_strict_cap():
+    frame = _day(["chip"] * 6 + ["bank", "chip", "food", "auto", "oil"])
+    cfg = PureConfig(pool_size=100, top_k=6, rules=(ExitRule("X", 15.0, 10.0, 0.0),), primary_rule="X")
+    out = select(frame, cfg, industry_cap=4, industry_mode="replace")
+    assert list(out.ts_code) == ["S0", "S1", "S2", "S3", "S6", "S8"]
+
+
+def test_select_safe_keeps_only_the_calm_part_of_the_market():
+    from stockagent_analysis.s20_pure import SafeConfig, select_safe
+    frame = _day(["a", "b", "c", "d", "e"], scores=[0.9, 0.8, 0.7, 0.6, 0.5])
+    frame["natr14"] = [0.09, 0.01, 0.02, 0.08, 0.03]
+    out = select_safe(frame, SafeConfig(natr_pct_max=0.6, top_k=2))
+    # natr pct: S1 .2, S2 .4, S4 .6 kept; ranked by stage1 -> S1, S2
+    assert list(out.ts_code) == ["S1", "S2"]
+
+
+def test_safe_contract_matches_default_config():
+    from stockagent_analysis.s20_pure import SafeConfig
+    path = Path(__file__).parents[1] / "config/s20_pure_v1_1_safe.json"
+    if not path.exists():
+        return
+    contract = json.loads(path.read_text(encoding="utf-8"))
+    assert contract["status"] == "shadow_preregistered"
+    assert contract["list"] == json.loads(json.dumps(SafeConfig().to_dict()))

@@ -27,6 +27,7 @@ from .s20 import anchored_residual_probability
 ROOT = Path(__file__).resolve().parents[2]
 FROZEN_DIR = ROOT / "output/production/s20_pure_v1"
 CONTRACT_PATH = ROOT / "config/s20_pure_v1.json"
+SAFE_CONTRACT_PATH = ROOT / "config/s20_pure_v1_1_safe.json"
 STAGE1_SEEDS = (20260907, 20260921, 20261005)
 MAX_DELTA_LOGIT = 1.0
 
@@ -143,11 +144,13 @@ def stage1_probability(frame: pd.DataFrame) -> np.ndarray:
 
 # ---------------------------------------------------------------- funnel
 def select(frame: pd.DataFrame, cfg: PureConfig = PureConfig(), rule: str | None = None,
-           score_col: str = "stage1_probability", natr_col: str = "natr14") -> pd.DataFrame:
+           score_col: str = "stage1_probability", natr_col: str = "natr14",
+           industry_cap: int | None = None, industry_mode: str = "expand") -> pd.DataFrame:
     """Daily list: stage1 Top-pool -> drop highest-natr cap share -> stage1 Top-K.
 
     Returns the selected rows with `pool_rank`, `natr_pct_in_pool`, `list_rank`
     and `rule`. Names without natr (too little history) stay in the pool.
+    With `industry_cap`, needs an `industry` column; see `_industry_fill`.
     """
     r = cfg.rule(rule)
     f = frame[frame[score_col].notna()].copy()
@@ -157,6 +160,90 @@ def select(frame: pd.DataFrame, cfg: PureConfig = PureConfig(), rule: str | None
     keep = pool["natr_pct_in_pool"].isna() | (pool["natr_pct_in_pool"] <= 1 - r.amplitude_cap)
     out = pool[keep].copy()
     out["list_rank"] = out.groupby("trade_date")[score_col].rank(ascending=False, method="first")
-    out = out[out["list_rank"] <= cfg.top_k].copy()
+    if industry_cap is not None:
+        out = pd.concat([_industry_fill(g, cfg.top_k, industry_cap, industry_mode)
+                         for _, g in out.groupby("trade_date")], ignore_index=True)
+    else:
+        out = out[out["list_rank"] <= cfg.top_k].copy()
     out["rule"] = r.name
     return out.sort_values(["trade_date", "list_rank"]).reset_index(drop=True)
+
+
+@dataclass(frozen=True)
+class SafeConfig:
+    """v1.1 "safe and up" list (wiki/2026-09-29_s20-pure-r13-vol-band.md).
+
+    Safety and upside share one axis, volatility. Keep the calmer part of the
+    market (daily natr14 percentile <= natr_pct_max), rank it by stage1, take
+    Top-K, then widen the list with other industries when one industry holds
+    more than `industry_cap` names. Exit is a take-profit band.
+    """
+    natr_pct_max: float = 0.4
+    top_k: int = 20
+    industry_cap: int = 4
+    industry_mode: str = "expand"
+    band_low: float = 5.0      # a: sell half, move stop to entry
+    band_high: float = 15.0    # b: sell the rest
+    crash_line: float = 10.0   # D: full exit
+    horizon: int = 20
+    cost_pct: float = 0.3
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def select_safe(frame: pd.DataFrame, cfg: SafeConfig = SafeConfig(),
+                score_col: str = "stage1_probability", natr_col: str = "natr14") -> pd.DataFrame:
+    """Daily safe list. Needs trade_date, ts_code, industry, score and natr columns.
+
+    The natr percentile is taken over the whole scored universe of the day.
+    """
+    f = frame[frame[score_col].notna() & frame[natr_col].notna()].copy()
+    f["natr_pct"] = f.groupby("trade_date")[natr_col].rank(pct=True)
+    f = f[f["natr_pct"] <= cfg.natr_pct_max].copy()
+    f["list_rank"] = f.groupby("trade_date")[score_col].rank(ascending=False, method="first")
+    f = f[f["list_rank"] <= max(200, 3 * cfg.top_k)]
+    out = pd.concat([_industry_fill(g, cfg.top_k, cfg.industry_cap, cfg.industry_mode)
+                     for _, g in f.groupby("trade_date")], ignore_index=True)
+    out["rule"] = "safe_v1_1"
+    return out.sort_values(["trade_date", "list_rank"]).reset_index(drop=True)
+
+
+def _industry_fill(day: pd.DataFrame, top_k: int, cap: int, mode: str) -> pd.DataFrame:
+    """Per-day industry handling on candidates already ordered by `list_rank`.
+
+    mode="expand"  keep the original Top-K; for every name an industry holds above
+                   `cap`, add the next-best candidate from an industry still under
+                   `cap` (the list grows from K to K + excess).
+    mode="replace" strict cap: walk down the ranking, skip names whose industry is
+                   full, stop at K names.
+    """
+    day = day.sort_values("list_rank")
+    ind = day["industry"].fillna("unknown").astype(str).to_numpy()
+    if mode == "replace":
+        seen: dict[str, int] = {}
+        keep = []
+        for i, x in enumerate(ind):
+            if seen.get(x, 0) < cap:
+                seen[x] = seen.get(x, 0) + 1
+                keep.append(i)
+            if len(keep) == top_k:
+                break
+        res = day.iloc[keep].copy()
+        res["fill"] = "top"
+        return res
+    head = day.iloc[:top_k].copy()
+    head["fill"] = "top"
+    counts = head["industry"].fillna("unknown").astype(str).value_counts()
+    need = int((counts - cap).clip(lower=0).sum())
+    seen = counts.to_dict()
+    extra = []
+    for i in range(top_k, len(day)):
+        if len(extra) == need:
+            break
+        if seen.get(ind[i], 0) < cap:
+            seen[ind[i]] = seen.get(ind[i], 0) + 1
+            extra.append(i)
+    tail = day.iloc[extra].copy()
+    tail["fill"] = "industry_substitute"
+    return pd.concat([head, tail])
