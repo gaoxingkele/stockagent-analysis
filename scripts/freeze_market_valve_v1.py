@@ -33,7 +33,7 @@ def main() -> int:
     contract = {
         "name": "s20_pure_valve_v1",
         "frozen_on": "2026-09-29",
-        "status": "monitor_preregistered",
+        "status": "monitor_preregistered+B_enabled_by_user",
         "rationale": ["wiki/2026-09-29_jev-market-selloff-probe.md", "wiki/2026-09-29_market-valve-monitor.md"],
         "signal": "sum of SH/SZ limit-down closes over the last 5 sessions (10% boards <= -9.5%, 20% boards <= -19.5%)",
         "levels": {"green": f"< {cfg.yellow_at}", "yellow": f"{cfg.yellow_at}-{cfg.orange_at - 1}",
@@ -48,7 +48,14 @@ def main() -> int:
             "oracle": "sleeves entered when a sell-off did follow: v1 -3.3% (dev) / -2.1% (confirm) vs +3.2% / +3.6% otherwise",
             "policy_table_red_and_none": keep.to_dict(orient="records"),
         },
-        "action_now": "none - show the level on every daily list",
+        "action_now": "show the level on every daily list; B_safe_red is active (user amendment 2026-09-30); "
+                      "A and C remain monitor-only counterfactuals",
+        "amendments": [{
+            "date": "2026-09-30", "by": "user", "change": "enable B_safe_red",
+            "basis": "risk preference (avoid sell-off streaks), not an evidence promotion: on dev B lowered the "
+                     "aggressive list's mean sleeve return; in the 2026 window it protected against repeated sell-offs",
+            "still_recorded": "the 'none' counterfactual for v1, so the choice can be reviewed at 60 matured days",
+        }],
         "preregistered_actions": {
             "A_skip_red": "red: open no new sleeve that day (both lists)",
             "B_safe_red": "red: v1 users receive the v1.1 safe list instead",

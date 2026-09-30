@@ -148,5 +148,24 @@ def test_valve_contract_matches_config():
     if not VALVE_CONTRACT_PATH.exists():
         return
     c = json.loads(VALVE_CONTRACT_PATH.read_text(encoding="utf-8"))
-    assert c["status"] == "monitor_preregistered"
+    assert c["status"] == "monitor_preregistered+B_enabled_by_user"
     assert c["config"] == ValveConfig().to_dict()
+    assert c["amendments"][0]["change"] == "enable B_safe_red"
+
+
+def test_valve_b_replaces_aggressive_lists_on_red_days_only():
+    from stockagent_analysis.market_valve import ValveConfig, apply_actions
+    lists = pd.DataFrame({
+        "trade_date": ["d1"] * 4 + ["d2"] * 4,
+        "rule": ["U15D10", "U15D10", "safe_v1_1", "safe_v1_1"] * 2,
+        "ts_code": ["A", "B", "S", "T", "C", "D", "U", "V"],
+        "list_rank": [1, 2, 1, 2] * 2,
+    })
+    levels = pd.DataFrame({"date": ["d1", "d2"], "level": ["red", "orange"]})
+    out = apply_actions(lists, levels, ValveConfig(), aggressive_rules=("U15D10",))
+    d1 = out[(out.trade_date == "d1") & (out.rule == "U15D10")]
+    assert list(d1.ts_code) == ["S", "T"] and set(d1.served_by) == {"safe_v1_1"}
+    d2 = out[(out.trade_date == "d2") & (out.rule == "U15D10")]
+    assert list(d2.ts_code) == ["C", "D"] and set(d2.served_by) == {"U15D10"}
+    off = apply_actions(lists, levels, ValveConfig(enabled_actions=()), aggressive_rules=("U15D10",))
+    assert list(off[(off.trade_date == "d1") & (off.rule == "U15D10")].ts_code) == ["A", "B"]

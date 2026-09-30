@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from stockagent_analysis.market_valve import (  # noqa: E402
     LEVEL_CN,
     ValveConfig,
+    apply_actions,
     daily_breadth,
     load_contract,
     valve_levels,
@@ -145,8 +146,7 @@ def main() -> int:
                       ignore_index=True)
     cols = ["trade_date", "rule", "list_rank", "ts_code", "name", "industry", "stage1_probability",
             "pool_rank", "natr14", "natr_pct_in_pool", "natr_pct", "fill"]
-    cols = [c for c in cols if c in lists.columns]
-    lists[cols].to_csv(SHADOW / "daily_lists.csv", index=False, encoding="utf-8-sig")
+    cols = [c for c in cols if c in lists.columns] + ["valve_level", "served_by"]
     last = lists.trade_date.max()
     report["latest_list_date"] = last
 
@@ -183,6 +183,9 @@ def main() -> int:
     vc = load_contract()
     assert vc["config"] == json.loads(json.dumps(ValveConfig().to_dict())), "valve config drifted"
     vt = valve_table().set_index("date")
+    # lists as served: action B (user-enabled) swaps the aggressive lists for the safe list on red days
+    served = apply_actions(lists, vt.reset_index(), ValveConfig())
+    served[cols].to_csv(SHADOW / "daily_lists.csv", index=False, encoding="utf-8-sig")
     path = pd.read_parquet(ROOT / "output/experiments/s20_pure_20260928/path_panel.parquet",
                            columns=["ts_code", "trade_date", "up15_day", "dn10_day", "dn8_day", "ret20"])
     band8 = pd.read_parquet(ROOT / "output/experiments/s20_pure_20260928/band_panel.parquet",
@@ -217,18 +220,33 @@ def main() -> int:
                             "promotion_review_needs": 60, "table": ev.to_dict(orient="records")}
     print(ev.to_string(index=False))
 
-    valve_day = max(vt.index[vt.level != "unknown"])
-    lv = vt.loc[valve_day]
     vcfg = ValveConfig()
-    valve_line = (f"市场预警阀门（{valve_day}，监测模式，不改名单）：**{LEVEL_CN.get(lv.level, '未知')}**，"
-                  f"近 5 日跌停合计 {int(lv.limit_down_5d)} 家（黄 ≥{vcfg.yellow_at}，橙 ≥{vcfg.orange_at}，红 ≥{vcfg.red_at}）")
-    report["latest_valve"] = {"date": valve_day, "level": lv.level, "limit_down_5d": float(lv.limit_down_5d)}
-    md = [f"# S20-Pure v1 名单 {last}\n", "冻结合约 `config/s20_pure_v1.json`；影子运行，非投资建议。\n",
+    lv = vt.loc[last] if last in vt.index else None
+    level_today = lv.level if lv is not None else "unknown"
+    b_on = "B_safe_red" in vcfg.enabled_actions
+    triggered = b_on and level_today == "red"
+    valve_line = (f"市场预警阀门（{last}）：**{LEVEL_CN.get(level_today, '未知')}**，近 5 日跌停合计 "
+                  f"{int(lv.limit_down_5d) if lv is not None and pd.notna(lv.limit_down_5d) else '—'} 家"
+                  f"（黄 ≥{vcfg.yellow_at}，橙 ≥{vcfg.orange_at}，红 ≥{vcfg.red_at}）。"
+                  f"动作 B（红色时进攻版改用稳健版）{'已启用' if b_on else '未启用'}，"
+                  f"今日{'**已触发**：进攻版名单由稳健版替代' if triggered else '未触发'}。")
+    newest = max(vt.index[vt.level != "unknown"])
+    if newest > last:
+        valve_line += f" 最新一晚 {newest} 的阀门为 **{LEVEL_CN.get(vt.loc[newest].level)}**（近 5 日跌停 {int(vt.loc[newest].limit_down_5d)} 家）。"
+    report["latest_valve"] = {"list_date": last, "level": level_today, "action_B_triggered": bool(triggered),
+                              "newest_valve": {"date": newest, "level": vt.loc[newest].level}}
+    report["served_lists_red_days"] = sorted(served.loc[served.served_by.eq("safe_v1_1") & served.rule.ne("safe_v1_1"),
+                                                        "trade_date"].unique().tolist())
+    md = [f"# S20-Pure v1 名单 {last}\n",
+          "冻结合约 `config/s20_pure_v1.json`、`config/s20_pure_valve_v1.json`；影子运行，非投资建议。\n",
           f"\n{valve_line}\n"]
     for r in cfg.rules:
         q = lists[(lists.trade_date == last) & (lists.rule == r.name)]
-        md.append(f"\n## 规则 {r.name}（止盈 +{r.take_profit:g}% / 止损 -{r.stop_loss:g}% / {r.horizon} 日，"
-                  f"池内截掉 natr 最高 {int(r.amplitude_cap*100)}%）\n\n| # | 代码 | 名称 | 行业 | stage1 | 池内名次 | natr14 |\n|---|---|---|---|---|---|---|\n")
+        md.append(f"\n## 进攻版 {r.name}（止盈 +{r.take_profit:g}% / 止损 -{r.stop_loss:g}% / {r.horizon} 日，"
+                  f"池内截掉 natr 最高 {int(r.amplitude_cap*100)}%）\n\n")
+        if triggered:
+            md.append("> 今日红色预警，按动作 B 本规则改用下方稳健版名单；原名单仅供参考，不建议建仓。\n\n")
+        md.append("| # | 代码 | 名称 | 行业 | stage1 | 池内名次 | natr14 |\n|---|---|---|---|---|---|---|\n")
         for _, x in q.iterrows():
             md.append(f"| {int(x.list_rank)} | {x.ts_code} | {x.get('name','')} | {x.get('industry','')} | "
                       f"{x.stage1_probability:.3f} | {int(x.pool_rank)} | {x.natr14:.3f} |\n")

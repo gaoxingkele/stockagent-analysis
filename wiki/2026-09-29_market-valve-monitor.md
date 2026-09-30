@@ -2,7 +2,7 @@
 
 - **日期**: 2026-09-29
 - **provenance**: user（"把短期普跌风险写入规则、冻结算法，作为推荐股票时的预警阀门，考虑什么结构能融合进去实现总体最优"）/ ai-executed
-- **裁决**: ✅冻结为监测模式（`config/s20_pure_valve_v1.json`）/ ❌（现在就让阀门自动减仓或停手：开发期没有任何动作优于"不动"）
+- **裁决**: ✅冻结为监测模式（`config/s20_pure_valve_v1.json`）；2026-09-30 用户启用动作 B/ ❌（现在就让阀门自动减仓或停手：开发期没有任何动作优于"不动"）
 - **关联代码/实验**: `research/jev_market/valve_study.py`、`scripts/freeze_market_valve_v1.py`、`src/stockagent_analysis/market_valve.py`、`scripts/run_s20_pure_v1_shadow.py`；产物 `output/jev_market/{valve_study.txt, valve_policies.csv, valve_risk_history.csv, valve_buckets.txt}`
 - **链路**: [[2026-09-29_jev-market-selloff-probe]] → 本条
 
@@ -60,6 +60,12 @@
             平均每笔收益和最差月份都优于"不动"，才正式启用
 ```
 新数据前 17 天（非常早）：进攻版上 B（换稳健版）−0.49、A（停手）−0.55，都优于不动的 −0.75；稳健版上两个动作都略差。和开发期的结论一样，暂不定论。
+
+## 修订 2026-09-30：用户启用动作 B（风险偏好，非证据晋级）
+- **决定**：红色预警日，进攻版名单改用稳健版名单（`ValveConfig.enabled_actions = ("B_safe_red",)`，合约 `amendments` 记录）。
+- **代价与收益（已核对）**：开发期进攻版每笔 +2.44% → +2.11%（牺牲了恐慌尾声的反弹）；确认期 +1.21% → +1.86%，账户最大回撤 −5.94% → −4.14%（在连续下跌里起了保护作用）。用户选择"宁可少赚、避开连续普跌"。
+- **实现**：`market_valve.apply_actions` 在红色日把两条进攻规则的名单替换为稳健版，`daily_lists.csv` 带 `valve_level` 和 `served_by`；名单 md 顶部写明当日是否触发。新窗口里 2026-08-19～08-25 五个红色日已按 B 替换。
+- **仍然记录**："不执行 B"的反事实，60 个成熟日后复核这个选择。A、C 继续只做反事实记录。
 
 ## 结果与裁决
 ✅ 冻结为监测模式并接入每日名单（2026-09-29 为橙色，近 5 日跌停 126 家）。❌ 现在就自动执行阀门动作。
