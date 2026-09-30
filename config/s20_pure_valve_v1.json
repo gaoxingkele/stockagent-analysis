@@ -1,0 +1,306 @@
+{
+  "name": "s20_pure_valve_v1",
+  "frozen_on": "2026-09-29",
+  "status": "monitor_preregistered",
+  "rationale": [
+    "wiki/2026-09-29_jev-market-selloff-probe.md",
+    "wiki/2026-09-29_market-valve-monitor.md"
+  ],
+  "signal": "sum of SH/SZ limit-down closes over the last 5 sessions (10% boards <= -9.5%, 20% boards <= -19.5%)",
+  "levels": {
+    "green": "< 47",
+    "yellow": "47-101",
+    "orange": "102-153",
+    "red": ">= 154"
+  },
+  "config": {
+    "window": 5,
+    "yellow_at": 47,
+    "orange_at": 102,
+    "red_at": 154,
+    "mode": "monitor"
+  },
+  "target": "any broad sell-off session (median return <= -2.5% or >= 100 limit-down) in the next 5 sessions",
+  "evidence": {
+    "auc_expanding_window": {
+      "dev_2024_10_2026_01": 0.635,
+      "2026_02_09": 0.587,
+      "note": "90-day stratified probe gave 0.72; the full-day estimate is lower"
+    },
+    "why_no_action_now": "on dev, no action at any threshold beat doing nothing on mean sleeve return; the top-decile readings often mark the end of a panic (dev red-bucket sleeves +6.7% v1)",
+    "oracle": "sleeves entered when a sell-off did follow: v1 -3.3% (dev) / -2.1% (confirm) vs +3.2% / +3.6% otherwise",
+    "policy_table_red_and_none": [
+      {
+        "thr": 0.9,
+        "period": "dev",
+        "list": "v1",
+        "policy": "none",
+        "affected%": 9.0,
+        "mean_sleeve": 2.437,
+        "worst_month": -5.3,
+        "neg_months": 1,
+        "n_months": 7,
+        "maxDD_book": -7.2
+      },
+      {
+        "thr": 0.9,
+        "period": "dev",
+        "list": "v1",
+        "policy": "skip",
+        "affected%": 9.0,
+        "mean_sleeve": 1.84,
+        "worst_month": -5.3,
+        "neg_months": 2,
+        "n_months": 7,
+        "maxDD_book": -7.2
+      },
+      {
+        "thr": 0.9,
+        "period": "dev",
+        "list": "v1",
+        "policy": "half",
+        "affected%": 9.0,
+        "mean_sleeve": 2.139,
+        "worst_month": -5.3,
+        "neg_months": 2,
+        "n_months": 7,
+        "maxDD_book": -7.2
+      },
+      {
+        "thr": 0.9,
+        "period": "dev",
+        "list": "v1",
+        "policy": "tight",
+        "affected%": 9.0,
+        "mean_sleeve": 2.315,
+        "worst_month": -5.3,
+        "neg_months": 1,
+        "n_months": 7,
+        "maxDD_book": -7.2
+      },
+      {
+        "thr": 0.9,
+        "period": "dev",
+        "list": "v1",
+        "policy": "safe",
+        "affected%": 9.0,
+        "mean_sleeve": 2.113,
+        "worst_month": -5.3,
+        "neg_months": 2,
+        "n_months": 7,
+        "maxDD_book": -7.2
+      },
+      {
+        "thr": 0.9,
+        "period": "dev",
+        "list": "safe",
+        "policy": "none",
+        "affected%": 9.0,
+        "mean_sleeve": 1.649,
+        "worst_month": -1.73,
+        "neg_months": 3,
+        "n_months": 7,
+        "maxDD_book": -4.09
+      },
+      {
+        "thr": 0.9,
+        "period": "dev",
+        "list": "safe",
+        "policy": "skip",
+        "affected%": 9.0,
+        "mean_sleeve": 1.377,
+        "worst_month": -1.73,
+        "neg_months": 3,
+        "n_months": 7,
+        "maxDD_book": -4.09
+      },
+      {
+        "thr": 0.9,
+        "period": "dev",
+        "list": "safe",
+        "policy": "half",
+        "affected%": 9.0,
+        "mean_sleeve": 1.513,
+        "worst_month": -1.73,
+        "neg_months": 3,
+        "n_months": 7,
+        "maxDD_book": -4.09
+      },
+      {
+        "thr": 0.9,
+        "period": "dev",
+        "list": "safe",
+        "policy": "tight",
+        "affected%": 9.0,
+        "mean_sleeve": 1.607,
+        "worst_month": -1.73,
+        "neg_months": 3,
+        "n_months": 7,
+        "maxDD_book": -4.09
+      },
+      {
+        "thr": 0.9,
+        "period": "confirm",
+        "list": "v1",
+        "policy": "none",
+        "affected%": 19.8,
+        "mean_sleeve": 1.21,
+        "worst_month": -6.91,
+        "neg_months": 5,
+        "n_months": 8,
+        "maxDD_book": -5.94
+      },
+      {
+        "thr": 0.9,
+        "period": "confirm",
+        "list": "v1",
+        "policy": "skip",
+        "affected%": 19.8,
+        "mean_sleeve": 1.924,
+        "worst_month": -6.91,
+        "neg_months": 6,
+        "n_months": 8,
+        "maxDD_book": -3.93
+      },
+      {
+        "thr": 0.9,
+        "period": "confirm",
+        "list": "v1",
+        "policy": "half",
+        "affected%": 19.8,
+        "mean_sleeve": 1.567,
+        "worst_month": -6.91,
+        "neg_months": 5,
+        "n_months": 8,
+        "maxDD_book": -3.91
+      },
+      {
+        "thr": 0.9,
+        "period": "confirm",
+        "list": "v1",
+        "policy": "tight",
+        "affected%": 19.8,
+        "mean_sleeve": 1.383,
+        "worst_month": -6.91,
+        "neg_months": 5,
+        "n_months": 8,
+        "maxDD_book": -4.8
+      },
+      {
+        "thr": 0.9,
+        "period": "confirm",
+        "list": "v1",
+        "policy": "safe",
+        "affected%": 19.8,
+        "mean_sleeve": 1.861,
+        "worst_month": -6.91,
+        "neg_months": 6,
+        "n_months": 8,
+        "maxDD_book": -4.14
+      },
+      {
+        "thr": 0.9,
+        "period": "confirm",
+        "list": "safe",
+        "policy": "none",
+        "affected%": 19.8,
+        "mean_sleeve": -1.374,
+        "worst_month": -3.46,
+        "neg_months": 7,
+        "n_months": 8,
+        "maxDD_book": -8.51
+      },
+      {
+        "thr": 0.9,
+        "period": "confirm",
+        "list": "safe",
+        "policy": "skip",
+        "affected%": 19.8,
+        "mean_sleeve": -1.311,
+        "worst_month": -3.46,
+        "neg_months": 7,
+        "n_months": 8,
+        "maxDD_book": -8.09
+      },
+      {
+        "thr": 0.9,
+        "period": "confirm",
+        "list": "safe",
+        "policy": "half",
+        "affected%": 19.8,
+        "mean_sleeve": -1.343,
+        "worst_month": -3.46,
+        "neg_months": 7,
+        "n_months": 8,
+        "maxDD_book": -8.29
+      },
+      {
+        "thr": 0.9,
+        "period": "confirm",
+        "list": "safe",
+        "policy": "tight",
+        "affected%": 19.8,
+        "mean_sleeve": -1.437,
+        "worst_month": -3.46,
+        "neg_months": 7,
+        "n_months": 8,
+        "maxDD_book": -8.85
+      },
+      {
+        "thr": 1.01,
+        "period": "dev",
+        "list": "v1",
+        "policy": "none",
+        "affected%": 0.0,
+        "mean_sleeve": 2.437,
+        "worst_month": -5.3,
+        "neg_months": 1,
+        "n_months": 7,
+        "maxDD_book": -7.2
+      },
+      {
+        "thr": 1.01,
+        "period": "dev",
+        "list": "safe",
+        "policy": "none",
+        "affected%": 0.0,
+        "mean_sleeve": 1.649,
+        "worst_month": -1.73,
+        "neg_months": 3,
+        "n_months": 7,
+        "maxDD_book": -4.09
+      },
+      {
+        "thr": 1.01,
+        "period": "confirm",
+        "list": "v1",
+        "policy": "none",
+        "affected%": 0.0,
+        "mean_sleeve": 1.21,
+        "worst_month": -6.91,
+        "neg_months": 5,
+        "n_months": 8,
+        "maxDD_book": -5.94
+      },
+      {
+        "thr": 1.01,
+        "period": "confirm",
+        "list": "safe",
+        "policy": "none",
+        "affected%": 0.0,
+        "mean_sleeve": -1.374,
+        "worst_month": -3.46,
+        "neg_months": 7,
+        "n_months": 8,
+        "maxDD_book": -8.51
+      }
+    ]
+  },
+  "action_now": "none - show the level on every daily list",
+  "preregistered_actions": {
+    "A_skip_red": "red: open no new sleeve that day (both lists)",
+    "B_safe_red": "red: v1 users receive the v1.1 safe list instead",
+    "C_tight_orange": "orange or red: stop at -8% instead of -10% for that day's sleeve"
+  },
+  "promotion_rule": "after >= 60 matured signal days from 20260806, an action is enabled only if it beats 'none' on mean sleeve return AND worst month for the list it applies to"
+}

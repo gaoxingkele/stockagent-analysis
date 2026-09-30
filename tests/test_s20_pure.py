@@ -126,3 +126,27 @@ def test_safe_contract_matches_default_config():
     contract = json.loads(path.read_text(encoding="utf-8"))
     assert contract["status"] == "shadow_preregistered"
     assert contract["list"] == json.loads(json.dumps(SafeConfig().to_dict()))
+
+
+def test_market_valve_levels_use_frozen_cutoffs():
+    from stockagent_analysis.market_valve import ValveConfig, daily_breadth, valve_levels
+    daily = pd.DataFrame({
+        "ts_code": ["600000.SH", "300001.SZ", "300002.SZ"] * 6,
+        "trade_date": [f"2026010{i}" for i in range(1, 7) for _ in range(3)],
+        "pct_chg": [-10.0, -10.0, -20.0] * 6,   # per day: 600000 and 300002 are limit-down, 300001 is not
+    })
+    b = daily_breadth(daily)
+    assert list(b.limit_down) == [2] * 6
+    lv = valve_levels(b, ValveConfig(yellow_at=5, orange_at=9, red_at=11))
+    assert list(lv.limit_down_5d.iloc[4:]) == [10.0, 10.0]
+    assert list(lv.level) == ["unknown"] * 4 + ["orange", "orange"]
+    assert list(valve_levels(b, ValveConfig(yellow_at=5, orange_at=9, red_at=10)).level)[4:] == ["red", "red"]
+
+
+def test_valve_contract_matches_config():
+    from stockagent_analysis.market_valve import VALVE_CONTRACT_PATH, ValveConfig
+    if not VALVE_CONTRACT_PATH.exists():
+        return
+    c = json.loads(VALVE_CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert c["status"] == "monitor_preregistered"
+    assert c["config"] == ValveConfig().to_dict()

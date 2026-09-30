@@ -20,6 +20,13 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+from stockagent_analysis.market_valve import (  # noqa: E402
+    LEVEL_CN,
+    ValveConfig,
+    daily_breadth,
+    load_contract,
+    valve_levels,
+)
 from stockagent_analysis.s20_pure import (  # noqa: E402
     CONTRACT_PATH,
     SAFE_CONTRACT_PATH,
@@ -88,6 +95,17 @@ def summarize(q: pd.DataFrame, rule, name: str) -> dict:
             "dirty_up": round(100 * float((st == "dirty_up").mean()), 1),
             "pure_down": round(100 * float((st == "pure_down").mean()), 1),
             "chop": round(100 * float((st == "chop").mean()), 1)}
+
+
+def valve_table() -> pd.DataFrame:
+    """Valve level per date: Tushare daily cache, extended by the live Sina rows."""
+    files = [p for p in sorted((ROOT / "output/tushare_cache/daily").glob("*.parquet")) if p.stem >= "20260401"]
+    b = daily_breadth(pd.concat([pd.read_parquet(p, columns=["ts_code", "trade_date", "pct_chg"]) for p in files]))
+    live = ROOT / "output/jev_market/live_market_days.csv"
+    if live.exists():
+        lv = pd.read_csv(live, dtype={"date": str})[["date", "limit_down"]].rename(columns={"date": "trade_date"})
+        b = pd.concat([b, lv[~lv.trade_date.isin(b.trade_date)]], ignore_index=True)
+    return valve_levels(b, ValveConfig())
 
 
 def main() -> int:
@@ -160,13 +178,53 @@ def main() -> int:
     srows.append(safe_metrics(new[["ts_code", "trade_date"]].merge(band, on=["ts_code", "trade_date"]), "universe"))
     sev = pd.DataFrame(srows)
     report["evaluation_safe_band_a5_b15_d10"] = sev.to_dict(orient="records")
+
+    # --- market valve (monitor mode) + counterfactuals of the pre-registered actions
+    vc = load_contract()
+    assert vc["config"] == json.loads(json.dumps(ValveConfig().to_dict())), "valve config drifted"
+    vt = valve_table().set_index("date")
+    path = pd.read_parquet(ROOT / "output/experiments/s20_pure_20260928/path_panel.parquet",
+                           columns=["ts_code", "trade_date", "up15_day", "dn10_day", "dn8_day", "ret20"])
+    band8 = pd.read_parquet(ROOT / "output/experiments/s20_pure_20260928/band_panel.parquet",
+                            columns=["ts_code", "trade_date", "ret_a5_b15_d10", "ret_a5_b15_d8"])
+    r1 = cfg.rule("U15D10")
+    v1m = lists[lists.rule == "U15D10"].merge(path, on=["ts_code", "trade_date"])
+    v1m["ret"] = exit_return(v1m.up15_day, v1m.dn10_day, v1m.ret20, r1)
+    v1m["ret_t"] = exit_return(v1m.up15_day, v1m.dn8_day, v1m.ret20, r1)
+    sfm = lists[lists.rule == "safe_v1_1"].merge(band8, on=["ts_code", "trade_date"])
+    sfm["ret"], sfm["ret_t"] = sfm.ret_a5_b15_d10 - 0.3, sfm.ret_a5_b15_d8 - 0.3
+    day = pd.DataFrame({"v1": v1m.groupby("trade_date").ret.mean(), "v1_t": v1m.groupby("trade_date").ret_t.mean(),
+                        "safe": sfm.groupby("trade_date").ret.mean(), "safe_t": sfm.groupby("trade_date").ret_t.mean()})
+    day["level"] = vt.level.reindex(day.index)
+    red, hot = day.level.eq("red"), day.level.isin(["orange", "red"])
+    cf_rows = []
+    for lst in ("v1", "safe"):
+        pol = {"none": day[lst], "A_skip_red": day[lst].where(~red, 0.0),
+               "C_tight_orange": day[lst].where(~hot, day[f"{lst}_t"])}
+        if lst == "v1":
+            pol["B_safe_red"] = day[lst].where(~red, day["safe"])
+        for k, sr in pol.items():
+            cf_rows.append({"list": lst, "action": k, "days": int(sr.notna().sum()),
+                            "affected_days": int((red if "red" in k else hot)[sr.notna()].sum()) if k != "none" else 0,
+                            "mean_sleeve": round(float(sr.mean()), 3),
+                            "worst_month": round(float(sr.groupby(sr.index.str[:6]).mean().min()), 2)})
+    cfd = pd.DataFrame(cf_rows)
+    report["valve_counterfactuals"] = cfd.to_dict(orient="records")
+    report["valve_levels_new_window"] = day.level.value_counts().to_dict()
+    print(cfd.to_string(index=False))
     print(sev.to_string(index=False))
     report["evaluation"] = {"signal_days": [EVAL_START, matured_to], "matured_days": int(ev.days.max()),
                             "promotion_review_needs": 60, "table": ev.to_dict(orient="records")}
-    (SHADOW / "shadow_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     print(ev.to_string(index=False))
 
-    md = [f"# S20-Pure v1 名单 {last}\n", "冻结合约 `config/s20_pure_v1.json`；影子运行，非投资建议。\n"]
+    valve_day = max(vt.index[vt.level != "unknown"])
+    lv = vt.loc[valve_day]
+    vcfg = ValveConfig()
+    valve_line = (f"市场预警阀门（{valve_day}，监测模式，不改名单）：**{LEVEL_CN.get(lv.level, '未知')}**，"
+                  f"近 5 日跌停合计 {int(lv.limit_down_5d)} 家（黄 ≥{vcfg.yellow_at}，橙 ≥{vcfg.orange_at}，红 ≥{vcfg.red_at}）")
+    report["latest_valve"] = {"date": valve_day, "level": lv.level, "limit_down_5d": float(lv.limit_down_5d)}
+    md = [f"# S20-Pure v1 名单 {last}\n", "冻结合约 `config/s20_pure_v1.json`；影子运行，非投资建议。\n",
+          f"\n{valve_line}\n"]
     for r in cfg.rules:
         q = lists[(lists.trade_date == last) & (lists.rule == r.name)]
         md.append(f"\n## 规则 {r.name}（止盈 +{r.take_profit:g}% / 止损 -{r.stop_loss:g}% / {r.horizon} 日，"
@@ -182,6 +240,7 @@ def main() -> int:
         md.append(f"| {i} | {x.ts_code} | {x.get('name','')} | {x.get('industry','')} | {x.stage1_probability:.3f} | "
                   f"{x.natr_pct:.2f} | {'替补' if x.fill == 'industry_substitute' else '前20'} |\n")
     (SHADOW / f"list_{last}.md").write_text("".join(md), encoding="utf-8")
+    (SHADOW / "shadow_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     print(f"latest list {last}: {SHADOW / f'list_{last}.md'}")
     return 0
 
