@@ -186,6 +186,7 @@ def main() -> int:
     # lists as served: action B (user-enabled) swaps the aggressive lists for the safe list on red days
     served = apply_actions(lists, vt.reset_index(), ValveConfig())
     served[cols].to_csv(SHADOW / "daily_lists.csv", index=False, encoding="utf-8-sig")
+    lists[[c for c in cols if c in lists.columns]].to_csv(SHADOW / "daily_lists_raw.csv", index=False, encoding="utf-8-sig")
     path = pd.read_parquet(ROOT / "output/experiments/s20_pure_20260928/path_panel.parquet",
                            columns=["ts_code", "trade_date", "up15_day", "dn10_day", "dn8_day", "ret20"])
     band8 = pd.read_parquet(ROOT / "output/experiments/s20_pure_20260928/band_panel.parquet",
