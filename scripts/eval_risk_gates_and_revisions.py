@@ -96,6 +96,28 @@ def features(keys: pd.DataFrame) -> pd.DataFrame:
     m = m[(m.ad <= m.t) & (m.pre > m.t) & (m.pre <= m.t + pd.Timedelta(days=14))]
     out["earn10"] = out.set_index(["ts_code", "trade_date"]).index.isin(m.set_index(["ts_code", "trade_date"]).index)
 
+    em_dir = ROOT / "output/news/research_reports_em"
+    if em_dir.exists() and any(em_dir.glob("*.parquet")):
+        # Eastmoney research-report history: one row per report with its date and FY EPS
+        # forecasts. FY2026 is forecast by reports from 2024 on, so it covers the whole window
+        # (next-year EPS for 2025 signal days, current-year EPS for 2026). Strictly before t.
+        em = pd.concat([pd.read_parquet(f) for f in em_dir.glob("*.parquet")], ignore_index=True)
+        if "日期" in em.columns:
+            em = em.dropna(subset=["日期"])
+            em["rd"] = pd.to_datetime(em["日期"], errors="coerce")
+            em["eps"] = pd.to_numeric(em.get("2026-盈利预测-收益"), errors="coerce")
+            em = em.dropna(subset=["rd", "eps"])
+            m = k.merge(em[["ts_code", "rd", "eps"]], on="ts_code")
+            m = m[(m.rd < m.t) & (m.rd >= m.t - pd.Timedelta(days=90))]
+            m["recent"] = m.rd >= m.t - pd.Timedelta(days=30)
+            g = m.groupby(["ts_code", "trade_date", "recent"]).eps.mean().unstack().reindex(columns=[True, False])
+            g = g.rename(columns={True: "eps_new", False: "eps_old"})
+            g["rev"] = (g.eps_new - g.eps_old) / g.eps_old.abs()
+            out = out.merge(g[["rev"]].reset_index(), on=["ts_code", "trade_date"], how="left")
+            out["rev_up"], out["rev_dn"] = out.rev > 0.02, out.rev < -0.02
+            cov = m.groupby(["ts_code", "trade_date"]).size().rename("n_reports90")
+            out = out.merge(cov, on=["ts_code", "trade_date"], how="left")
+            return out.drop(columns="t")
     rc = read("report_rc")
     if rc.empty or "eps" not in rc.columns:
         out["rev"], out["rev_up"], out["rev_dn"], out["n_reports90"] = np.nan, False, False, np.nan
