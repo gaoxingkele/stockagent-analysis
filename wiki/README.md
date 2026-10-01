@@ -24,6 +24,7 @@
 
 | 日期 | 条目 | 思想来源 (出处) | 裁决 | 一句话 |
 |------|------|----------------|------|--------|
+| 2026-10-01 | [[2026-10-01_style-audit-not-small-cap]] | DGTW 1997 特征匹配基准 / Liu-Stambaugh-Yuan 2019 | ❌/🧩 | S20 进攻版市值分位 0.66、微盘仅 16%，不是小盘；偏高换手/高成交/低 EP/高波动；扣风格后剩 +0.50pp/笔（区间含 0） |
 | 2026-09-30 | [[2026-09-30_theory-audit-and-roadmap]] | Gu-Kelly-Xiu 2020 / Leippold 2022 / Liu-Stambaugh-Yuan 2019 / Ang 2006 / Bali 2011 / Frazzini-Pedersen 2014 / Moreira-Muir 2017 / Daniel-Moskowitz 2016 / Kronos / AIPM / AlphaAgent / RD-Agent-Q | 🧩 | 振幅上限、稳健版、阀门都有成熟异象支撑；方向无理论撑腰；缺口=风格暴露未审计、阀门应连续调仓并区分恐慌阶段 |
 | 2026-09-30 | [[2026-09-30_r20-feature-store-rebuild]] | 本仓生产因子流程 / Peng, Science 2011 可复现研究 | ✅ | 因子库补到 09-28，R20 重放与生产发布逐只一致（21 天 Jaccard 1.0）；公平窗口 95 天 S20 进攻版每笔 +2.0pp [+0.2,+3.8]，但优势集中在 4–6 月，7–8 月无优势 |
 | 2026-09-29 | [[2026-09-29_market-valve-monitor]] | Engle 1982 / Bollerslev 1986 / De Bondt–Thaler 1985 / arXiv:2603.13252 | ✅监测 | 近 5 日跌停合计作普跌阀门（绿/黄/橙/红），全样本 AUC 0.59–0.64；最高警报常是恐慌尾声，开发期无动作优于不动 → 监测模式 + 3 个预登记动作；09-30 用户启用 B（红色日进攻版换稳健版） |
