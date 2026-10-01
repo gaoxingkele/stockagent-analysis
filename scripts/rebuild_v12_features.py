@@ -110,7 +110,12 @@ def rebuild_factor_lab(daily: dict, start: str, end: str, written: list) -> int:
             rows.append(new[base_cols])
         if rows:
             out = FL_EXT / f"{p.stem}_ext_rebuild.parquet"
-            pd.concat(rows, ignore_index=True).to_parquet(out, index=False)
+            new = pd.concat(rows, ignore_index=True)
+            if out.exists():   # incremental run: keep earlier dates, replace the rebuilt range
+                old = pd.read_parquet(out)
+                old["trade_date"] = old.trade_date.astype(str)
+                new = pd.concat([old[(old.trade_date < start) | (old.trade_date > end)], new], ignore_index=True)
+            new.sort_values(["ts_code", "trade_date"]).to_parquet(out, index=False)
             written.append(str(out.relative_to(ROOT)))
             total += sum(len(r) for r in rows)
         print(f"  factor_lab [{i}] {p.stem}: {sum(len(r) for r in rows)} rows", flush=True)
@@ -182,8 +187,12 @@ def main() -> int:
     print(f"2) aux day-files written {c}, kept production files {len(skipped)} ({time.time() - t0:.0f}s)", flush=True)
     man = ROOT / "output/r20_history/rebuild_manifest.json"
     man.parent.mkdir(parents=True, exist_ok=True)
-    man.write_text(json.dumps({"start": a.start, "end": a.end, "written": written, "kept_production": skipped},
-                              indent=1), encoding="utf-8")
+    runs = json.loads(man.read_text(encoding="utf-8")).get("runs", []) if man.exists() else []
+    if man.exists() and not runs:          # first manifest format: one run at top level
+        prev = json.loads(man.read_text(encoding="utf-8"))
+        runs = [{k: prev[k] for k in ("start", "end", "written", "kept_production")}]
+    runs.append({"start": a.start, "end": a.end, "written": written, "kept_production": skipped})
+    man.write_text(json.dumps({"runs": runs}, indent=1), encoding="utf-8")
     print(f"manifest -> {man}")
     return 0
 
