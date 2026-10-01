@@ -50,7 +50,14 @@ def main() -> int:
                     kw = {"trade_date": d}
                     if api in FIELDS:
                         kw["fields"] = FIELDS[api]
-                    df = getattr(pro, api)(**kw)
+                    pages, offset = [], 0
+                    while True:     # Tushare caps one query at 6000 rows: page until a short page
+                        page = getattr(pro, api)(offset=offset, limit=6000, **kw)
+                        pages.append(page)
+                        if page is None or len(page) < 6000:
+                            break
+                        offset += 6000
+                    df = pd.concat([x for x in pages if x is not None], ignore_index=True)
                     break
                 except Exception as exc:  # noqa: BLE001
                     msg = str(exc)

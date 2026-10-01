@@ -24,6 +24,7 @@
 
 | 日期 | 条目 | 思想来源 (出处) | 裁决 | 一句话 |
 |------|------|----------------|------|--------|
+| 2026-10-01 | [[2026-10-01_risk-gates]] | Frazzini-Lamont 2007 / Barber et al. JFE 2013 财报溢价 / Field-Hanka JF 2001 解禁 | ❌/⏸ | 解禁、减持、负预告、财报窗口四个排雷门均未过（对照随机剔除）；财报窗口两段一致为加分项，登记为 v1.2 候选 |
 | 2026-10-01 | [[2026-10-01_turnover-amount-ablation]] | DGTW 1997 / Liu-Stambaugh-Yuan 2019 / 本仓朴素消融纪律 | 🧩/⏸ | 去掉 16 个量能特征开发期变差（每笔 1.34→1.07）但换手偏向不变：偏向是振幅选择副产品；成交额≥5亿仍有效，容量非约束；两个候选待预登记 |
 | 2026-10-01 | [[2026-10-01_style-audit-not-small-cap]] | DGTW 1997 特征匹配基准 / Liu-Stambaugh-Yuan 2019 | ❌/🧩 | S20 进攻版市值分位 0.66、微盘仅 16%，不是小盘；偏高换手/高成交/低 EP/高波动；扣风格后剩 +0.50pp/笔（区间含 0） |
 | 2026-09-30 | [[2026-09-30_theory-audit-and-roadmap]] | Gu-Kelly-Xiu 2020 / Leippold 2022 / Liu-Stambaugh-Yuan 2019 / Ang 2006 / Bali 2011 / Frazzini-Pedersen 2014 / Moreira-Muir 2017 / Daniel-Moskowitz 2016 / Kronos / AIPM / AlphaAgent / RD-Agent-Q | 🧩 | 振幅上限、稳健版、阀门都有成熟异象支撑；方向无理论撑腰；缺口=风格暴露未审计、阀门应连续调仓并区分恐慌阶段 |
