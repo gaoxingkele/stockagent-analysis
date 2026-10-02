@@ -39,7 +39,8 @@ def run(args: list[str]) -> str:
 
 def notices_complete() -> bool:
     have = {p.stem for p in (ROOT / "output/news/notices").glob("*.parquet")}
-    need = pd.bdate_range(WIN_START, WIN_END).strftime("%Y%m%d")
+    # trading days only: Eastmoney returns nothing on exchange holidays, so no file is written
+    need = [p.stem for p in (ROOT / "output/tushare_cache/daily").glob("*.parquet") if WIN_START <= p.stem <= WIN_END]
     missing = [d for d in need if d not in have]
     return not missing
 
