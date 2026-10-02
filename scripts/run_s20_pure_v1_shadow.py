@@ -200,16 +200,22 @@ def main() -> int:
     day = pd.DataFrame({"v1": v1m.groupby("trade_date").ret.mean(), "v1_t": v1m.groupby("trade_date").ret_t.mean(),
                         "safe": sfm.groupby("trade_date").ret.mean(), "safe_t": sfm.groupby("trade_date").ret_t.mean()})
     day["level"] = vt.level.reindex(day.index)
+    rg = pd.read_parquet(ROOT / "output/regimes/daily_regime.parquet")
+    regime = rg.assign(trade_date=rg.trade_date.astype(str)).set_index("trade_date").regime_id
+    day["regime"] = regime.reindex(day.index)
     red, hot = day.level.eq("red"), day.level.isin(["orange", "red"])
+    sideways = day.regime.eq(5)          # pre-registered action D (2026-10-02), counterfactual only
     cf_rows = []
     for lst in ("v1", "safe"):
         pol = {"none": day[lst], "A_skip_red": day[lst].where(~red, 0.0),
-               "C_tight_orange": day[lst].where(~hot, day[f"{lst}_t"])}
+               "C_tight_orange": day[lst].where(~hot, day[f"{lst}_t"]),
+               "D_skip_sideways": day[lst].where(~sideways, 0.0)}
         if lst == "v1":
             pol["B_safe_red"] = day[lst].where(~red, day["safe"])
         for k, sr in pol.items():
+            affected = sideways if k == "D_skip_sideways" else (red if "red" in k else hot)
             cf_rows.append({"list": lst, "action": k, "days": int(sr.notna().sum()),
-                            "affected_days": int((red if "red" in k else hot)[sr.notna()].sum()) if k != "none" else 0,
+                            "affected_days": int(affected[sr.notna()].sum()) if k != "none" else 0,
                             "mean_sleeve": round(float(sr.mean()), 3),
                             "worst_month": round(float(sr.groupby(sr.index.str[:6]).mean().min()), 2)})
     cfd = pd.DataFrame(cf_rows)

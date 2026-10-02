@@ -312,7 +312,8 @@
   "preregistered_actions": {
     "A_skip_red": "red: open no new sleeve that day (both lists)",
     "B_safe_red": "red: v1 users receive the v1.1 safe list instead",
-    "C_tight_orange": "orange or red: stop at -8% instead of -10% for that day's sleeve"
+    "C_tight_orange": "orange or red: stop at -8% instead of -10% for that day's sleeve",
+    "D_skip_sideways": "HS300 regime_id == 5 (sideways: |20d return| < 3% and Bollinger width < 8): open no new sleeve that day (both lists); registered 2026-10-02 from wiki/2026-10-02_segment-backtest-sideways-regime.md"
   },
   "promotion_rule": "after >= 60 matured signal days from 20260806, an action is enabled only if it beats 'none' on mean sleeve return AND worst month for the list it applies to"
 }
