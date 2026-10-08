@@ -1,0 +1,64 @@
+{
+  "project": "stockagent-analysis",
+  "tiers": [
+    "formal",
+    "prospective",
+    "holdout_once",
+    "reused_holdout",
+    "in_sample",
+    "judge"
+  ],
+  "protected": [
+    {
+      "path": ".metarsi/constitution.json",
+      "min_tier": "formal",
+      "human": true,
+      "note": "宪法文件只由人修改。"
+    },
+    {
+      "path": "config/s20_pure_v1.json",
+      "min_tier": "prospective",
+      "human": true,
+      "note": "S20-Pure v1 冻结合约"
+    },
+    {
+      "path": "config/s20_pure_v1_1_safe.json",
+      "min_tier": "prospective",
+      "human": true,
+      "note": "S20-Pure v1.1 稳健版冻结合约"
+    },
+    {
+      "path": "config/s20_pure_valve_v1.json",
+      "min_tier": "prospective",
+      "human": true,
+      "note": "市场阀门合约"
+    },
+    {
+      "path": "config/pool_a_r20_target_v1.json",
+      "min_tier": "prospective",
+      "human": true,
+      "note": "R20 池 A 合约"
+    },
+    {
+      "path": "output/production/*",
+      "min_tier": "prospective",
+      "human": true,
+      "note": "生产与冻结模型权重"
+    }
+  ],
+  "default_min_tier": "holdout_once",
+  "invariants": [
+    "模型或评审的意见不能作为改动受保护面的证据。",
+    "在某段数据上发现的规则，不能用同一段数据确认。",
+    "保留窗口只用于给读取之前就登记好的规则计分。",
+    "不自动更改股票冻结合约、交易动作或发出的名单。",
+    "JEV 与任何模型评审只算 judge 级意见。",
+    "2026-08-06 起的信号日是保留窗口，只用于给事先登记的影子规则计分，且要满 60 个成熟信号日。",
+    "报每笔收益时写明是名单口径还是账户口径。"
+  ],
+  "calendar": {
+    "glob": "output/tushare_cache/daily/*.parquet",
+    "horizon": 20,
+    "note": "交易日历取日线缓存的文件名；信号日之后满 20 个交易日算成熟"
+  }
+}
