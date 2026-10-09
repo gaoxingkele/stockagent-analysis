@@ -375,3 +375,9 @@ S0016 登记（三旗≥2 减半仓、最后买），S0005 结；已用窗口风
 
 - 出处：[wiki/2026-10-07_deployable-combination-summary.md](../../wiki/2026-10-07_deployable-combination-summary.md)
 
+## [2026-10-09] E0051 | S20 的推荐评分也用 100 分制
+
+全市场分沿用 V12 锚定（P5→0/P50→50/P95→90/P99.5→100），名单内饱和到 99.9~100，故并列池内分（前100池名次换算）；688010 全市场 58.6；10-09 名单池内分 99~73；只改显示
+
+- 出处：[wiki/2026-10-07_deployable-combination-summary.md](../../wiki/2026-10-07_deployable-combination-summary.md)
+

@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 from run_s20_pure_v1_shadow import SHADOW, daily_natr, load_factors, valve_table  # noqa: E402
 from stockagent_analysis.market_valve import LEVEL_CN  # noqa: E402
+from stockagent_analysis.s20_display import s20_pool_score, s20_score_100  # noqa: E402
 from stockagent_analysis.s20_pure import PureConfig, _frozen_models, stage1_probability  # noqa: E402
 
 DEFAULT_SEMAS = Path(os.environ.get("SEMAS_PINNED", "C:/Users/apple/AppData/Local/Temp/claude/C--aicoding-stockagent-analysis/"
@@ -100,8 +101,10 @@ def main() -> int:
     day = a.date or f.trade_date.max()
     f = f[f.trade_date == day].copy()
     f["stage1_probability"] = stage1_probability(f)
+    f["score_100"] = s20_score_100(f)
     f = f.merge(daily_natr("20260901"), on=["ts_code", "trade_date"], how="left")
     f["pool_rank"] = f.stage1_probability.rank(ascending=False, method="first")
+    f["score_pool"] = s20_pool_score(f.pool_rank, cfg.pool_size)
     pool = f[f.pool_rank <= cfg.pool_size].copy()
     pool["natr_pct_in_pool"] = pool.natr14.rank(pct=True)
     surv = pool[pool.natr_pct_in_pool.isna() | (pool.natr_pct_in_pool <= 0.60)].copy()
@@ -114,8 +117,9 @@ def main() -> int:
     name = me.get("name", "")
     lines = [f"# {code} {name}  signal day {day}  (scored after the close; entry would be the next open)", "",
              "## S20-Pure v1 (frozen contract)"]
-    lines.append(f"- stage1 score {me.stage1_probability:.4f}; market rank {int(me.pool_rank)} of {len(f)} "
-                 f"(top {100 * me.pool_rank / len(f):.1f}%)")
+    lines.append(f"- S20 market score {me.score_100:.1f} / 100 (V12-style anchors on the day's market: P5=0, P50=50, P95=90, P99.5=100); "
+                 f"pool score {'%.0f' % me.score_pool if pd.notna(me.score_pool) else 'n/a (outside the top-100 pool)'}; "
+                 f"stage1 {me.stage1_probability:.4f}; market rank {int(me.pool_rank)} of {len(f)} (top {100 * me.pool_rank / len(f):.1f}%)")
     in_pool = code in set(pool.ts_code)
     in_surv = code in set(surv.ts_code)
     lr = int(surv.loc[surv.ts_code == code, "list_rank"].iloc[0]) if in_surv else None
@@ -126,7 +130,11 @@ def main() -> int:
                  (f"no, survivor rank {lr} (needs <= {cfg.top_k})" if lr else "no")))
     cut20 = surv[surv.list_rank == cfg.top_k].stage1_probability
     if len(cut20):
-        lines.append(f"- score of the 20th name today {cut20.iloc[0]:.4f}; gap {me.stage1_probability - cut20.iloc[0]:+.4f}")
+        s20th = surv.loc[surv.list_rank == cfg.top_k, "score_100"].iloc[0]
+        lines.append(f"- the 20th name today: market score {s20th:.1f}, pool score {surv.loc[surv.list_rank == cfg.top_k, 'score_pool'].iloc[0]:.0f} "
+                     f"(stage1 {cut20.iloc[0]:.4f}); gap {me.score_100 - s20th:+.1f} market points")
+    top = surv[surv.list_rank <= cfg.top_k].sort_values("list_rank")
+    lines.append("- today's list (pool score / market score): " + ", ".join(f"{int(x.list_rank)}.{x.ts_code}{x.get('name', '')} {x.score_pool:.0f}/{x.score_100:.1f}" for _, x in top.iterrows()))
 
     lines += ["", "## Market layers on the day"]
     hs, cy = index_close("000300.SH"), index_close("399006.SZ")

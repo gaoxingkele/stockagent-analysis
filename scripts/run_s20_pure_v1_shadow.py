@@ -28,6 +28,7 @@ from stockagent_analysis.market_valve import (  # noqa: E402
     load_contract,
     valve_levels,
 )
+from stockagent_analysis.s20_display import s20_pool_score, s20_score_100  # noqa: E402
 from stockagent_analysis.s20_pure import (  # noqa: E402
     CONTRACT_PATH,
     SAFE_CONTRACT_PATH,
@@ -142,9 +143,11 @@ def main() -> int:
 
     # --- daily lists
     new = f[f.trade_date >= EVAL_START].copy()
+    new["score_100"] = s20_score_100(new)       # display only: V12-style 0-100 on the day's full market
+    new["score_pool"] = s20_pool_score(new.groupby("trade_date")["stage1_probability"].rank(ascending=False, method="first"), cfg.pool_size)
     lists = pd.concat([select(new, cfg, r.name) for r in cfg.rules] + [select_safe(new, safe_cfg)],
                       ignore_index=True)
-    cols = ["trade_date", "rule", "list_rank", "ts_code", "name", "industry", "stage1_probability",
+    cols = ["trade_date", "rule", "list_rank", "ts_code", "name", "industry", "stage1_probability", "score_100", "score_pool",
             "pool_rank", "natr14", "natr_pct_in_pool", "natr_pct", "fill"]
     cols = [c for c in cols if c in lists.columns] + ["valve_level", "served_by"]
     last = lists.trade_date.max()
