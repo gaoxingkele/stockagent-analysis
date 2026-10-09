@@ -61,3 +61,15 @@
 
 ## 会话记录（2026-10-07）
 用户说：好的，总结一下目前可上线测试验证的算法组合。我查了账本（5 条未结影子，S0010 为主，成熟 19/60）和影子运行目录（最新名单 2026-09-30，未接进每日任务），按「主线 / 影子 / 候选 / 持仓建议 / 模型 / 上线缺口 / 验收」整理成本页。
+
+## 8. 换到另一台电脑运行（2026-10-09 补）
+用户说：把所有变动、所有内容都推上去，实际运行在另一台电脑。已推送三次提交：a815cdb13（代码、wiki、账本、小报告）、6ae431159（探索方向页）、2aab957f8（全部数据缓存与中间结果，约 1.76 GB，经 LFS）。推送前用 `.env` 里的每个值扫过全部未跟踪文本文件，无命中。
+
+另一台电脑需要自己准备、不在本仓库 git 里的东西：
+1. `git lfs install` 后 `git clone` / `git lfs pull`，切到 `experiment/s20-first-passage-v1`。
+2. `.env`：至少 `TUSHARE_TOKEN`（被 `.gitignore` 排除）。JEV 的密钥在 `C:/aicoding/jev.env.txt` 或环境变量。
+3. `C:/aicoding/mylib`（另一个仓库 gaoxingkele/mylib）：metaRSI（`skills/meta-rsi`，账本命令和钩子）与 JEV（`skills/jev-help-decide`）。`scripts/analyze_s20_scissors.py`、`scripts/register_s20_models_metarsi.py` 写死了这个路径。
+4. `.claude/settings.json`（被 `.gitignore` 排除）：会话开始和每次发消息时运行 metaRSI 钩子；新机器上要重新建，内容是 `python "C:/aicoding/mylib/skills/meta-rsi/scripts/metarsi.py" hook`。
+5. SEMAS 仓库（`C:/aicoding/SEMAS`，固定提交 b50aa062）：`evaluate_semas_factors.py` 读清单文件，并需要 `--semas` 指向从该提交取出的 `china_a_share_alpha/factor` 包；S0016 的 F01、F20 每日计算也依赖它。
+6. Python 依赖：pandas、pyarrow、lightgbm、scikit-learn、tushare、python-dotenv、TA-Lib（`talib`）。
+7. 生产任务 `scripts/run_daily_pools.ps1` 写死的是 `D:\aicoding\...` 路径；S20 影子运行还没有接进去。
