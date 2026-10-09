@@ -363,3 +363,9 @@ S0016 登记（三旗≥2 减半仓、最后买），S0005 结；已用窗口风
 - 遗留：每日运行脚本
 - 出处：[wiki/2026-10-07_deployable-combination-summary.md](../../wiki/2026-10-07_deployable-combination-summary.md)
 
+## [2026-10-09] E0049 | 拉取最新数据，跑 688010 的分数
+
+补数据到 10-09（日线等、市场状态逐日比对一致后追加、因子库重建并 20/20 复现）；688010 stage1 第 1170/5041，不在前 100、不在名单；当天风格门关、三态下行、阀门橙
+
+- 出处：[wiki/2026-10-07_deployable-combination-summary.md](../../wiki/2026-10-07_deployable-combination-summary.md)
+
