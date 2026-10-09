@@ -369,3 +369,9 @@ S0016 登记（三旗≥2 减半仓、最后买），S0005 结；已用窗口风
 
 - 出处：[wiki/2026-10-07_deployable-combination-summary.md](../../wiki/2026-10-07_deployable-combination-summary.md)
 
+## [2026-10-09] E0050 | 688010 的 V12.31 / R20 版本评分
+
+跑生产数据更新到 10-09（市场状态逐行一致、无兜底），V12 评分 09-30 逐只复现生产导出；688010 r20_pred +5.71% 第 482，预测最大涨 +16.5%/回撤 -9.2%，不在池 A（9 只）与 V12.31 Top20（6 只），V7c 可参选未推荐
+
+- 出处：[wiki/2026-10-07_deployable-combination-summary.md](../../wiki/2026-10-07_deployable-combination-summary.md)
+
