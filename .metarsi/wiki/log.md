@@ -381,3 +381,9 @@ S0016 登记（三旗≥2 减半仓、最后买），S0005 结；已用窗口风
 
 - 出处：[wiki/2026-10-07_deployable-combination-summary.md](../../wiki/2026-10-07_deployable-combination-summary.md)
 
+## [2026-10-10] E0052 | 根据最新数据跑 R20、S20 最佳推荐分数和各自 ratio
+
+10-09：R20 池A 9 只（7 只软件）、V12.31 Top20 6 只；S20 进攻版 17/20 半导体，富瀚微、气派科技触发 S0016；ratio 全在 2~3；两体系无交集；风格门关、三态下行、阀门橙
+
+- 出处：[wiki/2026-10-07_deployable-combination-summary.md](../../wiki/2026-10-07_deployable-combination-summary.md)
+
