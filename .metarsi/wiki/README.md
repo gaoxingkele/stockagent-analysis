@@ -25,7 +25,7 @@
 - 审计问题更少的候选模型：s20_unified_v1、s20_unified_v2、pump_v5_shape。要替换先看 model diagnose，再登记成影子在保留窗口上并行验证
 - 现在可以做：记录问答、试验和否决项；做描述性分析（只能算 in_sample 或 reused_holdout）；整理 wiki；可以把新想法登记成影子规则
 - 现在不做：在已用过的窗口上搜新规则并当作验证；读保留窗口；改受保护面
-- 已疲劳的类别：day-gate、in-list-filter/R、in-list-filter/S、model-routing、s20-model、s20-model-audit
+- 已疲劳的类别：day-gate、in-list-filter/R、in-list-filter/S、list-combination、model-routing、s20-model、s20-model-audit
 
 ## 当前状态
 
@@ -34,12 +34,12 @@
 | 窗口 | 起 | 止 | 状态 | 试验数 | 同类问题已比较的规则数（需要的 /t/） |
 |---|---|---|---|---:|---|
 | dev_20250303_20260126 | 20250303 | 20260126 | consumed | 8 | in-list-filter/S: 133 条（3.56）；in-list-filter/R: 11 条（2.84）；s20-model-audit: 4 条（2.50）；s20-model: 2 条（2.24） |
-| confirm_20260127_20260805 | 20260127 | 20260805 | consumed | 43 | in-list-filter/S: 148 条（3.58）；in-list-filter/R: 22 条（3.05）；list-turnover/S: 2 条（2.24）；s20-model-audit: 1 条（1.96）；s20-model: 3 条（2.39）；model-routing: 5 条（2.58）；day-gate: 61 条（3.35）；pump-model: 4 条（2.50）；mean-reversion: 3 条（2.39）；intraday: 32 条（3.16）；external-factors: 42 条（3.24）；risk-flag: 1 条（1.96）；list-combination: 2 条（2.24） |
+| confirm_20260127_20260805 | 20260127 | 20260805 | consumed | 45 | in-list-filter/S: 148 条（3.58）；in-list-filter/R: 22 条（3.05）；list-turnover/S: 2 条（2.24）；s20-model-audit: 1 条（1.96）；s20-model: 3 条（2.39）；model-routing: 5 条（2.58）；day-gate: 61 条（3.35）；pump-model: 4 条（2.50）；mean-reversion: 3 条（2.39）；intraday: 32 条（3.16）；external-factors: 42 条（3.24）；risk-flag: 1 条（1.96）；list-combination: 10 条（2.81） |
 | reserved_20260806_plus | 20260806 |  | reserved | 0 |  |
 
 - 未结的影子规则：5 条；主规则：S0010
 - 等人批准的提议：0 条
-- 试验 52 条，否决 24 条，问答 54 条
+- 试验 54 条，否决 25 条，问答 55 条
 - 校准：在较弱等级上显著、又在更强等级上复验过的结果 3 条，其中成立 0 条
 - 账本链：完整
 
