@@ -210,3 +210,8 @@
 - 说明：用户 2026-10-08：C:/aicoding/SEMAS/FACTOR_5D_SHARPE_GT_1_5.md 的候选因子试试看
 - 状态：已处理 见 wiki/2026-10-08_semas-5d-factors-on-s20.md：F01、F20 为 S20 风险信号候选
 
+### `G0028` request：daily-pools-a-s
+- 时间：2026-10-10，ewanlin
+- 说明：keep R20 pool A, add S20 contract list as pool S, drop V12.31 from daily report
+- 状态：已处理 daily_best_lists.py now shows pool A + pool S; display only
+

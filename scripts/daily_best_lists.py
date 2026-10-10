@@ -1,14 +1,14 @@
 #!/usr/bin/env python
-"""The day's best recommendations of R20 (V12.31) and S20 (S20-Pure v1), with scores and pump ratio.
+"""The day's two pools, R20 pool A and S20 pool S, with scores and pump ratio.
 
   python scripts/daily_best_lists.py [--date YYYYMMDD] [--no-flags]
 
-R20: V12Scorer.score_market (production, unchanged) -> pool A (config/pool_a_r20_target_v1.json), the R20
-     representative list (user 2026-10-10), and the V12.31 Top20 (V7c main pool by ratio, industry cap 4)
-     shown for reference, as in export_r20_pool_a_history.py.
-S20: frozen stage1 + funnel (config/s20_pure_v1.json) -> offensive list U15D10, and the safe list v1.1;
-     valve (config/s20_pure_valve_v1.json) action B on red days. Scores on 0-100: market score (V12
-     anchors) and pool score (rank in the stage1 top 100).
+Pool A (R20): V12Scorer.score_market (production, unchanged) -> config/pool_a_r20_target_v1.json, as in
+     export_r20_pool_a_history.py. The V12.31 Top20 is no longer shown (user 2026-10-10).
+Pool S (S20): the current contract list as served, frozen stage1 + funnel (config/s20_pure_v1.json) ->
+     offensive list U15D10; on valve red days (config/s20_pure_valve_v1.json, action B) the safe list v1.1
+     is served instead. The safe list is also shown on its own. Scores on 0-100: market score (V12
+     anchors) and pool score (rank in the stage1 top 100). Neither pool's contract is changed here.
 ratio = pump v3c P(up) / (P(down) + 0.01), the same number for both systems.
 Shadow layers on the day (not live): style gate S0010, CSI300 phase S0007, risk flags S0016.
 Needs the caches, regimes, S20 factor store and the V12 feature pipeline up to the day.
@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 from export_pump_history import stale_groups  # noqa: E402
-from export_r20_pool_a_history import pool_a, v12_top20  # noqa: E402
+from export_r20_pool_a_history import pool_a  # noqa: E402
 from run_s20_pure_v1_shadow import SHADOW, daily_natr, load_factors, valve_table  # noqa: E402
 from score_s20_stock import DEFAULT_SEMAS, index_close, last_hour, semas_factors  # noqa: E402
 from stockagent_analysis.market_valve import LEVEL_CN  # noqa: E402
@@ -85,8 +85,6 @@ def main() -> int:
     safe = select_safe(f, safe_cfg).merge(pump, on="ts_code", how="left")
     A = pool_a(v12).reset_index(drop=True)
     A["rank"] = np.arange(1, len(A) + 1)
-    V = v12_top20(v12).reset_index(drop=True)
-    V["rank"] = np.arange(1, len(V) + 1)
 
     hs, cy = index_close("000300.SH"), index_close("399006.SZ")
     r20h, r60h = hs.loc[day] / hs.shift(20).loc[day] - 1, hs.loc[day] / hs.shift(60).loc[day] - 1
@@ -110,42 +108,46 @@ def main() -> int:
         except Exception as err:  # noqa: BLE001
             flags_note = f"（风险旗未算出：{err}）"
 
-    md = [f"# R20 / S20 最佳推荐 {day}", "",
+    red = level == "red"
+    safe = safe.reset_index(drop=True)
+    safe["n"] = np.arange(1, len(safe) + 1)
+    S = safe if red else off                      # pool S as served (valve action B)
+    md = [f"# 池 A（R20）/ 池 S（S20）{day}", "",
           "收盘后计算，次日开盘可执行。冻结合约与生产规则未改；影子层只作参考。非投资建议。", "",
           "## 当天盘面", "",
-          f"- 阀门：**{LEVEL_CN.get(level, level)}**" + ("（动作 B：进攻版改用稳健版）" if level == "red" else ""),
+          f"- 阀门：**{LEVEL_CN.get(level, level)}**" + ("（动作 B 触发：池 S 今天由稳健版替代）" if red else ""),
           f"- S0010 风格门（主影子）：创业板 20 日 {100 * r20c:+.2f}% 对 沪深300 {100 * r20h:+.2f}% → **{'开' if r20c > r20h else '关（不建新仓）'}**",
           f"- S0007 三态：沪深300 20 日 {100 * r20h:+.2f}%、60 日 {100 * r60h:+.2f}% → **{phase}**",
           f"- V12 特征当天是否齐全：{'是' if not stale else '否，缺 ' + ', '.join(stale)}",
           "",
           "ratio = pump v3c P(涨)/(P(跌)+0.01)；括号内为全市场 ratio 名次。2～5 为池 A 历史上较好的一段，>5 为 P(跌)≈0 的分母放大段。", ""]
-    md += [f"## R20（代表）· 池 A（{len(A)} 只；r20 预测或最大涨幅 ≥25% 且最大回撤 ≥ −15%）", ""]
+    md += [f"## 池 A · R20（{len(A)} 只；r20 预测或最大涨幅 ≥25% 且最大回撤 ≥ −15%）", ""]
     md += table(A.head(30), [("#", "rank", "{:.0f}"), ("代码", "ts_code", ""), ("名称", "name", ""), ("行业", "industry", ""),
                              ("买分", "buy_r20_score", "{:.1f}"), ("r20 预测%", "r20_pred", "{:+.2f}"),
                              ("最大涨%", "pred_max_gain_20", "{:+.1f}"), ("最大回撤%", "pred_max_dd_20", "{:+.1f}"),
                              ("ratio", "ratio", "{:.2f}"), ("ratio 名次", "ratio_rank", "{:.0f}")])
-    md += ["", f"## 参考 · V12.31 Top20（{len(V)} 只；V7c 主推池按 ratio 排序，单行业 ≤4；历史上弱于池 A，仅作参考）", ""]
-    md += table(V, [("#", "rank", "{:.0f}"), ("代码", "ts_code", ""), ("名称", "name", ""), ("行业", "industry", ""),
-                    ("ratio", "ratio", "{:.2f}"), ("P(涨)", "pump_score", "{:.3f}"), ("P(跌)", "pump_down_score", "{:.3f}"),
-                    ("买分", "buy_r20_score", "{:.1f}"), ("r20 预测%", "r20_pred", "{:+.2f}")])
     cols = [("#", "list_rank", "{:.0f}"), ("代码", "ts_code", ""), ("名称", "name", ""), ("行业", "industry", ""),
             ("池内分", "score_pool", "{:.0f}"), ("全市场分", "score_100", "{:.1f}"), ("stage1", "stage1_probability", "{:.3f}"),
             ("ratio", "ratio", "{:.2f}"), ("ratio 名次", "ratio_rank", "{:.0f}"), ("NATR", "natr14", "{:.3f}")]
     if "flags" in off:
         cols += [("风险旗", "flags", "{:.0f}"), ("S0016", "risk", "")]
-    md += ["", f"## S20 · 进攻版 U15D10（前 100 → 剪 NATR 最高 40% → 前 20；+15%/−10%/20 日）{flags_note}", ""]
-    md += table(off, cols)
-    safe = safe.reset_index(drop=True)
-    safe["n"] = np.arange(1, len(safe) + 1)
-    md += ["", f"## S20 · 稳健版 v1.1（全市场波动最低 {int(safe_cfg.natr_pct_max * 100)}% → stage1 → 前 {safe_cfg.top_k}，单行业 ≤{safe_cfg.industry_cap}）", ""]
-    md += table(safe, [("#", "n", "{:.0f}"), ("代码", "ts_code", ""), ("名称", "name", ""), ("行业", "industry", ""),
-                       ("全市场分", "score_100", "{:.1f}"), ("stage1", "stage1_probability", "{:.3f}"),
-                       ("ratio", "ratio", "{:.2f}"), ("ratio 名次", "ratio_rank", "{:.0f}")])
-    both = sorted(set(off.ts_code) & set(A.ts_code))
-    ref = sorted(set(off.ts_code) & set(V.ts_code))
-    md += ["", "## 交集", "", f"- S20 进攻版 ∩ R20 池 A：{', '.join(both) if both else '无'}；∩ V12.31 Top20（参考）：{', '.join(ref) if ref else '无'}",
-           f"- ratio 中位数：S20 进攻版 {off.ratio.median():.2f}，池 A {A.ratio.median() if len(A) else float('nan'):.2f}，"
-           f"V12.31 Top20 {V.ratio.median() if len(V) else float('nan'):.2f}，全市场 {v12.ratio.median():.2f}"]
+    safe_cols = [("#", "n", "{:.0f}"), ("代码", "ts_code", ""), ("名称", "name", ""), ("行业", "industry", ""),
+                 ("全市场分", "score_100", "{:.1f}"), ("stage1", "stage1_probability", "{:.3f}"),
+                 ("ratio", "ratio", "{:.2f}"), ("ratio 名次", "ratio_rank", "{:.0f}")]
+    safe_desc = f"全市场波动最低 {int(safe_cfg.natr_pct_max * 100)}% → stage1 → 前 {safe_cfg.top_k}，单行业 ≤{safe_cfg.industry_cap}"
+    if red:
+        md += ["", f"## 池 S · S20（今天红灯，按动作 B 发稳健版 v1.1：{safe_desc}）", ""]
+        md += table(safe, safe_cols)
+        md += ["", f"### 进攻版 U15D10（今天不发，仅供对照）{flags_note}", ""]
+        md += table(off, cols)
+    else:
+        md += ["", f"## 池 S · S20 合约名单（进攻版 U15D10：前 100 → 剪 NATR 最高 40% → 前 20；+15%/−10%/20 日）{flags_note}", ""]
+        md += table(off, cols)
+        md += ["", f"### 稳健版 v1.1（{safe_desc}；红灯日替代池 S）", ""]
+        md += table(safe, safe_cols)
+    both = sorted(set(S.ts_code) & set(A.ts_code))
+    md += ["", "## 两池交集", "", f"- 池 S ∩ 池 A：{', '.join(both) if both else '无'}（历史上两池几乎不重合，合并或嵌套都没有提升，见 wiki 2026-10-10）",
+           f"- ratio 中位数：池 S {S.ratio.median():.2f}，池 A {A.ratio.median() if len(A) else float('nan'):.2f}，全市场 {v12.ratio.median():.2f}"]
     text = "\n".join(md) + "\n"
     out = ROOT / "output/experiments/daily_best" / f"best_{day}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
