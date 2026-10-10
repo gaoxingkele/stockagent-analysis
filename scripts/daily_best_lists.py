@@ -3,8 +3,9 @@
 
   python scripts/daily_best_lists.py [--date YYYYMMDD] [--no-flags]
 
-R20: V12Scorer.score_market (production, unchanged) -> pool A (config/pool_a_r20_target_v1.json) and the
-     V12.31 Top20 (V7c main pool by ratio, industry cap 4), as in export_r20_pool_a_history.py.
+R20: V12Scorer.score_market (production, unchanged) -> pool A (config/pool_a_r20_target_v1.json), the R20
+     representative list (user 2026-10-10), and the V12.31 Top20 (V7c main pool by ratio, industry cap 4)
+     shown for reference, as in export_r20_pool_a_history.py.
 S20: frozen stage1 + funnel (config/s20_pure_v1.json) -> offensive list U15D10, and the safe list v1.1;
      valve (config/s20_pure_valve_v1.json) action B on red days. Scores on 0-100: market score (V12
      anchors) and pool score (rank in the stage1 top 100).
@@ -118,12 +119,12 @@ def main() -> int:
           f"- V12 特征当天是否齐全：{'是' if not stale else '否，缺 ' + ', '.join(stale)}",
           "",
           "ratio = pump v3c P(涨)/(P(跌)+0.01)；括号内为全市场 ratio 名次。2～5 为池 A 历史上较好的一段，>5 为 P(跌)≈0 的分母放大段。", ""]
-    md += [f"## R20 · 池 A（{len(A)} 只；r20 预测或最大涨幅 ≥25% 且最大回撤 ≥ −15%）", ""]
+    md += [f"## R20（代表）· 池 A（{len(A)} 只；r20 预测或最大涨幅 ≥25% 且最大回撤 ≥ −15%）", ""]
     md += table(A.head(30), [("#", "rank", "{:.0f}"), ("代码", "ts_code", ""), ("名称", "name", ""), ("行业", "industry", ""),
                              ("买分", "buy_r20_score", "{:.1f}"), ("r20 预测%", "r20_pred", "{:+.2f}"),
                              ("最大涨%", "pred_max_gain_20", "{:+.1f}"), ("最大回撤%", "pred_max_dd_20", "{:+.1f}"),
                              ("ratio", "ratio", "{:.2f}"), ("ratio 名次", "ratio_rank", "{:.0f}")])
-    md += ["", f"## R20 · V12.31 Top20（{len(V)} 只；V7c 主推池按 ratio 排序，单行业 ≤4）", ""]
+    md += ["", f"## 参考 · V12.31 Top20（{len(V)} 只；V7c 主推池按 ratio 排序，单行业 ≤4；历史上弱于池 A，仅作参考）", ""]
     md += table(V, [("#", "rank", "{:.0f}"), ("代码", "ts_code", ""), ("名称", "name", ""), ("行业", "industry", ""),
                     ("ratio", "ratio", "{:.2f}"), ("P(涨)", "pump_score", "{:.3f}"), ("P(跌)", "pump_down_score", "{:.3f}"),
                     ("买分", "buy_r20_score", "{:.1f}"), ("r20 预测%", "r20_pred", "{:+.2f}")])
@@ -140,8 +141,9 @@ def main() -> int:
     md += table(safe, [("#", "n", "{:.0f}"), ("代码", "ts_code", ""), ("名称", "name", ""), ("行业", "industry", ""),
                        ("全市场分", "score_100", "{:.1f}"), ("stage1", "stage1_probability", "{:.3f}"),
                        ("ratio", "ratio", "{:.2f}"), ("ratio 名次", "ratio_rank", "{:.0f}")])
-    both = sorted(set(off.ts_code) & (set(A.ts_code) | set(V.ts_code)))
-    md += ["", "## 交集", "", f"- S20 进攻版 ∩ R20（池 A 或 V12.31 Top20）：{', '.join(both) if both else '无'}",
+    both = sorted(set(off.ts_code) & set(A.ts_code))
+    ref = sorted(set(off.ts_code) & set(V.ts_code))
+    md += ["", "## 交集", "", f"- S20 进攻版 ∩ R20 池 A：{', '.join(both) if both else '无'}；∩ V12.31 Top20（参考）：{', '.join(ref) if ref else '无'}",
            f"- ratio 中位数：S20 进攻版 {off.ratio.median():.2f}，池 A {A.ratio.median() if len(A) else float('nan'):.2f}，"
            f"V12.31 Top20 {V.ratio.median() if len(V) else float('nan'):.2f}，全市场 {v12.ratio.median():.2f}"]
     text = "\n".join(md) + "\n"
