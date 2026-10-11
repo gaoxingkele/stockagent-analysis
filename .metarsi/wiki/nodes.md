@@ -215,3 +215,8 @@
 - 说明：keep R20 pool A, add S20 contract list as pool S, drop V12.31 from daily report
 - 状态：已处理 daily_best_lists.py now shows pool A + pool S; display only
 
+### `G0030` request：s20-alt-designs
+- 时间：2026-10-11，ewanlin
+- 说明：用户 2026-10-11：五个新方向都试（ATR 单位标签、行业超额标签、解禁/融资/龙虎榜、执行层、出场变体），并重新思考方向×波动双重筛选
+- 状态：已处理 20 rules tried, T0055-T0074; none beat frozen in both segments; wiki 2026-10-11_s20-alt-designs-trial
+
