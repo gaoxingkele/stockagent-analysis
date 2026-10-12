@@ -410,3 +410,9 @@ V12.31 Top20（5 月上线，V7c 铁律池按 pump ratio 排序，抄底+启动�
 
 - 出处：[wiki/2026-10-12_workbuddy-double-bottom-vs-r20-s20.md](../../wiki/2026-10-12_workbuddy-double-bottom-vs-r20-s20.md)
 
+## [2026-10-12] E0057 | R/S 前100 成功案例之前是否都出现过某种双底形态
+
+成功者 96-99% 有，失败者 92-99% 也有，市场 98%；单形态无稳定区分；仅 R20 池布林带底部回转两段为负
+
+- 出处：[wiki/2026-10-12_success-precursors-bottom-patterns.md](../../wiki/2026-10-12_success-precursors-bottom-patterns.md)
+
