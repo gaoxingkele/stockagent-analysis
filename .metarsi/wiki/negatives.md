@@ -226,3 +226,10 @@
 - 出处：[wiki/2026-10-12_bottom-pattern-lab.md](../../wiki/2026-10-12_bottom-pattern-lab.md)
 - 记录：2026-10-12，agent
 
+## `N0033` 用 WorkBuddy/通达信日线双底（W底）规则全市场选股，或在其命中名单里用 S20/R20 排序
+- 原因：复现规则两段不同号（S1 -0.40 / S2 +0.27 vs 市场），严格筛选两段为负；S20 在命中名单里排序无效（IC≈0），R20 弱正但不显著（top10 vs 全部 OOS +0.21 t 0.3）
+- 教训：外部底部形态名单与 S20 动量池几乎不重合；R20 对这类名单打分偏低；证据等级 reused_holdout，规则为近似复现
+- 相关试验：无
+- 出处：[wiki/2026-10-12_workbuddy-double-bottom-vs-r20-s20.md](../../wiki/2026-10-12_workbuddy-double-bottom-vs-r20-s20.md)
+- 记录：2026-10-12，agent
+

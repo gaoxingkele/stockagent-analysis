@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>双底形态 + RSI 走出超卖区（2026-10-12）</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f5f7;color:#1f2328;font:14px/1.6 "Microsoft YaHei",system-ui,-apple-system,sans-serif}
+.wrap{max-width:1560px;margin:0 auto;padding:28px 22px 60px}
+h1{font-size:23px;margin:0 0 6px}
+.sub{color:#6b7280;font-size:13px;margin-bottom:18px}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px 20px;margin-bottom:16px}
+.card h2{font-size:15px;margin:0 0 10px;padding-left:9px;border-left:3px solid #d92b2b}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px 20px;font-size:13px;color:#374151}
+.warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:13px;border-radius:8px;padding:11px 14px;margin-bottom:16px}
+.tiers{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.tier{flex:1 1 190px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:13px 15px}
+.tier.on{border-color:#d92b2b;box-shadow:0 0 0 2px rgba(217,43,43,.08)}
+.tier .k{font-size:12px;color:#6b7280}
+.tier .v{font-size:24px;font-weight:700;color:#111827;line-height:1.25}
+.tier .v small{font-size:12px;font-weight:400;color:#9ca3af}
+table{width:100%;border-collapse:collapse;background:#fff;font-size:12.5px}
+th,td{padding:7px 7px;border-bottom:1px solid #eef0f3;text-align:center;white-space:nowrap}
+th{background:#fafbfc;color:#4b5563;font-weight:600;border-bottom:1px solid #e5e7eb}
+tbody tr:hover{background:#fafcff}
+td.rank{color:#9ca3af;font-weight:700}
+td.code{font-family:ui-monospace,Consolas,monospace;font-weight:600}
+.mkt{font-size:10px;color:#9ca3af;margin-left:3px;font-family:inherit;font-weight:400}
+td.name{font-weight:600;text-align:left}
+td.spark{padding:2px 4px}
+td.spark svg{display:block}
+.barwrap{position:relative;width:74px;height:16px;background:#f1f3f5;border-radius:8px;overflow:hidden;margin:0 auto}
+.bar{height:100%;background:linear-gradient(90deg,#f08a8a,#d92b2b)}
+.barwrap span{position:absolute;inset:0;font-size:11px;font-weight:700;color:#3b1111;line-height:16px}
+.num b{color:#111827}
+.hi{color:#1d4ed8;font-weight:700}
+.hl{color:#d92b2b;font-weight:700;font-size:14px}
+.ok{color:#d92b2b;font-weight:700}.near{color:#b45309}
+.tag{font-size:10px;color:#9ca3af}
+.tblwrap{overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:#fff}
+.legend{font-size:12px;color:#6b7280;margin-top:9px;line-height:1.85}
+.disc{font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb;margin-top:22px;padding-top:13px}
+</style></head><body><div class="wrap">
+<h1>双底形态 + RSI(6) 走出超卖区</h1>
+<div class="sub">在上一步「近一月日线双底形态」182 只结果上叠加 RSI 条件 · 数据截至 2026-10-12</div>
+
+<div class="warn"><b>指标口径说明：</b>行情选股接口返回的 <code>RSI_6</code> 字段在时序上近乎冻结（如大参林连续 6 个交易日恒为 80.5，而实际日线 RSI 由 42 升至 80），无法用于「穿越」判定；本页 RSI(6) 由<b>日线收盘价自行计算</b>（Wilder 平滑，参数 6，与通达信口径一致）。该自算值与接口字段在横截面上相关系数 <b>r = 0.983</b>，均值分别为 54.2 / 54.3，整体一致。</div>
+
+<div class="card">
+  <h2>叠加条件</h2>
+  <div class="rules">
+    <div><b>① 基础</b>：双底形态成立（上一步 182 只）</div>
+    <div><b>② 超卖</b>：RSI(6) 曾跌破 20</div>
+    <div><b>③ 走出</b>：当前 RSI(6) 已回到 20 以上</div>
+    <div><b>④ 刚走出</b>：距最后一次超卖 ≤ 5 个交易日（主档）</div>
+  </div>
+  <div class="legend">
+    <b>RSI 缩略图</b>：近 15 个交易日 RSI(6) 走势；蓝点=进入超卖区(&lt;20)，红线=当前值。<br>
+    <b>距今天数</b>= 自最后一次 RSI(6) &lt; 20 起经过的交易日数，数值越小代表"走出"越新鲜。
+  </div>
+</div>
+
+<div class="tiers">
+  <div class="tier"><div class="k">近 3 个交易日走出（最严）</div><div class="v">1 <small>只</small></div></div>
+  <div class="tier on"><div class="k">近 5 个交易日走出（主档）</div><div class="v">6 <small>只</small></div></div>
+  <div class="tier"><div class="k">近 10 个交易日走出</div><div class="v">7 <small>只</small></div></div>
+  <div class="tier"><div class="k">近 15 个交易日走出（宽档）</div><div class="v">33 <small>只</small></div></div>
+</div>
+
+<div class="card" style="padding-bottom:10px"><h2>主档（近 5 个交易日走出超卖区，按"走出新鲜度 + 形态得分"排序）</h2>
+<div class="tblwrap"><table>
+<thead><tr><th>#</th><th>代码</th><th>名称</th><th>形态得分</th><th>RSI(6) 近15日</th>
+<th>最后超卖日</th><th>距今天数</th><th>当前RSI</th>
+<th>第一底</th><th>第二底</th><th>两底价差</th><th>中间反弹</th>
+<th>颈线价</th><th>最新收盘</th><th>距颈线</th><th>综合评分</th><th>技术评分</th></tr></thead>
+<tbody><tr>
+  <td class="rank">0</td>
+  <td class="code">603685<span class="mkt">SH</span></td>
+  <td class="name">晨丰科技</td>
+  <td class="sc"><div class="barwrap"><div class="bar" style="width:37.5%"></div><span>37.5</span></div></td>
+  <td class="spark"><svg viewBox="0 0 220 62" width="220" height="62"><rect x="0" y="0" width="220" height="62" fill="#fcfcfd" rx="3"/><line x1="26" y1="15.599999999999998" x2="214" y2="15.599999999999998" stroke="#e6a6a6" stroke-width="1"/><text x="22" y="18.599999999999998" font-size="7" fill="#9aa1ab" text-anchor="end">80</text><line x1="26" y1="31.5" x2="214" y2="31.5" stroke="#dfe3e8" stroke-width="1"/><text x="22" y="34.5" font-size="7" fill="#9aa1ab" text-anchor="end">50</text><line x1="26" y1="47.400000000000006" x2="214" y2="47.400000000000006" stroke="#8fb3e8" stroke-width="1"/><text x="22" y="50.400000000000006" font-size="7" fill="#9aa1ab" text-anchor="end">20</text><path d="M26.0,23.5L39.4,33.1L52.9,30.4L66.3,34.7L79.7,30.4L93.1,28.3L106.6,37.3L120.0,42.1L133.4,43.2L146.9,45.3L160.3,46.3L173.7,47.4L187.1,31.0L200.6,20.9L214.0,32.0" fill="none" stroke="#1d4ed8" stroke-width="1.6"/><circle cx="214" cy="32.03" r="2.8" fill="#d92b2b"/><text x="212" y="27.03" font-size="8" font-weight="700" fill="#d92b2b" text-anchor="end">49</text><text x="26" y="61" font-size="6.5" fill="#9aa1ab">09-14</text><text x="214" y="61" font-size="6.5" fill="#9aa1ab" text-anchor="end">10-12</text></svg></td>
+  <td class="num">09-30<br><span class="tag">RSI 19.9</span></td>
+  <td class="num hi">3 日</td>
+  <td class="num"><b>49.1</b></td>
+  <td class="num">09-11 · 26.76</td>
+  <td class="num">09-28 · 24.84</td>
+  <td class="num">7.7%</td>
+  <td class="num">7.5%</td>
+  <td class="num">28.78</td>
+  <td class="num"><b>25.80</b></td>
+  <td class="num near">89.6%</td>
+  <td class="num hl">70.79</td>
+  <td class="num">82.07</td>
+</tr>
+<tr>
+  <td class="rank">1</td>
+  <td class="code">603701<span class="mkt">SH</span></td>
+  <td class="name">德宏股份</td>
+  <td class="sc"><div class="barwrap"><div class="bar" style="width:43.5%"></div><span>43.5</span></div></td>
+  <td class="spark"><svg viewBox="0 0 220 62" width="220" height="62"><rect x="0" y="0" width="220" height="62" fill="#fcfcfd" rx="3"/><line x1="26" y1="15.599999999999998" x2="214" y2="15.599999999999998" stroke="#e6a6a6" stroke-width="1"/><text x="22" y="18.599999999999998" font-size="7" fill="#9aa1ab" text-anchor="end">80</text><line x1="26" y1="31.5" x2="214" y2="31.5" stroke="#dfe3e8" stroke-width="1"/><text x="22" y="34.5" font-size="7" fill="#9aa1ab" text-anchor="end">50</text><line x1="26" y1="47.400000000000006" x2="214" y2="47.400000000000006" stroke="#8fb3e8" stroke-width="1"/><text x="22" y="50.400000000000006" font-size="7" fill="#9aa1ab" text-anchor="end">20</text><path d="M26.0,31.0L39.4,38.4L52.9,33.6L66.3,31.0L79.7,28.3L93.1,28.3L106.6,33.6L120.0,39.5L133.4,44.2L146.9,48.5L160.3,47.4L173.7,46.9L187.1,31.5L200.6,25.7L214.0,29.4" fill="none" stroke="#1d4ed8" stroke-width="1.6"/><circle cx="146.85714285714286" cy="48.46" r="2.2" fill="#2f6fd0"/><circle cx="214" cy="29.38" r="2.8" fill="#d92b2b"/><text x="212" y="24.38" font-size="8" font-weight="700" fill="#d92b2b" text-anchor="end">54</text><text x="26" y="61" font-size="6.5" fill="#9aa1ab">09-14</text><text x="214" y="61" font-size="6.5" fill="#9aa1ab" text-anchor="end">10-12</text></svg></td>
+  <td class="num">09-29<br><span class="tag">RSI 19.9</span></td>
+  <td class="num hi">4 日</td>
+  <td class="num"><b>54.5</b></td>
+  <td class="num">09-11 · 19.00</td>
+  <td class="num">09-30 · 18.00</td>
+  <td class="num">5.6%</td>
+  <td class="num">5.8%</td>
+  <td class="num">20.10</td>
+  <td class="num"><b>19.40</b></td>
+  <td class="num near">96.5%</td>
+  <td class="num hl">66.84</td>
+  <td class="num">79.41</td>
+</tr>
+<tr>
+  <td class="rank">2</td>
+  <td class="code">300769<span class="mkt">SZ</span></td>
+  <td class="name">德方纳米</td>
+  <td class="sc"><div class="barwrap"><div class="bar" style="width:78.2%"></div><span>78.2</span></div></td>
+  <td class="spark"><svg viewBox="0 0 220 62" width="220" height="62"><rect x="0" y="0" width="220" height="62" fill="#fcfcfd" rx="3"/><line x1="26" y1="15.599999999999998" x2="214" y2="15.599999999999998" stroke="#e6a6a6" stroke-width="1"/><text x="22" y="18.599999999999998" font-size="7" fill="#9aa1ab" text-anchor="end">80</text><line x1="26" y1="31.5" x2="214" y2="31.5" stroke="#dfe3e8" stroke-width="1"/><text x="22" y="34.5" font-size="7" fill="#9aa1ab" text-anchor="end">50</text><line x1="26" y1="47.400000000000006" x2="214" y2="47.400000000000006" stroke="#8fb3e8" stroke-width="1"/><text x="22" y="50.400000000000006" font-size="7" fill="#9aa1ab" text-anchor="end">20</text><path d="M26.0,37.9L39.4,36.3L52.9,34.2L66.3,37.3L79.7,29.9L93.1,31.5L106.6,33.6L120.0,37.3L133.4,42.6L146.9,49.0L160.3,39.5L173.7,36.8L187.1,23.5L200.6,17.2L214.0,25.1" fill="none" stroke="#1d4ed8" stroke-width="1.6"/><circle cx="146.85714285714286" cy="48.989999999999995" r="2.2" fill="#2f6fd0"/><circle cx="214" cy="25.14" r="2.8" fill="#d92b2b"/><text x="212" y="20.14" font-size="8" font-weight="700" fill="#d92b2b" text-anchor="end">62</text><text x="26" y="61" font-size="6.5" fill="#9aa1ab">09-14</text><text x="214" y="61" font-size="6.5" fill="#9aa1ab" text-anchor="end">10-12</text></svg></td>
+  <td class="num">09-28<br><span class="tag">RSI 17.5</span></td>
+  <td class="num hi">5 日</td>
+  <td class="num"><b>61.6</b></td>
+  <td class="num">09-11 · 38.66</td>
+  <td class="num">09-28 · 37.80</td>
+  <td class="num">2.3%</td>
+  <td class="num">9.2%</td>
+  <td class="num">42.23</td>
+  <td class="num"><b>43.99</b></td>
+  <td class="num ok">104.2%</td>
+  <td class="num hl">78.73</td>
+  <td class="num">91.05</td>
+</tr>
+<tr>
+  <td class="rank">3</td>
+  <td class="code">002709<span class="mkt">SZ</span></td>
+  <td class="name">天赐材料</td>
+  <td class="sc"><div class="barwrap"><div class="bar" style="width:68.4%"></div><span>68.4</span></div></td>
+  <td class="spark"><svg viewBox="0 0 220 62" width="220" height="62"><rect x="0" y="0" width="220" height="62" fill="#fcfcfd" rx="3"/><line x1="26" y1="15.599999999999998" x2="214" y2="15.599999999999998" stroke="#e6a6a6" stroke-width="1"/><text x="22" y="18.599999999999998" font-size="7" fill="#9aa1ab" text-anchor="end">80</text><line x1="26" y1="31.5" x2="214" y2="31.5" stroke="#dfe3e8" stroke-width="1"/><text x="22" y="34.5" font-size="7" fill="#9aa1ab" text-anchor="end">50</text><line x1="26" y1="47.400000000000006" x2="214" y2="47.400000000000006" stroke="#8fb3e8" stroke-width="1"/><text x="22" y="50.400000000000006" font-size="7" fill="#9aa1ab" text-anchor="end">20</text><path d="M26.0,41.0L39.4,42.6L52.9,38.4L66.3,40.0L79.7,33.6L93.1,31.5L106.6,34.2L120.0,38.9L133.4,45.8L146.9,50.0L160.3,42.6L173.7,41.6L187.1,28.3L200.6,17.7L214.0,23.5" fill="none" stroke="#1d4ed8" stroke-width="1.6"/><circle cx="146.85714285714286" cy="50.05" r="2.2" fill="#2f6fd0"/><circle cx="214" cy="23.549999999999997" r="2.8" fill="#d92b2b"/><text x="212" y="18.549999999999997" font-size="8" font-weight="700" fill="#d92b2b" text-anchor="end">65</text><text x="26" y="61" font-size="6.5" fill="#9aa1ab">09-14</text><text x="214" y="61" font-size="6.5" fill="#9aa1ab" text-anchor="end">10-12</text></svg></td>
+  <td class="num">09-28<br><span class="tag">RSI 15</span></td>
+  <td class="num hi">5 日</td>
+  <td class="num"><b>64.7</b></td>
+  <td class="num">09-11 · 31.68</td>
+  <td class="num">09-28 · 30.34</td>
+  <td class="num">4.4%</td>
+  <td class="num">6.3%</td>
+  <td class="num">33.69</td>
+  <td class="num"><b>35.10</b></td>
+  <td class="num ok">104.2%</td>
+  <td class="num hl">88.52</td>
+  <td class="num">90.2</td>
+</tr>
+<tr>
+  <td class="rank">4</td>
+  <td class="code">603399<span class="mkt">SH</span></td>
+  <td class="name">永杉锂业</td>
+  <td class="sc"><div class="barwrap"><div class="bar" style="width:58.8%"></div><span>58.8</span></div></td>
+  <td class="spark"><svg viewBox="0 0 220 62" width="220" height="62"><rect x="0" y="0" width="220" height="62" fill="#fcfcfd" rx="3"/><line x1="26" y1="15.599999999999998" x2="214" y2="15.599999999999998" stroke="#e6a6a6" stroke-width="1"/><text x="22" y="18.599999999999998" font-size="7" fill="#9aa1ab" text-anchor="end">80</text><line x1="26" y1="31.5" x2="214" y2="31.5" stroke="#dfe3e8" stroke-width="1"/><text x="22" y="34.5" font-size="7" fill="#9aa1ab" text-anchor="end">50</text><line x1="26" y1="47.400000000000006" x2="214" y2="47.400000000000006" stroke="#8fb3e8" stroke-width="1"/><text x="22" y="50.400000000000006" font-size="7" fill="#9aa1ab" text-anchor="end">20</text><path d="M26.0,41.0L39.4,38.9L52.9,35.2L66.3,34.2L79.7,34.7L93.1,28.3L106.6,28.8L120.0,40.5L133.4,44.8L146.9,49.5L160.3,37.3L173.7,39.5L187.1,29.9L200.6,24.1L214.0,33.1" fill="none" stroke="#1d4ed8" stroke-width="1.6"/><circle cx="146.85714285714286" cy="49.519999999999996" r="2.2" fill="#2f6fd0"/><circle cx="214" cy="33.09" r="2.8" fill="#d92b2b"/><text x="212" y="28.090000000000003" font-size="8" font-weight="700" fill="#d92b2b" text-anchor="end">47</text><text x="26" y="61" font-size="6.5" fill="#9aa1ab">09-14</text><text x="214" y="61" font-size="6.5" fill="#9aa1ab" text-anchor="end">10-12</text></svg></td>
+  <td class="num">09-28<br><span class="tag">RSI 16.4</span></td>
+  <td class="num hi">5 日</td>
+  <td class="num"><b>47</b></td>
+  <td class="num">09-11 · 12.98</td>
+  <td class="num">09-28 · 12.60</td>
+  <td class="num">3.0%</td>
+  <td class="num">8.9%</td>
+  <td class="num">14.13</td>
+  <td class="num"><b>13.48</b></td>
+  <td class="num near">95.4%</td>
+  <td class="num hl">72.06</td>
+  <td class="num">85.09</td>
+</tr>
+<tr>
+  <td class="rank">5</td>
+  <td class="code">002812<span class="mkt">SZ</span></td>
+  <td class="name">恩捷股份</td>
+  <td class="sc"><div class="barwrap"><div class="bar" style="width:55.3%"></div><span>55.3</span></div></td>
+  <td class="spark"><svg viewBox="0 0 220 62" width="220" height="62"><rect x="0" y="0" width="220" height="62" fill="#fcfcfd" rx="3"/><line x1="26" y1="15.599999999999998" x2="214" y2="15.599999999999998" stroke="#e6a6a6" stroke-width="1"/><text x="22" y="18.599999999999998" font-size="7" fill="#9aa1ab" text-anchor="end">80</text><line x1="26" y1="31.5" x2="214" y2="31.5" stroke="#dfe3e8" stroke-width="1"/><text x="22" y="34.5" font-size="7" fill="#9aa1ab" text-anchor="end">50</text><line x1="26" y1="47.400000000000006" x2="214" y2="47.400000000000006" stroke="#8fb3e8" stroke-width="1"/><text x="22" y="50.400000000000006" font-size="7" fill="#9aa1ab" text-anchor="end">20</text><path d="M26.0,39.5L39.4,40.5L52.9,40.0L66.3,40.0L79.7,33.6L93.1,36.3L106.6,40.0L120.0,40.5L133.4,46.3L146.9,49.5L160.3,44.2L173.7,44.8L187.1,40.5L200.6,25.1L214.0,29.9" fill="none" stroke="#1d4ed8" stroke-width="1.6"/><circle cx="146.85714285714286" cy="49.519999999999996" r="2.2" fill="#2f6fd0"/><circle cx="214" cy="29.91" r="2.8" fill="#d92b2b"/><text x="212" y="24.91" font-size="8" font-weight="700" fill="#d92b2b" text-anchor="end">53</text><text x="26" y="61" font-size="6.5" fill="#9aa1ab">09-14</text><text x="214" y="61" font-size="6.5" fill="#9aa1ab" text-anchor="end">10-12</text></svg></td>
+  <td class="num">09-28<br><span class="tag">RSI 15.6</span></td>
+  <td class="num hi">5 日</td>
+  <td class="num"><b>53</b></td>
+  <td class="num">09-16 · 45.72</td>
+  <td class="num">09-30 · 45.03</td>
+  <td class="num">1.5%</td>
+  <td class="num">7.0%</td>
+  <td class="num">48.91</td>
+  <td class="num"><b>47.41</b></td>
+  <td class="num near">96.9%</td>
+  <td class="num hl">81.4</td>
+  <td class="num">75.71</td>
+</tr></tbody></table></div></div>
+
+<div class="card" style="padding-bottom:10px"><h2>宽档补充（距最后一次超卖 6~15 个交易日，共 27 只）</h2>
+<div class="tblwrap"><table>
+<thead><tr><th>#</th><th>代码</th><th>名称</th><th>形态得分</th><th>最后超卖日</th><th>超卖值</th>
+<th>距今天数</th><th>当前RSI</th><th>颈线价</th><th>最新收盘</th><th>距颈线</th><th>综合评分</th></tr></thead>
+<tbody><tr><td class="rank">0</td><td class="code">601777</td><td class="name">千里科技</td>
+  <td class="num">61.7</td><td class="num">09-23</td><td class="num">17.3</td>
+  <td class="num">7</td><td class="num"><b>60.6</b></td>
+  <td class="num">8.39</td><td class="num">8.31</td>
+  <td class="num">99.0%</td>
+  <td class="num">76.73</td></tr>
+<tr><td class="rank">1</td><td class="code">603589</td><td class="name">口子窖</td>
+  <td class="num">59.3</td><td class="num">09-17</td><td class="num">15.7</td>
+  <td class="num">11</td><td class="num"><b>56</b></td>
+  <td class="num">18.63</td><td class="num">18.00</td>
+  <td class="num">96.6%</td>
+  <td class="num">67.56</td></tr>
+<tr><td class="rank">2</td><td class="code">000715</td><td class="name">中兴商业</td>
+  <td class="num">56.7</td><td class="num">09-16</td><td class="num">19.4</td>
+  <td class="num">12</td><td class="num"><b>40.8</b></td>
+  <td class="num">5.51</td><td class="num">5.32</td>
+  <td class="num">96.6%</td>
+  <td class="num">70.48</td></tr>
+<tr><td class="rank">3</td><td class="code">300014</td><td class="name">亿纬锂能</td>
+  <td class="num">73.8</td><td class="num">09-15</td><td class="num">19.7</td>
+  <td class="num">13</td><td class="num"><b>58.4</b></td>
+  <td class="num">52.06</td><td class="num">51.08</td>
+  <td class="num">98.1%</td>
+  <td class="num">82</td></tr>
+<tr><td class="rank">4</td><td class="code">688171</td><td class="name">纬德信息</td>
+  <td class="num">72.6</td><td class="num">09-15</td><td class="num">17.5</td>
+  <td class="num">13</td><td class="num"><b>62</b></td>
+  <td class="num">25.39</td><td class="num">25.86</td>
+  <td class="num">101.9%</td>
+  <td class="num">68.14</td></tr>
+<tr><td class="rank">5</td><td class="code">300531</td><td class="name">优博讯</td>
+  <td class="num">69.1</td><td class="num">09-15</td><td class="num">14.1</td>
+  <td class="num">13</td><td class="num"><b>55.6</b></td>
+  <td class="num">15.86</td><td class="num">15.80</td>
+  <td class="num">99.6%</td>
+  <td class="num">81.63</td></tr>
+<tr><td class="rank">6</td><td class="code">000036</td><td class="name">华联控股</td>
+  <td class="num">60.6</td><td class="num">09-15</td><td class="num">16.2</td>
+  <td class="num">13</td><td class="num"><b>46.3</b></td>
+  <td class="num">4.33</td><td class="num">3.99</td>
+  <td class="num">92.1%</td>
+  <td class="num">78.54</td></tr>
+<tr><td class="rank">7</td><td class="code">300771</td><td class="name">智莱科技</td>
+  <td class="num">59.8</td><td class="num">09-15</td><td class="num">19.8</td>
+  <td class="num">13</td><td class="num"><b>51.7</b></td>
+  <td class="num">11.60</td><td class="num">11.38</td>
+  <td class="num">98.1%</td>
+  <td class="num">75.45</td></tr>
+<tr><td class="rank">8</td><td class="code">301057</td><td class="name">汇隆新材</td>
+  <td class="num">58.9</td><td class="num">09-15</td><td class="num">15.9</td>
+  <td class="num">13</td><td class="num"><b>39.3</b></td>
+  <td class="num">26.50</td><td class="num">21.64</td>
+  <td class="num">81.7%</td>
+  <td class="num">65.84</td></tr>
+<tr><td class="rank">9</td><td class="code">300206</td><td class="name">理邦仪器</td>
+  <td class="num">57.5</td><td class="num">09-15</td><td class="num">13.2</td>
+  <td class="num">13</td><td class="num"><b>47.8</b></td>
+  <td class="num">11.88</td><td class="num">11.58</td>
+  <td class="num">97.5%</td>
+  <td class="num">78.63</td></tr>
+<tr><td class="rank">10</td><td class="code">301418</td><td class="name">协昌科技</td>
+  <td class="num">57.1</td><td class="num">09-15</td><td class="num">18.1</td>
+  <td class="num">13</td><td class="num"><b>42.1</b></td>
+  <td class="num">36.34</td><td class="num">34.44</td>
+  <td class="num">94.8%</td>
+  <td class="num">61.16</td></tr>
+<tr><td class="rank">11</td><td class="code">002642</td><td class="name">荣联科技</td>
+  <td class="num">53.2</td><td class="num">09-15</td><td class="num">15.8</td>
+  <td class="num">13</td><td class="num"><b>54.2</b></td>
+  <td class="num">7.30</td><td class="num">7.00</td>
+  <td class="num">95.9%</td>
+  <td class="num">69.03</td></tr>
+<tr><td class="rank">12</td><td class="code">301367</td><td class="name">瑞迈特</td>
+  <td class="num">51.1</td><td class="num">09-15</td><td class="num">19.2</td>
+  <td class="num">13</td><td class="num"><b>63.2</b></td>
+  <td class="num">47.74</td><td class="num">46.64</td>
+  <td class="num">97.7%</td>
+  <td class="num">73.11</td></tr>
+<tr><td class="rank">13</td><td class="code">002103</td><td class="name">广博股份</td>
+  <td class="num">47.5</td><td class="num">09-15</td><td class="num">19.4</td>
+  <td class="num">13</td><td class="num"><b>61.9</b></td>
+  <td class="num">7.20</td><td class="num">6.79</td>
+  <td class="num">94.3%</td>
+  <td class="num">73.58</td></tr>
+<tr><td class="rank">14</td><td class="code">688616</td><td class="name">西力科技</td>
+  <td class="num">42.5</td><td class="num">09-15</td><td class="num">15.4</td>
+  <td class="num">13</td><td class="num"><b>55.4</b></td>
+  <td class="num">11.33</td><td class="num">11.09</td>
+  <td class="num">97.9%</td>
+  <td class="num">76.23</td></tr>
+<tr><td class="rank">15</td><td class="code">688100</td><td class="name">威胜信息</td>
+  <td class="num">60.5</td><td class="num">09-14</td><td class="num">15</td>
+  <td class="num">14</td><td class="num"><b>57.1</b></td>
+  <td class="num">25.36</td><td class="num">25.14</td>
+  <td class="num">99.1%</td>
+  <td class="num">75.89</td></tr>
+<tr><td class="rank">16</td><td class="code">301162</td><td class="name">国能日新</td>
+  <td class="num">58.4</td><td class="num">09-14</td><td class="num">18.7</td>
+  <td class="num">14</td><td class="num"><b>56.5</b></td>
+  <td class="num">38.50</td><td class="num">37.08</td>
+  <td class="num">96.3%</td>
+  <td class="num">76.55</td></tr>
+<tr><td class="rank">17</td><td class="code">300743</td><td class="name">天地数码</td>
+  <td class="num">67.6</td><td class="num">09-11</td><td class="num">16.8</td>
+  <td class="num">15</td><td class="num"><b>53.9</b></td>
+  <td class="num">14.70</td><td class="num">14.49</td>
+  <td class="num">98.6%</td>
+  <td class="num">73.14</td></tr>
+<tr><td class="rank">18</td><td class="code">300905</td><td class="name">宝丽迪</td>
+  <td class="num">65.1</td><td class="num">09-11</td><td class="num">19.6</td>
+  <td class="num">15</td><td class="num"><b>43.4</b></td>
+  <td class="num">42.12</td><td class="num">37.47</td>
+  <td class="num">89.0%</td>
+  <td class="num">76.18</td></tr>
+<tr><td class="rank">19</td><td class="code">301669</td><td class="name">高特电子</td>
+  <td class="num">65</td><td class="num">09-11</td><td class="num">12.1</td>
+  <td class="num">15</td><td class="num"><b>51.7</b></td>
+  <td class="num">27.11</td><td class="num">25.67</td>
+  <td class="num">94.7%</td>
+  <td class="num">72.7</td></tr>
+<tr><td class="rank">20</td><td class="code">301408</td><td class="name">华人健康</td>
+  <td class="num">62</td><td class="num">09-11</td><td class="num">19.7</td>
+  <td class="num">15</td><td class="num"><b>62.7</b></td>
+  <td class="num">17.28</td><td class="num">15.45</td>
+  <td class="num">89.4%</td>
+  <td class="num">76.95</td></tr>
+<tr><td class="rank">21</td><td class="code">300467</td><td class="name">迅游科技</td>
+  <td class="num">57.9</td><td class="num">09-11</td><td class="num">19.8</td>
+  <td class="num">15</td><td class="num"><b>42.5</b></td>
+  <td class="num">34.37</td><td class="num">32.33</td>
+  <td class="num">94.1%</td>
+  <td class="num">73.94</td></tr>
+<tr><td class="rank">22</td><td class="code">600267</td><td class="name">海正药业</td>
+  <td class="num">52</td><td class="num">09-11</td><td class="num">17.7</td>
+  <td class="num">15</td><td class="num"><b>52.9</b></td>
+  <td class="num">12.06</td><td class="num">11.78</td>
+  <td class="num">97.7%</td>
+  <td class="num">78.48</td></tr>
+<tr><td class="rank">23</td><td class="code">301602</td><td class="name">超研股份</td>
+  <td class="num">47</td><td class="num">09-11</td><td class="num">17.7</td>
+  <td class="num">15</td><td class="num"><b>43.2</b></td>
+  <td class="num">16.64</td><td class="num">15.85</td>
+  <td class="num">95.3%</td>
+  <td class="num">66.65</td></tr>
+<tr><td class="rank">24</td><td class="code">603520</td><td class="name">司太立</td>
+  <td class="num">45.8</td><td class="num">09-11</td><td class="num">19.3</td>
+  <td class="num">15</td><td class="num"><b>51.9</b></td>
+  <td class="num">8.87</td><td class="num">8.59</td>
+  <td class="num">96.8%</td>
+  <td class="num">64.99</td></tr>
+<tr><td class="rank">25</td><td class="code">603109</td><td class="name">神驰机电</td>
+  <td class="num">45.7</td><td class="num">09-11</td><td class="num">14</td>
+  <td class="num">15</td><td class="num"><b>40.4</b></td>
+  <td class="num">17.99</td><td class="num">17.16</td>
+  <td class="num">95.4%</td>
+  <td class="num">60.66</td></tr>
+<tr><td class="rank">26</td><td class="code">301518</td><td class="name">长华化学</td>
+  <td class="num">42.3</td><td class="num">09-11</td><td class="num">18.8</td>
+  <td class="num">15</td><td class="num"><b>48.4</b></td>
+  <td class="num">26.73</td><td class="num">24.38</td>
+  <td class="num">91.2%</td>
+  <td class="num">63.5</td></tr></tbody></table></div></div>
+
+<div class="disc">数据来源：通达信行情数据（日线，前复权）· 形态与 RSI 指标由本地计算。本页仅提供客观市场数据的筛选与展示，不含任何主观分析、投资评级或交易建议，不构成证券投资咨询服务；数据可能存在延迟，请以交易所官方数据为准。投资有风险，决策需谨慎。</div>
+</div></body></html>
