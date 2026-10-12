@@ -53,13 +53,17 @@ def v12_market(day: str) -> tuple[pd.DataFrame, list[str]]:
     return df, stale
 
 
+BOTTOM = [("底部分", "bottom_score", "{:.0f}"), ("底部形态", "bottom_tags", "")]
+
+
 def table(rows: pd.DataFrame, cols: list[tuple[str, str, str]]) -> list[str]:
     out = ["| " + " | ".join(h for h, _, _ in cols) + " |", "|" + "---|" * len(cols)]
     for _, r in rows.iterrows():
         cells = []
         for _, c, fmt in cols:
             v = r.get(c, np.nan)
-            cells.append("—" if (isinstance(v, float) and np.isnan(v)) or v is None else (fmt.format(v) if fmt else str(v)))
+            empty = v is None or (isinstance(v, float) and np.isnan(v)) or (isinstance(v, str) and v == "")
+            cells.append("—" if empty else (fmt.format(v) if fmt else str(v)))
         out.append("| " + " | ".join(cells) + " |")
     return out
 
@@ -68,6 +72,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--date")
     ap.add_argument("--no-flags", action="store_true", help="skip the S0016 risk flags (they fetch 15-minute bars)")
+    ap.add_argument("--no-bottom", action="store_true", help="skip the bottom-pattern tags")
     a = ap.parse_args()
     cfg, safe_cfg = PureConfig(), SafeConfig()
     _, _, features = _frozen_models()
@@ -108,6 +113,14 @@ def main() -> int:
         except Exception as err:  # noqa: BLE001
             flags_note = f"（风险旗未算出：{err}）"
 
+    bottom_note = ""
+    if not a.no_bottom:
+        try:
+            from bottom_pattern_pools import bottom_tags
+            bt = bottom_tags(set(A.ts_code) | set(off.ts_code) | set(safe.ts_code), day)
+            A, off, safe = (x.merge(bt, on="ts_code", how="left") for x in (A, off, safe))
+        except Exception as err:  # noqa: BLE001
+            bottom_note = f"（底部形态未算出：{err}）"
     red = level == "red"
     safe = safe.reset_index(drop=True)
     safe["n"] = np.arange(1, len(safe) + 1)
@@ -120,20 +133,24 @@ def main() -> int:
           f"- S0007 三态：沪深300 20 日 {100 * r20h:+.2f}%、60 日 {100 * r60h:+.2f}% → **{phase}**",
           f"- V12 特征当天是否齐全：{'是' if not stale else '否，缺 ' + ', '.join(stale)}",
           "",
-          "ratio = pump v3c P(涨)/(P(跌)+0.01)；括号内为全市场 ratio 名次。2～5 为池 A 历史上较好的一段，>5 为 P(跌)≈0 的分母放大段。", ""]
+          "ratio = pump v3c P(涨)/(P(跌)+0.01)；括号内为全市场 ratio 名次。2～5 为池 A 历史上较好的一段，>5 为 P(跌)≈0 的分母放大段。",
+          "底部形态 / 底部分：日线底部形态标签（缠论底背离、W底突破/形成、双插针+MA5拐头、RSI底背离、KDJ超卖金叉、吞没/晨星、缩量后放量），"
+          "定义见 wiki/2026-10-12_bottom-pattern-lab.md；「回踩」= 重新站上颈线而非首次突破。回测中没有一个形态两段都有效"
+          "（RSI底背离在 S20 池两段同号为正但不显著；吞没/晨星在 R20 池两段为负），只作标注，不改名单和顺序。" + bottom_note, ""]
     md += [f"## 池 A · R20（{len(A)} 只；r20 预测或最大涨幅 ≥25% 且最大回撤 ≥ −15%）", ""]
     md += table(A.head(30), [("#", "rank", "{:.0f}"), ("代码", "ts_code", ""), ("名称", "name", ""), ("行业", "industry", ""),
                              ("买分", "buy_r20_score", "{:.1f}"), ("r20 预测%", "r20_pred", "{:+.2f}"),
                              ("最大涨%", "pred_max_gain_20", "{:+.1f}"), ("最大回撤%", "pred_max_dd_20", "{:+.1f}"),
-                             ("ratio", "ratio", "{:.2f}"), ("ratio 名次", "ratio_rank", "{:.0f}")])
+                             ("ratio", "ratio", "{:.2f}"), ("ratio 名次", "ratio_rank", "{:.0f}")] + BOTTOM)
     cols = [("#", "list_rank", "{:.0f}"), ("代码", "ts_code", ""), ("名称", "name", ""), ("行业", "industry", ""),
             ("池内分", "score_pool", "{:.0f}"), ("全市场分", "score_100", "{:.1f}"), ("stage1", "stage1_probability", "{:.3f}"),
             ("ratio", "ratio", "{:.2f}"), ("ratio 名次", "ratio_rank", "{:.0f}"), ("NATR", "natr14", "{:.3f}")]
     if "flags" in off:
         cols += [("风险旗", "flags", "{:.0f}"), ("S0016", "risk", "")]
+    cols += BOTTOM
     safe_cols = [("#", "n", "{:.0f}"), ("代码", "ts_code", ""), ("名称", "name", ""), ("行业", "industry", ""),
                  ("全市场分", "score_100", "{:.1f}"), ("stage1", "stage1_probability", "{:.3f}"),
-                 ("ratio", "ratio", "{:.2f}"), ("ratio 名次", "ratio_rank", "{:.0f}")]
+                 ("ratio", "ratio", "{:.2f}"), ("ratio 名次", "ratio_rank", "{:.0f}")] + BOTTOM
     safe_desc = f"全市场波动最低 {int(safe_cfg.natr_pct_max * 100)}% → stage1 → 前 {safe_cfg.top_k}，单行业 ≤{safe_cfg.industry_cap}"
     if red:
         md += ["", f"## 池 S · S20（今天红灯，按动作 B 发稳健版 v1.1：{safe_desc}）", ""]

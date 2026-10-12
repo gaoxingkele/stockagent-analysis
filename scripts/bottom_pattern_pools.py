@@ -29,6 +29,19 @@ NAMES = {"B1": "缠论底背离", "B2c": "W底突破", "B2f": "W底形成", "B3"
          "B5": "KDJ超卖金叉", "B6": "吞没/晨星", "B7": "缩量后放量"}
 
 
+def bottom_tags(codes: set[str], day: str) -> pd.DataFrame:
+    """ts_code, bottom_score, bottom_tags (pattern names; a W breakout that is not the first is marked) for one day."""
+    start = (pd.Timestamp(day) - pd.Timedelta(days=420)).strftime("%Y%m%d")
+    pp = pattern_panel(start, day, out_from=day, codes=set(codes))
+    pp = pp[pp.trade_date == day].copy()
+
+    def tags(r: pd.Series) -> str:
+        return "、".join(NAMES[k] + ("（回踩）" if k == "B2c" and not bool(r.get("B2c_first", False)) else "")
+                        for k in FLAGS if bool(r.get(k, False)))
+    pp["bottom_tags"] = pp.apply(tags, axis=1) if len(pp) else ""
+    return pp[["ts_code", "bottom_score", "bottom_tags", "zone"]]
+
+
 def s20_top100(day: str | None) -> tuple[str, pd.DataFrame]:
     from run_s20_pure_v1_shadow import SHADOW, load_factors
     from stockagent_analysis.s20_pure import _frozen_models, stage1_probability
