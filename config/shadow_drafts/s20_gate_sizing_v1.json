@@ -1,0 +1,21 @@
+{
+  "name": "s20_gate_sizing_v1",
+  "status": "draft_not_registered",
+  "drafted": "2026-10-12",
+  "wiki": "wiki/2026-10-12_gate-sizing-shadow-plan.md",
+  "depends_on_shadow": "S0010",
+  "window": "reserved_20260806_plus",
+  "min_matured": 60,
+  "gap": {"growth_index": "399006.SZ", "base_index": "000300.SH", "lookback_sessions": 20,
+          "source": "output/tushare_cache/index_daily", "definition": "ret20(growth) - ret20(base)"},
+  "weight": {"formula": "clip(gap / full_at, 0, 1)", "full_at": 0.05, "hysteresis": false},
+  "list": {"contract": "config/s20_pure_v1.json", "rule": "U15D10", "top_k": 20, "equal_weight": true,
+           "valve_action_B_unchanged": true},
+  "base_budget_per_day": 0.05,
+  "exit": {"take_profit_pct": 15, "stop_loss_pct": 10, "horizon_sessions": 20, "cost_pct": 0.3},
+  "controls": {"A": "S0010 binary gate (w = 1 if gap > 0)", "B": "frozen contract list, no gate"},
+  "primary_metric": "return per unit exposure = sum(w * list mean) / sum(w), paired vs A, Newey-West(19) t",
+  "pass_if": ["matured signal days >= 60", "primary vs A > 0 and t >= 1.96",
+              "max drawdown not worse than A", "book daily return minus A >= -0.2"],
+  "frozen_parameters": ["full_at", "lookback_sessions"]
+}

@@ -220,3 +220,8 @@
 - 说明：用户 2026-10-11：五个新方向都试（ATR 单位标签、行业超额标签、解禁/融资/龙虎榜、执行层、出场变体），并重新思考方向×波动双重筛选
 - 状态：已处理 20 rules tried, T0055-T0074; none beat frozen in both segments; wiki 2026-10-11_s20-alt-designs-trial
 
+### `G0032` request：bottom-pattern-lab
+- 时间：2026-10-12，ewanlin
+- 说明：用户 2026-10-12：写好仓位随风格门强度的影子方案；在 R20 前100 与 S20 前100 里识别缠论底背离、W 双底、双插针+MA5拐头等底部形态，单独评分，跑最新数据和历史回测
+- 状态：已处理 plan wiki 2026-10-12_gate-sizing-shadow-plan + I0004; bottom lab T0075-T0092, N0032
+
