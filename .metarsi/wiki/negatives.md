@@ -240,3 +240,10 @@
 - 出处：[wiki/2026-10-12_success-precursors-bottom-patterns.md](../../wiki/2026-10-12_success-precursors-bottom-patterns.md)
 - 记录：2026-10-12，agent
 
+## `N0035` 在 S20 前100 里用信号日技术指标（RSI、MACD、KDJ、布林、均线乖离、量比、换手、影线等 32 个）区分成功与失败
+- 原因：S20 池两段没有任何一个指标过多重比较门槛 3.73（最大 t 3.1）；第一段挑出 6 个，第二段只有 1 个（距60日低点）复验通过
+- 教训：S20 池内成败几乎不由日线技术状态决定；R20 池内有一族『近期强势』指标（布林%b、偏离MA20、10日涨幅）两段同号且超门槛，但是在已用窗口上看过 32 个指标后挑的，只能作影子候选
+- 相关试验：无
+- 出处：[wiki/2026-10-15_list-indicators-success-vs-failure.md](../../wiki/2026-10-15_list-indicators-success-vs-failure.md)
+- 记录：2026-10-16，agent
+

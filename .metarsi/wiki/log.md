@@ -416,3 +416,9 @@ V12.31 Top20（5 月上线，V7c 铁律池按 pump ratio 排序，抄底+启动�
 
 - 出处：[wiki/2026-10-12_success-precursors-bottom-patterns.md](../../wiki/2026-10-12_success-precursors-bottom-patterns.md)
 
+## [2026-10-16] E0058 | 推荐池里哪些技术指标能区分成功和失败
+
+S20 池无稳定指标；R20 池『近期强势』一族（布林%b、偏离MA20、10日涨幅）两段同号超门槛但属已用窗口挑选，只作影子候选；底部特征更差
+
+- 出处：[wiki/2026-10-15_list-indicators-success-vs-failure.md](../../wiki/2026-10-15_list-indicators-success-vs-failure.md)
+
