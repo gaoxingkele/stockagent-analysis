@@ -11,7 +11,8 @@ Pool S (S20): the current contract list as served, frozen stage1 + funnel (confi
      anchors) and pool score (rank in the stage1 top 100). Neither pool's contract is changed here.
 ratio = pump v3c P(up) / (P(down) + 0.01), the same number for both systems.
 Shadow layers on the day (not live): style gate S0010, CSI300 phase S0007, risk flags S0016.
-Needs the caches, regimes, S20 factor store and the V12 feature pipeline up to the day.
+Needs the caches, regimes and the V12 feature pipeline up to the day; the S20 shadow factor store is rebuilt
+automatically when it ends before the day (--no-rebuild to refuse instead).
 Output: output/experiments/daily_best/best_<date>.md. Not investment advice.
 """
 from __future__ import annotations
@@ -73,10 +74,20 @@ def main() -> int:
     ap.add_argument("--date")
     ap.add_argument("--no-flags", action="store_true", help="skip the S0016 risk flags (they fetch 15-minute bars)")
     ap.add_argument("--no-bottom", action="store_true", help="skip the bottom-pattern tags")
+    ap.add_argument("--no-rebuild", action="store_true", help="do not rebuild the S20 shadow factor store when it ends before the day")
     a = ap.parse_args()
     cfg, safe_cfg = PureConfig(), SafeConfig()
     _, _, features = _frozen_models()
     f = load_factors(SHADOW / "factor_groups", features, "20260901")
+    want = a.date or max(p.stem for p in (ROOT / "output/tushare_cache/daily").glob("*.parquet"))
+    if want not in set(f.trade_date) and not a.no_rebuild:
+        import subprocess
+        print(f"S20 shadow factor store ends {f.trade_date.max()}, rebuilding to {want} (a few minutes) ...", flush=True)
+        subprocess.run([sys.executable, str(ROOT / "scripts/build_s20_20r_confirmation_factors.py"), "--confirmation-start", "20260727",
+                        "--confirmation-end", want, "--output-dir", str(SHADOW / "factor_groups")], check=True, stdout=subprocess.DEVNULL)
+        f = load_factors(SHADOW / "factor_groups", features, "20260901")
+    if want not in set(f.trade_date):
+        raise SystemExit(f"S20 factor store has no rows for {want} (ends {f.trade_date.max()}): update the caches first")
     day = a.date or f.trade_date.max()
     f = f[f.trade_date == day].copy()
     f["stage1_probability"] = stage1_probability(f)

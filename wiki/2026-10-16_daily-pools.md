@@ -17,3 +17,10 @@
 - 阀门橙；S0010 风格门关（创业板 20 日 −16.96% 对沪深 300 −8.31%，当天不建新仓）；S0007 三态：下行。
 - 池 A（R20）2 只：皖通科技、恒实科技（均为软件服务）。
 - 池 S（S20）20 只，半导体占大头；两池无交集。
+
+## 后续
+
+用户：S20 影子因子库要先重建到当天（引用上一条回答里的提醒，没有写别的指令；我理解为要把这一步自动化）。
+
+- `scripts/daily_best_lists.py` 现在在 S20 影子因子库的最后一天早于要跑的日子时，自动调用 `build_s20_20r_confirmation_factors.py`（起 20260727、止当天）重建，再继续；缺数据时给出明确提示而不是 LightGBM 的报错。`--no-rebuild` 则只提示不重建。不带 `--date` 时默认用缓存里最新的交易日。
+- 前置的 `update_daily_caches.py`、`update_regimes_tushare.py`、`daily_review.update_data` 仍需先跑。
