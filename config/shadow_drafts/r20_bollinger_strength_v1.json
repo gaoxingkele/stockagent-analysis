@@ -1,0 +1,19 @@
+{
+  "name": "r20_bollinger_strength_v1",
+  "status": "draft_not_registered_slots_full",
+  "drafted": "2026-10-15",
+  "wiki": "wiki/2026-10-15_list-indicators-success-vs-failure.md",
+  "window": "reserved_20260806_plus",
+  "min_matured": 60,
+  "pool": {"source": "production V12 r20_pred", "top_n": 100, "note": "the research pool of the evidence, not the 10-name pool A"},
+  "factor": {"name": "bollinger_pctb", "formula": "(close - (MA20 - 2*std20)) / (4*std20)", "std": "population (ddof=0) of the last 20 split-adjusted closes, signal day included",
+             "select": "within-day percentile rank inside the pool > 2/3 (top tercile, about 33 names)", "frozen_parameters": ["20", "2", "2/3"]},
+  "treatment": "top tercile by %b inside the R20 top 100, equal weight, U15D10 list basis (next-day open, +15% / -10% / 20 sessions, cost 0.3%)",
+  "control": "the full R20 top 100 on the same days",
+  "primary_metric": "success rate (+15% before -10%) treatment minus control, same-day paired, Newey-West(19) t",
+  "pass_if": ["matured signal days >= 60", "primary > 0 and t >= 1.96", "per-trade U15D10 treatment minus control > 0", "treatment stop-first share not above control"],
+  "evidence_at_drafting": {"tier": "reused_holdout", "R20_in_sample": {"success_diff_pp": 5.5, "t": 4.9, "per_trade_diff": 0.69},
+                           "R20_oos": {"success_diff_pp": 9.4, "t": 5.2, "per_trade_diff": 2.41},
+                           "S20_pool": "same sign, t 1.4 / 1.7, not significant", "selected_after_viewing": "32 indicators"},
+  "slots": "S0001, S0007, S0010, S0014, S0016 are open; register after the user closes one"
+}

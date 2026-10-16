@@ -247,3 +247,10 @@
 - 出处：[wiki/2026-10-15_list-indicators-success-vs-failure.md](../../wiki/2026-10-15_list-indicators-success-vs-failure.md)
 - 记录：2026-10-16，agent
 
+## `N0036` 从 TA-Lib 和 Qlib Alpha158 的 282 个因子里找能在 S20 前100 区分成败的筛选因子
+- 原因：第一段有 2 个超门槛(4.24)，第二段 0 个（最大 t 3.8）；第一段挑出 47 个，第二段复验 9 个但多为互相相关的波动/振幅代理，每笔收益差 +0.4～0.5 或为负
+- 教训：S20 动量池内日线因子区分力弱；R20 池内的区分力集中在同一个『近期强势』族，布林%b 只是其中一员（CCI、MOM/ROC10、Elder ray 同方向）
+- 相关试验：无
+- 出处：[wiki/2026-10-15_talib-qlib-factor-zoo-in-pools.md](../../wiki/2026-10-15_talib-qlib-factor-zoo-in-pools.md)
+- 记录：2026-10-16，agent
+

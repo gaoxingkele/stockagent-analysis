@@ -422,3 +422,9 @@ S20 池无稳定指标；R20 池『近期强势』一族（布林%b、偏离MA20
 
 - 出处：[wiki/2026-10-15_list-indicators-success-vs-failure.md](../../wiki/2026-10-15_list-indicators-success-vs-failure.md)
 
+## [2026-10-16] E0059 | 把布林%b强势登记成影子候选；从 talib、qlib 找可筛选的指标因子
+
+草稿+想法 I0005 已登记，名额满未占位；282 个因子里 S20 无稳定因子，R20 只有近期强势一族，布林%b 只是其中一员
+
+- 出处：[wiki/2026-10-15_talib-qlib-factor-zoo-in-pools.md](../../wiki/2026-10-15_talib-qlib-factor-zoo-in-pools.md)
+
