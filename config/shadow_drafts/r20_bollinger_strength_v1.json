@@ -1,19 +1,67 @@
 {
-  "name": "r20_bollinger_strength_v1",
-  "status": "draft_not_registered_slots_full",
-  "drafted": "2026-10-15",
-  "wiki": "wiki/2026-10-15_list-indicators-success-vs-failure.md",
-  "window": "reserved_20260806_plus",
-  "min_matured": 60,
-  "pool": {"source": "production V12 r20_pred", "top_n": 100, "note": "the research pool of the evidence, not the 10-name pool A"},
-  "factor": {"name": "bollinger_pctb", "formula": "(close - (MA20 - 2*std20)) / (4*std20)", "std": "population (ddof=0) of the last 20 split-adjusted closes, signal day included",
-             "select": "within-day percentile rank inside the pool > 2/3 (top tercile, about 33 names)", "frozen_parameters": ["20", "2", "2/3"]},
-  "treatment": "top tercile by %b inside the R20 top 100, equal weight, U15D10 list basis (next-day open, +15% / -10% / 20 sessions, cost 0.3%)",
-  "control": "the full R20 top 100 on the same days",
-  "primary_metric": "success rate (+15% before -10%) treatment minus control, same-day paired, Newey-West(19) t",
-  "pass_if": ["matured signal days >= 60", "primary > 0 and t >= 1.96", "per-trade U15D10 treatment minus control > 0", "treatment stop-first share not above control"],
-  "evidence_at_drafting": {"tier": "reused_holdout", "R20_in_sample": {"success_diff_pp": 5.5, "t": 4.9, "per_trade_diff": 0.69},
-                           "R20_oos": {"success_diff_pp": 9.4, "t": 5.2, "per_trade_diff": 2.41},
-                           "S20_pool": "same sign, t 1.4 / 1.7, not significant", "selected_after_viewing": "32 indicators"},
-  "slots": "S0001, S0007, S0010, S0014, S0016 are open; register after the user closes one"
+ "name": "r20_bollinger_strength_v1",
+ "status": "registered_S0018",
+ "drafted": "2026-10-15",
+ "wiki": [
+  "wiki/2026-10-15_list-indicators-success-vs-failure.md",
+  "wiki/2026-10-16_two-factor-deep-validation.md"
+ ],
+ "window": "reserved_20260806_plus",
+ "min_matured": 60,
+ "pool": {
+  "source": "production V12 r20_pred",
+  "top_n": 100,
+  "note": "the research pool of the evidence, not the 10-name pool A"
+ },
+ "factor": {
+  "name": "bollinger_pctb",
+  "formula": "(close - (MA20 - 2*std20)) / (4*std20)",
+  "std": "population (ddof=0) of the last 20 split-adjusted closes, signal day included",
+  "select": "within-day percentile rank inside the pool > 2/3 (top tercile, about 33 names)",
+  "frozen_parameters": [
+   "20",
+   "2",
+   "2/3"
+  ]
+ },
+ "treatment": "top tercile by %b inside the R20 top 100, equal weight, U15D10 list basis (next-day open, +15% / -10% / 20 sessions, cost 0.3%)",
+ "control": "the full R20 top 100 on the same days (control A)",
+ "primary_metric": "success rate (+15% before -10%) treatment minus control, same-day paired, Newey-West(19) t",
+ "pass_if": [
+  "matured signal days >= 60",
+  "primary (treatment minus control A) > 0 and t >= 1.96",
+  "per-trade U15D10 treatment minus control A > 0",
+  "treatment stop-first share not above control A",
+  "treatment minus random third: success difference > 0 (t reported; not part of the pass line, decides whether the factor adds beyond subset selection)"
+ ],
+ "evidence_at_drafting": {
+  "tier": "reused_holdout",
+  "R20_in_sample": {
+   "success_diff_pp": 5.5,
+   "t": 4.9,
+   "per_trade_diff": 0.69
+  },
+  "R20_oos": {
+   "success_diff_pp": 9.4,
+   "t": 5.2,
+   "per_trade_diff": 2.41
+  },
+  "S20_pool": "same sign, t 1.4 / 1.7, not significant",
+  "selected_after_viewing": "32 indicators",
+  "deep_validation_20261016": {
+   "pool_level": "real in R20 (placebo 0/300, leave-one-month-out t>=3.6 OOS) but same-industry IS +1.3 (t0.6) and model ranks 1-50 IS +2.3 (t0.6)",
+   "list_level": "r20 top20 +6.4 IS / +6.2 OOS success vs random third +6.0 / +3.2: factor adds ~0.4 / ~3.0",
+   "S20": "fails, not part of this rule"
+  }
+ },
+ "revised": "2026-10-16",
+ "control_random": {
+  "name": "random third",
+  "definition": "on each signal day a random third (round(n/3) names) of the R20 top 100, drawn with a fixed per-day seed derived from the signal date (seed = int(signal_date)), so the draw can be reproduced; one draw per day",
+  "purpose": "R20 top 20 is worse than the top-100 mean, so any subset looks better; the factor must beat a random subset of the same size, not only the whole pool"
+ },
+ "secondary_metrics": [
+  "pool level: treatment minus random third, success rate, same-day paired, NW(19) t (reported, must be > 0)",
+  "list level: r20_pred top 20 taken inside the top tercile by %b, minus the plain r20_pred top 20, and minus the same list taken inside the random third; success rate and per-trade, same-day paired, NW(19) t"
+ ]
 }
