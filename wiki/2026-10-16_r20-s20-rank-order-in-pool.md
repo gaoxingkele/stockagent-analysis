@@ -1,7 +1,7 @@
 # R20、S20 的名次和先涨 15% 的关系（2026-10-16）
 
 - **日期**: 2026-10-16
-- **关联代码/实验**: 一次性脚本分析（未存脚本，结果全部写在本页）；用 `output/experiments/s20_alt_designs_20261011/paths.parquet`（全市场路径标签）、`output/r20_history/market`、`s20_frozen_rescore_20261005/frozen_scores.parquet`；账本 T0115
+- **关联代码/实验**: `scripts/analyze_rank_order.py`（事后补存；重跑的名次档、前20减21–100 与首次交互运行的数字一致）；产物 `output/experiments/rank_order_20261016/report.txt`；用 `output/experiments/s20_alt_designs_20261011/paths.parquet`（全市场路径标签）、`output/r20_history/market`、`s20_frozen_rescore_20261005/frozen_scores.parquet`；账本 T0115
 - **证据等级**: reused_holdout，描述性。时间段都已用过，没有读保留窗口。
 
 ## 对话
