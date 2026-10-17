@@ -261,3 +261,10 @@
 - 出处：[wiki/2026-10-16_two-factor-deep-validation.md](../../wiki/2026-10-16_two-factor-deep-validation.md)
 - 记录：2026-10-16，agent
 
+## `N0038` 已公告限售解禁（吸收天数）、财报披露窗口、业绩预告方向作为 S20/R20 前100 的成败旗
+- 原因：只有 unlock_1 在 S20 S2 按股票聚类仍显著；S1 不显著、R20 反向；按首次标志仅 87 例几乎无差；财报窗口和预告两段符号不一致
+- 教训：名单内事件旗在连续信号日重复计数，按日配对 t 会高估，须按股票聚类；N0031 同理需复核
+- 相关试验：无
+- 出处：[wiki/2026-10-16_event-flags-unlock-earnings.md](../../wiki/2026-10-16_event-flags-unlock-earnings.md)
+- 记录：2026-10-17，agent
+
