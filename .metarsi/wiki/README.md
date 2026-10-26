@@ -17,7 +17,7 @@
 
 **后台学习**
 
-- 保留窗口 reserved_20260806_plus 已成熟 26 个信号日；5 条影子规则里 0 条到期，最近的一条还差 34 个
+- 保留窗口 reserved_20260806_plus 已成熟 31 个信号日；5 条影子规则里 0 条到期，最近的一条还差 29 个
 - 有待处理的信号，但没有未用过的留出窗口，影子规则也已到上限
 - 没有未用过的留出窗口，新规则在已用窗口上最多算 reused_holdout
 - 校准：弱证据上显著、又到更强证据复验的结果 3 条，成立 0 条
@@ -34,12 +34,12 @@
 | 窗口 | 起 | 止 | 状态 | 试验数 | 同类问题已比较的规则数（需要的 /t/） |
 |---|---|---|---|---:|---|
 | dev_20250303_20260126 | 20250303 | 20260126 | consumed | 8 | in-list-filter/S: 133 条（3.56）；in-list-filter/R: 11 条（2.84）；s20-model-audit: 4 条（2.50）；s20-model: 2 条（2.24） |
-| confirm_20260127_20260805 | 20260127 | 20260805 | consumed | 106 | in-list-filter/S: 165 条（3.61）；in-list-filter/R: 24 条（3.08）；list-turnover/S: 2 条（2.24）；s20-model-audit: 1 条（1.96）；s20-model: 3 条（2.39）；model-routing: 5 条（2.58）；day-gate: 61 条（3.35）；pump-model: 4 条（2.50）；mean-reversion: 3 条（2.39）；intraday: 32 条（3.16）；external-factors: 42 条（3.24）；risk-flag: 1 条（1.96）；list-combination: 10 条（2.81）；s20-label: 16 条（2.96）；execution: 36 条（3.20）；exit: 9 条（2.77）；dual-screen: 9 条（2.77）；bottom-pattern: 2529 条（4.27）；in-list-filter: 3282 条（4.33）；event-flags: 73 条（3.40）；model-rank-order: 4 条（2.50） |
+| confirm_20260127_20260805 | 20260127 | 20260805 | consumed | 108 | in-list-filter/S: 166 条（3.61）；in-list-filter/R: 24 条（3.08）；list-turnover/S: 2 条（2.24）；s20-model-audit: 1 条（1.96）；s20-model: 3 条（2.39）；model-routing: 5 条（2.58）；day-gate: 61 条（3.35）；pump-model: 4 条（2.50）；mean-reversion: 3 条（2.39）；intraday: 32 条（3.16）；external-factors: 42 条（3.24）；risk-flag: 1 条（1.96）；list-combination: 10 条（2.81）；s20-label: 16 条（2.96）；execution: 36 条（3.20）；exit: 9 条（2.77）；dual-screen: 9 条（2.77）；bottom-pattern: 2529 条（4.27）；in-list-filter: 3282 条（4.33）；event-flags: 73 条（3.40）；model-rank-order: 4 条（2.50）；intraday-entry: 1 条（1.96） |
 | reserved_20260806_plus | 20260806 |  | reserved | 0 |  |
 
 - 未结的影子规则：5 条；主规则：S0010
 - 等人批准的提议：0 条
-- 试验 115 条，否决 38 条，问答 59 条
+- 试验 117 条，否决 39 条，问答 59 条
 - 校准：在较弱等级上显著、又在更强等级上复验过的结果 3 条，其中成立 0 条
 - 账本链：完整
 

@@ -268,3 +268,10 @@
 - 出处：[wiki/2026-10-16_event-flags-unlock-earnings.md](../../wiki/2026-10-16_event-flags-unlock-earnings.md)
 - 记录：2026-10-17，agent
 
+## `N0039` I0007
+- 原因：次日10:00卖出口径两段净收益均<0(-0.79/-0.87%),且低于涨幅榜前50其余股票;池内旗标无稳定增量
+- 教训：涨幅榜前50隔夜/早盘就是负(r_open -0.5%);'找高点卖'的盈利来自不可兑现的早盘最高价(任何组合平均+2~3.5%)
+- 相关试验：无
+- 出处：[wiki/2026-10-26_user-afternoon-rule.md](../../wiki/2026-10-26_user-afternoon-rule.md)
+- 记录：2026-10-26，claude
+
