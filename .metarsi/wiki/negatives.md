@@ -289,3 +289,10 @@
 - 出处：[wiki/2026-10-26_csi300-horizon-reward.md](../../wiki/2026-10-26_csi300-horizon-reward.md)
 - 记录：2026-10-27，claude
 
+## `N0042` I0010
+- 原因：NATR三档内重排奖励分后，滚动前向IC t 0.6~1.8，档内前减后未来收益-0.7~-1.4pp，高波动档-2~-6pp
+- 教训：路径奖励分+特征预测三次落空；剥离NATR水平后模型仍偏爱相对低波动，无剩余信息
+- 相关试验：T0121
+- 出处：[wiki/2026-10-27_csi300-horizon-reward-neutral.md](../../wiki/2026-10-27_csi300-horizon-reward-neutral.md)
+- 记录：2026-10-27，claude
+
