@@ -296,3 +296,10 @@
 - 出处：[wiki/2026-10-27_csi300-horizon-reward-neutral.md](../../wiki/2026-10-27_csi300-horizon-reward-neutral.md)
 - 记录：2026-10-27，claude
 
+## `N0043` I0011
+- 原因：同日配对ratio<2减>=2每笔+0.58(t1.5)，验证期+0.95、样本外+0.09，低ratio名字并不更差；分段表的差别来自弱日子
+- 教训：ratio带当天大盘属性，必须同日配对；不能用逐名ratio低作过滤理由
+- 相关试验：无
+- 出处：[wiki/2026-10-30_s20-low-ratio-names.md](../../wiki/2026-10-30_s20-low-ratio-names.md)
+- 记录：2026-10-30，claude
+
