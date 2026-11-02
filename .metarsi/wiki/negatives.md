@@ -310,3 +310,10 @@
 - 出处：[wiki/2026-10-31_vision-smoke-test.md](../../wiki/2026-10-31_vision-smoke-test.md)
 - 记录：2026-10-31，claude
 
+## `N0045` I0013
+- 原因：全市场测试日内IC约0(NW t<=0.8)；S20漏斗内IC随种子0.01~0.045且t<1.96；打乱对照约0
+- 教训：小CNN加数据到4万张仍无判决力；多模态判决需另用预训练大模型并先看标签对照
+- 相关试验：无
+- 出处：[wiki/2026-10-31_vision-full-market.md](../../wiki/2026-10-31_vision-full-market.md)
+- 记录：2026-11-02，agent
+
