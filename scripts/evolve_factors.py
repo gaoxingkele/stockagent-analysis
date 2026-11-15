@@ -25,6 +25,9 @@ PRE-REGISTERED:
    placebo hall-of-fame members pass select (that count is what chance looks like).
 Falsified (I0014) if, in a pool, no evolved factor passes select, or the one that does has test success diff t < 1.96 / opposite sign / per-trade difference <= 0,
 or the placebo passes select as often as the real labels.
+Longer-history variant (idea I0015, user request 2026-11-15, python scripts/evolve_factors.py --long): S20 only, search 2025-03-03..2025-12-19 (225 days instead of 125, 25-session purge
+before select), select and test unchanged so the result is directly comparable with I0014; everything else (GP, fitness, bar, placebo) identical.  R20 cannot be
+lengthened: the production scorer r20_v16_all_nost was trained on 2023-01-01..2026-04-13 and the production factor store can only be rebuilt from 2026-01-27.
 Output: output/experiments/evolve_factors_20261111/report.txt
 """
 from __future__ import annotations
@@ -47,6 +50,10 @@ SEG = {"S20": {"search": ("20250303", "20250829"), "select": ("20260127", "20260
        "R20": {"search": ("20260127", "20260413"), "select": ("20260414", "20260612"), "test": ("20260615", "20260805")}}
 POP, GENS, TOURN, ELITE, SEEDS, HOF = 200, 20, 4, 10, 3, 20
 OPS = ("add", "sub", "mul", "max", "min", "neg", "absdiff")
+LONG = len(sys.argv) > 1 and sys.argv[1] == "--long"     # I0015: S20 search on the whole development period (R20 has no longer history)
+if LONG:
+    OUT = ROOT / "output/experiments/evolve_factors_long_20261115"
+    SEG = {"S20": {"search": ("20250303", "20251219"), "select": ("20260127", "20260430"), "test": ("20260501", "20260805")}}
 LINES: list[str] = []
 
 

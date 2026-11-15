@@ -324,3 +324,10 @@
 - 出处：[wiki/2026-11-11_evolved-factors.md](../../wiki/2026-11-11_evolved-factors.md)
 - 记录：2026-11-11，agent
 
+## `N0047` I0015
+- 原因：测试段成功率差+2.3pp t 0.6，不优于单因子q_KUP；打乱标签对照选择段也过4/20(t最高6.1)
+- 教训：该选择段对低量加权均线类形态友好，选择段t不能区分真假；R20无更长历史
+- 相关试验：无
+- 出处：[wiki/2026-11-15_evolved-factors-long.md](../../wiki/2026-11-15_evolved-factors-long.md)
+- 记录：2026-11-15，agent
+
