@@ -144,7 +144,11 @@
 
 ## 准入提议
 
-（暂无）
+### `P0001` output/production/r20_v16_all_nost + config/pool_a_r20_target_v1.json
+- 内容：用户建议把生产R20模型训练到最新数据(含2026-08-06起保留窗口)。会消耗保留窗口；本仓库没有train_v16_full.py；未执行decide，待用户明确决定。备选：训练到2026-08-05的R20-M-V17并行计分
+- 证据：（最好 None，要求 prospective）
+- 决定：rejected
+- 理由：no passing trial among the evidence
 
 ## 信号
 
